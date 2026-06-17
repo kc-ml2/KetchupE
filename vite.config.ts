@@ -53,5 +53,7 @@ export default defineConfig({
   ],
   build: {
     outDir: "dist",
+    // 구형 WebKit(회사 모바일앱 인앱 웹뷰 등) 호환을 위해 빌드 타깃을 낮춤
+    target: ["es2019", "safari13"],
   },
 });
