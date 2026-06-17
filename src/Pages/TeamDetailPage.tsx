@@ -326,7 +326,7 @@ const TeamDetailPage = (): React.JSX.Element => {
                   >
                     <LuUserPlus className="w-3.5 h-3.5 text-[#0066FF]" />
                     <span className="text-xs font-medium text-[#0066FF]">
-                      초대
+                      초대하기
                     </span>
                   </button>
                 ) : (
