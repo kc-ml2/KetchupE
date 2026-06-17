@@ -112,7 +112,7 @@ export const useFolderUpload = (teamId: number): UseFolderUploadReturn => {
       setState((prev) => ({
         ...prev,
         step: "error",
-        errorMessage: "PC 앱에서만 가능한 기능입니다.",
+        errorMessage: "PC앱(🍅공개 예정)에서만 가능한 기능입니다.",
       }));
       return;
     }

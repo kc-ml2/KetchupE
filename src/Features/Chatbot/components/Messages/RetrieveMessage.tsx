@@ -179,7 +179,7 @@ const RetrieveMessage = ({
   const handleOpenFile = async (filePath: string) => {
     const electronAPI = window.electronAPI;
     if (!electronAPI) {
-      setAlertMessage("PC 앱에서만 파일 열람 기능이 가능합니다.");
+      setAlertMessage("PC앱(🍅공개 예정)에서만 파일 열람 기능이 가능합니다.");
       return;
     }
 
