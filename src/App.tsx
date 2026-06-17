@@ -63,7 +63,8 @@ const AppRoutes = () => {
 };
 
 const App = () => {
-  const isElectron = typeof window !== "undefined" && window.location.protocol === "file:";
+  const isElectron =
+    typeof window !== "undefined" && window.location.protocol === "file:";
   const Router = isElectron ? HashRouter : BrowserRouter;
 
   return (

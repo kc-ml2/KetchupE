@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { createFetchClient } from "@lib/fetchClient";
 import { config } from "@config/index";
 import { UserPayload } from "@app-types/AuthContext.types";
+import { UserProfile } from "@app-types/Profile.types";
 import Loading from "@Features/Shared/components/Loading";
 import { AuthContext } from "./AuthContext";
 
@@ -39,6 +40,31 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
     }
   };
 
+  // 서버(GET /auth/me)에서 표시명을 받아 전역 user.name을 보강한다.
+  // name은 JWT에 없을 수 있으므로 서버 프로필로 채운다. (없으면 null 유지 → UI에서 email로 폴백)
+  // accessToken 상태 반영 전에도 동작하도록 토큰을 명시적으로 받는다.
+  const syncUserProfile = async (token: string) => {
+    try {
+      const res = await fetch(`${config.apiUrl}/auth/me`, {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          "device-id": localStorage.getItem("device_id") || "",
+        },
+      });
+      if (!res.ok) return;
+      const profile: UserProfile = await res.json();
+      setUser((prev) => ({
+        email: profile.email ?? prev?.email ?? "",
+        name: profile.name ?? prev?.name ?? null,
+      }));
+    } catch (error) {
+      console.error("Failed to fetch user profile:", error);
+    }
+  };
+
   const login = (token: string, redirectTo = "/chatbot", email?: string) => {
     if (token) {
       setAccessToken(token);
@@ -52,6 +78,8 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
       if (userEmail) {
         localStorage.setItem("user_email", userEmail);
       }
+      // 서버 표시명으로 보강 (응답 전이라도 navigate는 진행)
+      void syncUserProfile(token);
 
       navigate(redirectTo, { replace: true });
     }
@@ -122,6 +150,8 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
             email: prev?.email ?? savedEmail ?? payload?.email ?? "",
             name: payload?.name ?? prev?.name ?? null,
           }));
+          // 서버 표시명으로 보강 (init 흐름에서 await되어 Sidebar 렌더 전 반영)
+          await syncUserProfile(newAccessToken);
         } else {
           throw new Error("No access token in refresh response");
         }

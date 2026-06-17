@@ -23,7 +23,8 @@ export const useProfile = (): UseProfileReturn => {
         "/auth/me",
         body as unknown as Record<string, unknown>,
       );
-      updateUserName(profile.name);
+      // 방금 설정한 이름이므로 응답 name이 null이면 입력값으로 폴백한다.
+      updateUserName(profile.name ?? name);
     } finally {
       setIsUpdating(false);
     }

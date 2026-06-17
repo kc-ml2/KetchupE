@@ -129,7 +129,7 @@ function LoginPage() {
           !err?.response
         ) {
           setServerError(
-            "Cannot connect to server. Please check the Workspace Server URL.",
+            "서버에 잠시 문제가 생겼어요. 잠시 후 다시 시도해 주세요.",
           );
         } else if (err?.response?.status && err.response.status >= 500) {
           setServerError("Server error occurred. Please try again later.");
@@ -226,9 +226,7 @@ function LoginPage() {
                 <span>{serverError}</span>
               </span>
             ) : (
-              <span className="text-xs text-gray-400 mt-1">
-                Enter server URL. Leave empty to use default.
-              </span>
+              <></>
             )}
           </div>
         </div>
