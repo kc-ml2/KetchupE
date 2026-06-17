@@ -17,7 +17,7 @@
     "test:coverage": "vitest --coverage"
   },
   "build": {
-    "appId": "com.llm-chatbot.app",
+    "appId": "com.KetchupE.app",
     "productName": "KetchupE",
     "artifactName": "${name}-${version}-${arch}.${ext}",
     "publish": [
