@@ -1,7 +1,6 @@
 import { useContext, PropsWithChildren } from "react";
 import { Agentation } from "agentation";
 import {
-  BrowserRouter,
   HashRouter,
   Routes,
   Route,
@@ -65,7 +64,10 @@ const AppRoutes = () => {
 const App = () => {
   const isElectron =
     typeof window !== "undefined" && window.location.protocol === "file:";
-  const Router = isElectron ? HashRouter : BrowserRouter;
+  // 웹/Electron 모두 HashRouter 사용.
+  // 정적 서버(history fallback 미설정)에서 /login·/chatbot 직접 진입·새로고침 시
+  // 발생하던 404를 방지한다. (URL은 .../#/login 형태)
+  const Router = HashRouter;
 
   return (
     <Router>
