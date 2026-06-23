@@ -16,6 +16,11 @@ concurrency:
 jobs:
   publish-windows-release:
     runs-on: windows-latest
+    env:
+      # Vite embeds VITE_* values into the renderer bundle at build time.
+      # Prefer a repository variable for the API URL; allow a secret fallback
+      # for environments that already store it there.
+      VITE_API_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL }}
 
     steps:
       - name: Checkout
@@ -29,6 +34,15 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Validate renderer environment
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:VITE_API_URL)) {
+            Write-Error "VITE_API_URL is not configured. Set repository variable VITE_API_URL, or repository secret VITE_API_URL, before building the installer."
+            exit 1
+          }
+          Write-Host "VITE_API_URL is configured for the renderer build."
 
       - name: Restore Electron builder caches
         uses: actions/cache@v4
@@ -72,6 +86,11 @@ jobs:
         # dist/ (renderer) + dist-electron/ (main, preload) 생성.
         # 이 산출물이 있어야 electron-builder가 asar 패키징을 제대로 수행한다.
         run: npm run build
+
+      - name: Verify renderer endpoint was embedded
+        shell: pwsh
+        run: |
+          node -e 'const fs=require("fs"); const path=require("path"); const endpoint=process.env.VITE_API_URL; const files=[]; function walk(dir){ for (const entry of fs.readdirSync(dir,{withFileTypes:true})) { const full=path.join(dir,entry.name); if (entry.isDirectory()) walk(full); else if (/\.(js|html)$/.test(entry.name)) files.push(full); } } walk("dist"); const matches=files.filter((file)=>fs.readFileSync(file,"utf8").includes(endpoint)); if (matches.length===0) { console.error("Current VITE_API_URL was not found in the renderer bundle."); process.exit(1); } console.log("Renderer endpoint embedded in " + matches.length + " built file(s).");'
 
       - name: Package and publish to GitHub Release
         # 이 repo 가 public 이므로:
