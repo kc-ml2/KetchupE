@@ -33,7 +33,9 @@ const DefaultMessage = ({ content, showCopy = true }: DefaultMessageProps): Reac
   return (
     <div className="prose prose-sm max-w-none dark:prose-invert">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        // singleTilde: false → `~` 한 개는 취소선(Strikethrough)으로 처리하지 않음
+        // (예: "성수기(7~8월)"의 `~`가 취소선으로 묶이는 문제 방지)
+        remarkPlugins={[[remarkGfm, { singleTilde: false }]]}
         rehypePlugins={[rehypeRaw]}
         components={{
           // 단락
