@@ -18,7 +18,7 @@
 - **src/lib/**: 공통 유틸리티 라이브러리
 - **src/images/**: 이미지 에셋
 - **src/App.tsx**: 앱 엔트리 포인트
-- **electron/**: Electron 메인 프로세스 코드 (IPC, WebSocket, LanceDB 등)
+- **electron/**: Electron 메인 프로세스와 로컬 파일 IPC
 
 ```
 .
@@ -49,11 +49,10 @@
 │   └── App.tsx
 │
 └── electron/                 # Electron 메인 프로세스
-    ├── ipc/                  # IPC 핸들러
-    ├── websocket/            # WebSocket 통신
-    ├── lancedb/              # 로컬 벡터 DB
+    ├── ipc/                  # 폴더 스캔·파일 열기 IPC
     ├── assets/
-    └── build/
+    ├── main.ts
+    └── preload.js
 ```
 
 ## vite

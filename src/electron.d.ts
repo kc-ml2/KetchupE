@@ -1,8 +1,7 @@
 export interface ScannedFile {
   fileName: string;
-  createdAt: string;
   relativePath: string;
-  fullPath?: string;
+  fullPath: string;
   size: number;
   mtime: number;
 }
@@ -17,10 +16,6 @@ export interface ElectronAPI {
   readFile: (filePath: string) => Promise<{
     success: boolean;
     data?: ArrayBuffer;
-    error?: string;
-  }>;
-  openFolderInExplorer: (folderPath: string) => Promise<{
-    success: boolean;
     error?: string;
   }>;
   openFileByRelativePath: (relativePath: string) => Promise<{

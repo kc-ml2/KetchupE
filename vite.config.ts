@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
 import electron from "vite-plugin-electron";
-import renderer from "vite-plugin-electron-renderer";
 
 export default defineConfig({
   plugins: [
@@ -16,15 +15,7 @@ export default defineConfig({
           build: {
             outDir: "dist-electron",
             rollupOptions: {
-              external: [
-                "electron",
-                "electron-updater",
-                "ws",
-                "bufferutil",
-                "utf-8-validate",
-                "@lancedb/lancedb",
-                /^@lancedb\/lancedb-.*/,
-              ],
+              external: ["electron", "electron-updater"],
             },
           },
         },
@@ -49,7 +40,6 @@ export default defineConfig({
         },
       },
     ]),
-    renderer(),
   ],
   build: {
     outDir: "dist",

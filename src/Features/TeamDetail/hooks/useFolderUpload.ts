@@ -15,26 +15,6 @@ const getFileExtension = (fileName: string): string => {
   return lastDotIndex === -1 ? "" : fileName.slice(lastDotIndex).toLowerCase();
 };
 
-const joinScannedFilePath = (
-  folderPath: string,
-  relativePath: string,
-): string => {
-  const separator =
-    folderPath.includes("\\") && !folderPath.includes("/") ? "\\" : "/";
-  const basePath = folderPath.replace(/[\\/]+$/, "");
-  const normalizedRelativePath = relativePath
-    .split("/")
-    .join(separator)
-    .replace(/^[\\/]+/, "");
-
-  return `${basePath}${separator}${normalizedRelativePath}`;
-};
-
-const getScannedFileFullPath = (
-  folderPath: string,
-  file: ScannedFile,
-): string => file.fullPath || joinScannedFilePath(folderPath, file.relativePath);
-
 type UploadStep =
   | "idle"
   | "scanning"
@@ -186,7 +166,7 @@ export const useFolderUpload = (teamId: number): UseFolderUploadReturn => {
           team_id: teamId,
           folder_path: folderPath,
           files: supportedFiles.map((f) => {
-            const fullPath = getScannedFileFullPath(folderPath, f);
+            const fullPath = f.fullPath;
 
             return {
               relative_path: f.relativePath,
@@ -241,7 +221,7 @@ export const useFolderUpload = (teamId: number): UseFolderUploadReturn => {
     try {
       for (let i = 0; i < filesToUpload.length; i++) {
         const file = filesToUpload[i];
-        const fullPath = getScannedFileFullPath(state.folderPath, file);
+        const fullPath = file.fullPath;
 
         const readResult = await electronAPI.readFile(fullPath);
         if (!readResult.success || !readResult.data) {

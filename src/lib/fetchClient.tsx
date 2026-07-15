@@ -59,14 +59,10 @@ export function createFetchClient({
 	const getDeviceId = () => {
 	  let deviceId = localStorage.getItem("device_id");
 	  if (!deviceId) {
-		deviceId = generateRandomDeviceId();
+		deviceId = `device-${crypto.randomUUID()}`;
 		localStorage.setItem("device_id", deviceId);
 	  }
 	  return deviceId;
-	};
-  
-	const generateRandomDeviceId = () => {
-	  return "device-" + Math.random().toString(36).substring(2, 15);
 	};
 
 	async function fetchWithAuth(
@@ -159,10 +155,6 @@ export function createFetchClient({
 		  throw new FetchError(res.status, extractErrorMessage(errorData) || res.statusText);
 		}
 
-		if (options.stream) {
-			return res;
-		}
-
 		if (res.status === 204) {
 			return undefined;
 		}
@@ -201,13 +193,6 @@ export function createFetchClient({
 		  method: "POST",
 		  body: formData,
 		  headers: {},
-		  ...config,
-		}),
-	  postStream: (url: string, body: Record<string, unknown> = {}, config: ExtendedRequestInit = {}) =>
-		fetchWithAuth(url, {
-		  method: "POST",
-		  body: JSON.stringify(body),
-		  stream: true,
 		  ...config,
 		}),
 	  del: (url: string, params: Record<string, string | number> = {}) => {

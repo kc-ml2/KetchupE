@@ -84,9 +84,6 @@ function LoginPage() {
   const [showOTP, setShowOTP] = useState(false);
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  // const [serverUrl, setServerUrl] = useState(() => {
-  //   return localStorage.getItem("serverUrl") || "https://chat-dev.kcsoftmax.com";
-  // });
 
   const { login, fetchClient } = useContext(AuthContext) as AuthContextType;
   const location = useLocation();
@@ -166,14 +163,6 @@ function LoginPage() {
     }
   };
 
-  // const handleServerUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const value = e.target.value;
-  //   setServerUrl(value);
-  //   localStorage.setItem("serverUrl", value);
-  //   import.meta.env.VITE_API_URL = value;
-  //   setServerError(null);
-  // };
-
   return (
     <div className="min-h-screen bg-white flex flex-col items-center gap-6 pt-12 px-4 relative">
       <img src={KetchupE} alt="MARU" className="h-20 w-auto" />
@@ -210,23 +199,11 @@ function LoginPage() {
           )}
 
           <div className="flex flex-col pt-4 border-t border-gray-200">
-            {/* <label className="font-bold mb-2 text-sm text-gray-900">Workspace Server URL</label>
-            <input
-              type="text"
-              className={`p-2 text-sm border rounded bg-white text-gray-900 ${
-                serverError ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="https://chat-dev.kcsoftmax.com"
-              value={serverUrl}
-              onChange={handleServerUrlChange}
-            /> */}
-            {serverError ? (
+            {serverError && (
               <span className="text-xs text-red-500 mt-1 flex items-start gap-1">
                 <span>⚠️</span>
                 <span>{serverError}</span>
               </span>
-            ) : (
-              <></>
             )}
           </div>
         </div>

@@ -18,7 +18,8 @@ const preprocessMarkdown = (text: string): string => {
 
 const DefaultMessage = ({ content, showCopy = true }: DefaultMessageProps): React.JSX.Element => {
   const [isCopied, setIsCopied] = useState(false);
-  const processedContent = preprocessMarkdown(content);
+  // content가 런타임에 null/undefined로 들어와도 크래시하지 않도록 방어
+  const processedContent = preprocessMarkdown(content ?? "");
 
   const handleCopy = async () => {
     try {
