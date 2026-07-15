@@ -1,4 +1,4 @@
-import { useState, useEffect, PropsWithChildren } from "react";
+import { useState, useEffect, useRef, PropsWithChildren } from "react";
 import { useNavigate } from "react-router-dom";
 import { createFetchClient } from "@lib/fetchClient";
 import { config } from "@config/index";
@@ -112,7 +112,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
   };
 
   // 토큰 갱신 (TOKEN_EXPIRED 시 호출) - 중복 호출 방지
-  const refreshPromiseRef = { current: null as Promise<void> | null };
+  const refreshPromiseRef = useRef<Promise<void> | null>(null);
 
   const silentRefresh = async () => {
     // 이미 refresh 진행 중이면 기존 Promise 반환
@@ -192,7 +192,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
           // 기존 device_id가 있으면 사용, 없으면 새로 생성 후 저장
           let deviceId = localStorage.getItem("device_id");
           if (!deviceId) {
-            deviceId = "device-" + Math.random().toString(36).substring(2, 15);
+            deviceId = `device-${crypto.randomUUID()}`;
             localStorage.setItem("device_id", deviceId);
           }
           const response = await fetchClient.post<string>(

@@ -21,7 +21,6 @@ import {
   ContractCanvas,
   ContractSection,
   ContractTableCell,
-  UseCanvasDocxExportResult,
 } from "@app-types/Canvas.types";
 
 const DEFAULT_FILE_TITLE = "contract";
@@ -225,7 +224,7 @@ const downloadBlob = (blob: Blob, fileName: string): void => {
 };
 
 // Canvas(계약서 초안)를 .docx 파일로 변환해 다운로드한다
-export const useCanvasDocxExport = (): UseCanvasDocxExportResult => {
+export const useCanvasDocxExport = () => {
   const [isExporting, setIsExporting] = useState(false);
 
   const exportCanvasToDocx = async (canvas: ContractCanvas): Promise<void> => {

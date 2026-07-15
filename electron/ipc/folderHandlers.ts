@@ -9,7 +9,6 @@ import {
 
 interface FileMetadata {
   fileName: string;
-  createdAt: string;
   relativePath: string;
   fullPath: string;
   size: number;
@@ -104,7 +103,6 @@ async function scanDirectory(
       const stats = await fs.stat(fullPath);
       files.push({
         fileName: entry.name,
-        createdAt: stats.birthtime.toISOString(),
         relativePath: path.relative(baseDir, fullPath).replace(/\\/g, "/"),
         fullPath,
         size: stats.size,
@@ -301,22 +299,4 @@ export function registerFolderHandlers() {
       }
     },
   );
-
-  ipcMain.handle("folder:openInExplorer", async (_event, pathToOpen: string) => {
-    try {
-      const stats = await fs.stat(pathToOpen);
-      if (!stats.isDirectory() && !stats.isFile()) {
-        return { success: false, error: "Path is not a file or directory" };
-      }
-
-      const result = await shell.openPath(pathToOpen);
-      if (result) {
-        return { success: false, error: result };
-      }
-
-      return { success: true };
-    } catch {
-      return { success: false, error: "Path does not exist" };
-    }
-  });
 }

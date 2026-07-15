@@ -64,24 +64,14 @@ const AnchorChoicePrompt = ({
           {/* 응답 옵션 */}
           <div className="flex flex-wrap gap-2">
             {hasSelection && (
-              <>
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => onSubmit("use_selected")}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[#0066FF] text-white hover:bg-[#0052CC] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  선택한 문서 참고하기
-                </button>
-                {/* <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => onSubmit("anchor_only")}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium border border-[#0066FF] text-[#0066FF] hover:bg-[#0066FF] hover:text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  여기서만 참고하기
-                </button> */}
-              </>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onSubmit("use_selected")}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[#0066FF] text-white hover:bg-[#0052CC] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                선택한 문서 참고하기
+              </button>
             )}
             <button
               type="button"

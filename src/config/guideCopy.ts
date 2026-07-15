@@ -25,14 +25,3 @@ export const guideCopy = {
       "팀에 추가된 문서를 참고해 질문에 답변하고, 참고한 문서도 함께 보여드립니다.",
   },
 } as const;
-
-type GuideCopyValues = Record<string, string | number>;
-
-export const formatGuideCopy = (
-  copy: string,
-  values: GuideCopyValues,
-): string =>
-  Object.entries(values).reduce(
-    (message, [key, value]) => message.replaceAll(`{${key}}`, String(value)),
-    copy,
-  );

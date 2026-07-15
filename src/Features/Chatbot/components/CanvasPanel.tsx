@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   LuFileDown,
   LuPanelRight,
@@ -33,11 +33,6 @@ interface CanvasPanelProps {
   onChangeVersion: (op: "undo" | "redo") => boolean;
   onFinalize: () => boolean;
 }
-
-const JSON_INDENT = 2;
-const MIN_PANEL_WIDTH = 360;
-const MAX_PANEL_WIDTH_RATIO = 0.75;
-const RESIZE_STEP = 24;
 
 const getCanvasTitle = (canvas: ContractCanvas): string =>
   canvas.title || canvas.metadata?.title || "Canvas";
@@ -345,61 +340,15 @@ const CanvasPanel = ({
     block: ContractBlock;
   } | null>(null);
   const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
-  const [panelWidth, setPanelWidth] = useState<number | null>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const resizeStartRef = useRef<{ x: number; width: number } | null>(null);
   const { isExporting, exportCanvasToDocx } = useCanvasDocxExport();
   const orderedSections = [...canvas.sections].sort(
     (a, b) => a.order - b.order,
   );
   const title = getCanvasTitle(canvas);
   const isFinalized = canvas.status.toLowerCase() === "finalized";
-  const clampWidth = (width: number) =>
-    Math.min(
-      window.innerWidth * MAX_PANEL_WIDTH_RATIO,
-      Math.max(MIN_PANEL_WIDTH, width),
-    );
 
   return (
-    <div
-      ref={panelRef}
-      style={{ width: panelWidth ?? "40%" }}
-      className="relative flex flex-none flex-col min-w-[360px] max-w-[75vw] min-h-0 border-l border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#0F0F0F]"
-    >
-      <div
-        role="separator"
-        aria-label="캔버스 너비 조절"
-        aria-orientation="vertical"
-        tabIndex={0}
-        onPointerDown={(event) => {
-          resizeStartRef.current = {
-            x: event.clientX,
-            width: panelRef.current?.offsetWidth ?? MIN_PANEL_WIDTH,
-          };
-          event.currentTarget.setPointerCapture?.(event.pointerId);
-        }}
-        onPointerMove={(event) => {
-          const start = resizeStartRef.current;
-          if (!start) return;
-          setPanelWidth(clampWidth(start.width + start.x - event.clientX));
-        }}
-        onPointerUp={() => {
-          resizeStartRef.current = null;
-        }}
-        onKeyDown={(event) => {
-          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-          event.preventDefault();
-          const current =
-            panelWidth ?? panelRef.current?.offsetWidth ?? MIN_PANEL_WIDTH;
-          setPanelWidth(
-            clampWidth(
-              current +
-                (event.key === "ArrowLeft" ? RESIZE_STEP : -RESIZE_STEP),
-            ),
-          );
-        }}
-        className="absolute -left-1 top-0 z-10 h-full w-2 cursor-col-resize touch-none outline-none before:absolute before:left-1/2 before:h-full before:w-px before:bg-transparent before:transition-colors hover:before:bg-[#0066FF] focus:before:bg-[#0066FF]"
-      />
+    <div className="relative flex w-[40%] flex-none flex-col min-w-[360px] max-w-[75vw] min-h-0 border-l border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#0F0F0F]">
       {/* Panel Header */}
       <div className="flex items-center justify-between h-[60px] px-4 border-b border-[#E4E4E7] dark:border-[#27272A]">
         <div className="flex items-center gap-2 min-w-0">
@@ -477,14 +426,6 @@ const CanvasPanel = ({
             }
           />
         ))}
-
-        {/* 디버깅용 원본 JSON */}
-        <details className="text-xs text-[#71717A] dark:text-[#A1A1AA]">
-          <summary className="cursor-pointer select-none">원본 JSON</summary>
-          <pre className="mt-2 whitespace-pre-wrap break-all bg-[#F4F4F5] dark:bg-[#171717] rounded-lg p-3 text-[#18181B] dark:text-[#FAFAFA]">
-            {JSON.stringify(canvas, null, JSON_INDENT)}
-          </pre>
-        </details>
       </div>
 
       {deleteTarget && (

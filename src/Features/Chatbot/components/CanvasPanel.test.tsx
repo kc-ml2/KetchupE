@@ -110,37 +110,6 @@ describe("CanvasPanel", () => {
     expect(onChangeVersion).toHaveBeenCalledWith("undo");
   });
 
-  it("왼쪽 경계에서 캔버스 너비를 조절한다", () => {
-    render(
-      <CanvasPanel
-        canvas={canvas}
-        changedBlockIds={[]}
-        canUndo={false}
-        canRedo={false}
-        onClose={vi.fn()}
-        activeActionContexts={[]}
-        onEditBlock={vi.fn()}
-        onAddBlockAfter={vi.fn()}
-        onDeleteBlock={vi.fn()}
-        onChangeVersion={vi.fn()}
-        onFinalize={vi.fn()}
-      />,
-    );
-
-    const separator = screen.getByRole("separator", {
-      name: "캔버스 너비 조절",
-    });
-    const panel = separator.parentElement!;
-    Object.defineProperty(panel, "offsetWidth", {
-      configurable: true,
-      value: 560,
-    });
-
-    fireEvent.keyDown(separator, { key: "ArrowLeft" });
-
-    expect(panel).toHaveStyle({ width: "584px" });
-  });
-
   it("미작성 항목을 경고한 뒤 문서를 확정한다", async () => {
     const onFinalize = vi.fn(() => true);
     const canvasWithMissingTerm = {

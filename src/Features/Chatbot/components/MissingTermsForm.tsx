@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { CanvasTermValue } from "@app-types/Chatbot.types";
 import { MissingTerm } from "@app-types/Canvas.types";
 import KetchupE from "@images/rag.png";
@@ -18,14 +18,10 @@ const MissingTermsForm = ({
 }: MissingTermsFormProps) => {
   const [values, setValues] = useState<Record<string, string>>({});
 
-  const normalizedTerms = useMemo(
-    () =>
-      terms.map((term) => ({
-        ...term,
-        term_key: getTermKey(term),
-      })),
-    [terms],
-  );
+  const normalizedTerms = terms.map((term) => ({
+    ...term,
+    term_key: getTermKey(term),
+  }));
 
   const hasValue = normalizedTerms.some(
     (term) => values[term.term_key]?.trim(),

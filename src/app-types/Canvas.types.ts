@@ -75,12 +75,6 @@ export interface ContractCanvasMetadata {
   parties: ContractParty[];
 }
 
-// useCanvasDocxExport hook 반환 타입
-export interface UseCanvasDocxExportResult {
-  isExporting: boolean;
-  exportCanvasToDocx: (canvas: ContractCanvas) => Promise<void>;
-}
-
 // Canvas 문서 전체 (버전 관리 포함)
 export interface ContractCanvas {
   schema_version: string;

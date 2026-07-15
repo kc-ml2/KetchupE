@@ -9,13 +9,11 @@ import {
   CanvasEditOp,
   CanvasTermValue,
   ChatMessagesHook,
-  ConnectionPhase,
   FeedbackInterruptContent,
   Message,
   PendingInterrupt,
   WSAuthMessage,
   WSChatMessage,
-  WSConfigureMessage,
   WSIncomingMessage,
   WSResumeMessage,
 } from "@app-types/Chatbot.types";
@@ -29,7 +27,6 @@ import { useSession } from "./useSession";
 
 // 로컬 turn 식별자 (stale 메시지 필터링용, 서버 session_id와 무관)
 let turnIdCounter = 0;
-const CONFIGURE_TIMEOUT_MS = 8000;
 const AUTH_TIMEOUT_MS = 10000;
 const HISTORY_PAGE_SIZE = 100;
 const generateTurnId = (): number => {
@@ -154,11 +151,6 @@ export const useChatMessages = (): ChatMessagesHook => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [feedbackModeEnabled, setFeedbackModeEnabled] =
-    useState<boolean>(false);
-  const [isConfigured, setIsConfigured] = useState<boolean>(false);
-  const [connectionPhase, setConnectionPhase] =
-    useState<ConnectionPhase>("idle");
   const [pendingInterrupt, setPendingInterrupt] =
     useState<PendingInterrupt | null>(null);
   const [isSubmittingResume, setIsSubmittingResume] = useState<boolean>(false);
@@ -200,7 +192,6 @@ export const useChatMessages = (): ChatMessagesHook => {
   const finalizingCanvasIdRef = useRef<string | null>(null);
   const currentContentRef = useRef<string>("");
   const activeTurnIdRef = useRef<number | null>(null);
-  const isConfiguredRef = useRef<boolean>(false);
   // 대화 이력 복원을 1회만 수행하기 위한 가드
   const historyLoadedRef = useRef<boolean>(false);
   // 'authenticated' ack 대기 중인 connect promise의 resolver
@@ -209,11 +200,6 @@ export const useChatMessages = (): ChatMessagesHook => {
     resolve: () => void;
     reject: (error: Error) => void;
   } | null>(null);
-
-  const setConfiguredState = useCallback((value: boolean) => {
-    isConfiguredRef.current = value;
-    setIsConfigured(value);
-  }, []);
 
   const storeCanvas = useCallback((canvas: ContractCanvas) => {
     const previous = canvasesByIdRef.current[canvas.canvas_id];
@@ -256,8 +242,7 @@ export const useChatMessages = (): ChatMessagesHook => {
     setIsGenerating(false);
     setPendingInterrupt(null);
     setIsSubmittingResume(false);
-    setConnectionPhase(feedbackModeEnabled && isConfigured ? "ready" : "idle");
-  }, [feedbackModeEnabled, isConfigured]);
+  }, []);
 
   const getInterruptPromptMessage = useCallback(
     (interruptType: FeedbackInterruptContent["type"]): string => {
@@ -313,12 +298,6 @@ export const useChatMessages = (): ChatMessagesHook => {
               break;
             }
 
-            case "configured": {
-              setConfiguredState(true);
-              setConnectionPhase("ready");
-              break;
-            }
-
             // 서버 라우터가 요청을 보낸 graph 안내 (정보성)
             case "routed": {
               console.log("[WebSocket] Routed to graph:", data.graph_id);
@@ -326,7 +305,6 @@ export const useChatMessages = (): ChatMessagesHook => {
             }
 
             case "thinking": {
-              setConnectionPhase("streaming");
               setIsGenerating(true);
               setPendingInterrupt(null);
               setMessages((prev) => upsertThinkingMessage(prev));
@@ -355,7 +333,6 @@ export const useChatMessages = (): ChatMessagesHook => {
             }
 
             case "stream": {
-              setConnectionPhase("streaming");
               setIsGenerating(true);
 
               currentContentRef.current += data.content || "";
@@ -427,7 +404,6 @@ export const useChatMessages = (): ChatMessagesHook => {
               // 공통: 생성 중단 + thinking 제거 + 스트리밍 중이던 메시지 확정
               setIsGenerating(false);
               setIsSubmittingResume(false);
-              setConnectionPhase("waiting_interrupt");
               currentContentRef.current = "";
               setMessages((prev) => {
                 const withoutThinking = prev.filter(
@@ -550,7 +526,7 @@ export const useChatMessages = (): ChatMessagesHook => {
               resetTurnState();
 
               // canvas 세션 중에는 complete 후에도 연결과 turn을 유지한다
-              if (!feedbackModeEnabled && !hasCanvasSessionRef.current) {
+              if (!hasCanvasSessionRef.current) {
                 activeTurnIdRef.current = null;
                 if (wsRef.current) {
                   wsRef.current.close();
@@ -572,12 +548,10 @@ export const useChatMessages = (): ChatMessagesHook => {
 
               resetTurnState();
 
-              if (!feedbackModeEnabled) {
-                activeTurnIdRef.current = null;
-                if (wsRef.current) {
-                  wsRef.current.close();
-                  wsRef.current = null;
-                }
+              activeTurnIdRef.current = null;
+              if (wsRef.current) {
+                wsRef.current.close();
+                wsRef.current = null;
               }
               break;
             }
@@ -594,36 +568,11 @@ export const useChatMessages = (): ChatMessagesHook => {
       };
     },
     [
-      feedbackModeEnabled,
       getInterruptPromptMessage,
       resetTurnState,
-      setConfiguredState,
       storeCanvas,
     ],
   );
-
-  const waitForConfigured = useCallback((timeoutMs: number): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (isConfiguredRef.current) {
-        resolve();
-        return;
-      }
-
-      const startedAt = Date.now();
-      const timer = setInterval(() => {
-        if (isConfiguredRef.current) {
-          clearInterval(timer);
-          resolve();
-          return;
-        }
-
-        if (Date.now() - startedAt >= timeoutMs) {
-          clearInterval(timer);
-          reject(new Error("Configure response timeout"));
-        }
-      }, 100);
-    });
-  }, []);
 
   // WebSocket 연결 + 인증. 'authenticated' ack를 받은 뒤에야 resolve된다.
   const connectWithAuth = useCallback(
@@ -691,8 +640,6 @@ export const useChatMessages = (): ChatMessagesHook => {
           console.log("[WebSocket] Disconnected:", event.code, event.reason);
           if (activeTurnIdRef.current === turnId) {
             activeTurnIdRef.current = null;
-            setConfiguredState(false);
-            setConnectionPhase("idle");
             setIsGenerating(false);
             setPendingInterrupt(null);
             setIsSubmittingResume(false);
@@ -707,8 +654,6 @@ export const useChatMessages = (): ChatMessagesHook => {
           console.error("[WebSocket] Error:", error);
           if (activeTurnIdRef.current === turnId) {
             activeTurnIdRef.current = null;
-            setConfiguredState(false);
-            setConnectionPhase("idle");
           }
           finish(new Error("WebSocket connection error"));
         };
@@ -718,78 +663,13 @@ export const useChatMessages = (): ChatMessagesHook => {
         }, AUTH_TIMEOUT_MS);
       });
     },
-    [
-      createMessageHandler,
-      ensureSession,
-      getChatToken,
-      getWebSocketUrl,
-      setConfiguredState,
-    ],
-  );
-
-  const connectForFeedbackMode = useCallback(
-    async (disableModeOnFail: boolean): Promise<void> => {
-      const turnId = generateTurnId();
-      console.log("[WebSocket] Starting feedback turn:", turnId);
-      activeTurnIdRef.current = turnId;
-      setConnectionPhase("connecting");
-      setConfiguredState(false);
-      setPendingInterrupt(null);
-      setIsSubmittingResume(false);
-      currentContentRef.current = "";
-
-      try {
-        await connectWithAuth(turnId);
-
-        if (
-          activeTurnIdRef.current !== turnId ||
-          wsRef.current?.readyState !== WebSocket.OPEN
-        ) {
-          throw new Error("WebSocket not ready for feedback configure");
-        }
-
-        const configureMessage: WSConfigureMessage = {
-          type: "configure",
-          function: "feedback",
-        };
-        setConnectionPhase("configuring");
-        wsRef.current.send(JSON.stringify(configureMessage));
-        await waitForConfigured(CONFIGURE_TIMEOUT_MS);
-        setConnectionPhase("ready");
-      } catch (error) {
-        console.error("[WebSocket] Feedback configure failed:", error);
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: "피드백 모드 연결에 실패했어요. 다시 시도해주세요.",
-            kind: "error",
-          },
-        ]);
-        if (disableModeOnFail) {
-          setFeedbackModeEnabled(false);
-        }
-        setConnectionPhase("idle");
-        setConfiguredState(false);
-        setPendingInterrupt(null);
-        setIsSubmittingResume(false);
-        activeTurnIdRef.current = null;
-        if (wsRef.current) {
-          wsRef.current.close();
-          wsRef.current = null;
-        }
-        throw new Error("FEEDBACK_CONFIGURE_FAILED");
-      }
-    },
-    [connectWithAuth, setConfiguredState, waitForConfigured],
+    [createMessageHandler, ensureSession, getChatToken, getWebSocketUrl],
   );
 
   // WebSocket 연결 종료
   const disconnect = useCallback(() => {
     activeTurnIdRef.current = null;
     authPromiseRef.current?.reject(new Error("Disconnected"));
-    setConfiguredState(false);
-    setConnectionPhase("idle");
     setPendingInterrupt(null);
     setSelectedAnchorIds([]);
     setCanvasActionContexts([]);
@@ -801,7 +681,7 @@ export const useChatMessages = (): ChatMessagesHook => {
       wsRef.current.close();
       wsRef.current = null;
     }
-  }, [setConfiguredState]);
+  }, []);
 
   // 언마운트 시 연결 종료
   useEffect(() => {
@@ -861,21 +741,6 @@ export const useChatMessages = (): ChatMessagesHook => {
     }
   }, [createNewSession, disconnect]);
 
-  const toggleFeedbackMode = useCallback(async () => {
-    if (feedbackModeEnabled) {
-      setFeedbackModeEnabled(false);
-      disconnect();
-      return;
-    }
-
-    setFeedbackModeEnabled(true);
-    try {
-      await connectForFeedbackMode(true);
-    } catch {
-      // connectForFeedbackMode 내부에서 에러 처리됨
-    }
-  }, [connectForFeedbackMode, disconnect, feedbackModeEnabled]);
-
   const sendChatMessage = useCallback(
     async (content: string) => {
       if (!content.trim() || isGenerating || isSubmittingResume) {
@@ -891,13 +756,12 @@ export const useChatMessages = (): ChatMessagesHook => {
 
       // 열려 있는 일반 채팅 turn이 있으면 같은 연결을 재사용한다.
       const reuseOpenConnection =
-        !feedbackModeEnabled &&
         activeTurnIdRef.current !== null &&
         wsRef.current?.readyState === WebSocket.OPEN;
 
       let turnId = activeTurnIdRef.current;
 
-      if (!feedbackModeEnabled && !reuseOpenConnection) {
+      if (!reuseOpenConnection) {
         turnId = generateTurnId();
         console.log("[WebSocket] Starting new turn:", turnId);
         activeTurnIdRef.current = turnId;
@@ -921,60 +785,24 @@ export const useChatMessages = (): ChatMessagesHook => {
       currentContentRef.current = "";
       setInputMessage("");
       setIsGenerating(true);
-      setConnectionPhase("streaming");
 
       try {
-        if (feedbackModeEnabled) {
-          if (
-            !isConfiguredRef.current ||
-            wsRef.current?.readyState !== WebSocket.OPEN
-          ) {
-            await connectForFeedbackMode(false);
-          }
-
-          if (
-            !isConfiguredRef.current ||
-            wsRef.current?.readyState !== WebSocket.OPEN
-          ) {
-            throw new Error("Feedback mode is not ready");
-          }
-
-          const chatMessage: WSChatMessage = {
-            type: "message",
-            content: userMessage,
-          };
-          wsRef.current?.send(JSON.stringify(chatMessage));
-        } else {
-          if (reuseOpenConnection) {
-            console.log("[WebSocket] Reusing open connection, turn:", turnId);
-          } else {
-            await connectWithAuth(turnId);
-          }
-          if (
-            activeTurnIdRef.current !== turnId ||
-            wsRef.current?.readyState !== WebSocket.OPEN
-          ) {
-            throw new Error("WebSocket not ready");
-          }
-          const chatMessage: WSChatMessage = {
-            type: "message",
-            content: userMessage,
-          };
-          console.log("[WebSocket] Sending message:", chatMessage);
-          wsRef.current.send(JSON.stringify(chatMessage));
+        if (!reuseOpenConnection) {
+          await connectWithAuth(turnId);
         }
+        if (
+          activeTurnIdRef.current !== turnId ||
+          wsRef.current?.readyState !== WebSocket.OPEN
+        ) {
+          throw new Error("WebSocket not ready");
+        }
+        const chatMessage: WSChatMessage = {
+          type: "message",
+          content: userMessage,
+        };
+        wsRef.current.send(JSON.stringify(chatMessage));
       } catch (error) {
         console.error("[WebSocket] Connection failed:", error);
-        if (
-          error instanceof Error &&
-          error.message === "FEEDBACK_CONFIGURE_FAILED"
-        ) {
-          setMessages((prev) => prev.filter((msg) => msg.kind !== "thinking"));
-          setIsGenerating(false);
-          setConnectionPhase("idle");
-          return;
-        }
-
         // 현재 turn의 에러만 처리 (서버 연결 실패)
         if (activeTurnIdRef.current === turnId) {
           setMessages((prev) => [
@@ -987,24 +815,11 @@ export const useChatMessages = (): ChatMessagesHook => {
             },
           ]);
           setIsGenerating(false);
-          setConnectionPhase("idle");
-          if (!feedbackModeEnabled) {
-            activeTurnIdRef.current = null;
-          } else {
-            setConfiguredState(false);
-          }
+          activeTurnIdRef.current = null;
         }
       }
     },
-    [
-      connectForFeedbackMode,
-      connectWithAuth,
-      feedbackModeEnabled,
-      isGenerating,
-      isSubmittingResume,
-      pendingInterrupt,
-      setConfiguredState,
-    ],
+    [connectWithAuth, isGenerating, isSubmittingResume, pendingInterrupt],
   );
 
   const sendResume = useCallback(
@@ -1032,8 +847,6 @@ export const useChatMessages = (): ChatMessagesHook => {
         setPendingInterrupt(null);
         setIsSubmittingResume(false);
         setIsGenerating(false);
-        setConnectionPhase("idle");
-        setConfiguredState(false);
         return;
       }
 
@@ -1054,10 +867,9 @@ export const useChatMessages = (): ChatMessagesHook => {
       };
       wsRef.current.send(JSON.stringify(resumeMessage));
       setPendingInterrupt(null);
-      setConnectionPhase("streaming");
       setIsGenerating(true);
     },
-    [isSubmittingResume, pendingInterrupt, setConfiguredState],
+    [isSubmittingResume, pendingInterrupt],
   );
 
   const sendCanvasResume = useCallback(
@@ -1090,7 +902,6 @@ export const useChatMessages = (): ChatMessagesHook => {
         ]);
         setPendingInterrupt(null);
         setIsGenerating(false);
-        setConnectionPhase("idle");
         return false;
       }
 
@@ -1106,7 +917,6 @@ export const useChatMessages = (): ChatMessagesHook => {
       setPendingInterrupt(null);
       setCanvasActionContexts([]);
       setInputMessage("");
-      setConnectionPhase("streaming");
       setIsGenerating(true);
       return true;
     },
@@ -1147,8 +957,6 @@ export const useChatMessages = (): ChatMessagesHook => {
         setSelectedAnchorIds([]);
         setIsSubmittingResume(false);
         setIsGenerating(false);
-        setConnectionPhase("idle");
-        setConfiguredState(false);
         return;
       }
 
@@ -1161,7 +969,7 @@ export const useChatMessages = (): ChatMessagesHook => {
         content: {
           document_ids: documentIds,
           skip,
-          anchor_only: action === "anchor_only",
+          anchor_only: false,
         },
       };
 
@@ -1177,8 +985,6 @@ export const useChatMessages = (): ChatMessagesHook => {
         .join(", ");
       const displayContent = (() => {
         if (skip) return "문서 참고 없이 진행할게요.";
-        if (action === "anchor_only")
-          return `이 문서에서만 참고할게요: ${selectedNames}`;
         return `참고 문서 선택: ${selectedNames}`;
       })();
       setMessages((prev) => [
@@ -1190,14 +996,12 @@ export const useChatMessages = (): ChatMessagesHook => {
       wsRef.current.send(JSON.stringify(resumeMessage));
       setPendingInterrupt(null);
       setSelectedAnchorIds([]);
-      setConnectionPhase("streaming");
       setIsGenerating(true);
     },
     [
       isSubmittingResume,
       pendingInterrupt,
       selectedAnchorIds,
-      setConfiguredState,
     ],
   );
 
@@ -1376,15 +1180,13 @@ export const useChatMessages = (): ChatMessagesHook => {
     setPendingInterrupt(null);
     setSelectedAnchorIds([]);
     setIsSubmittingResume(false);
-    setConfiguredState(false);
-    setConnectionPhase("idle");
 
     // 4. WebSocket 연결 종료
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
-  }, [setConfiguredState]);
+  }, []);
 
   const closeCanvas = useCallback(() => {
     setActiveCanvasId(null);
@@ -1395,9 +1197,6 @@ export const useChatMessages = (): ChatMessagesHook => {
     messages,
     inputMessage,
     isGenerating,
-    feedbackModeEnabled,
-    isConfigured,
-    connectionPhase,
     pendingInterrupt,
     isSubmittingResume,
     sessionId,
@@ -1408,7 +1207,6 @@ export const useChatMessages = (): ChatMessagesHook => {
     showMissingTermsForm,
     setInputMessage,
     handleSubmit,
-    toggleFeedbackMode,
     sendResume,
     toggleAnchorCandidate,
     submitAnchorChoice,

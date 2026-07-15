@@ -12,7 +12,6 @@ import { AuthContext } from "@Contexts/AuthContext";
 import { AuthProvider } from "@Contexts/AuthProvider";
 import { ThemeProvider } from "@Contexts/ThemeProvider";
 import { AuthContextType } from "@app-types/AuthContext.types";
-import "./App.scss";
 import LoginPage from "@Pages/LoginPage";
 import ChatbotPage from "@Pages/ChatbotPage";
 import TeamDetailPage from "@Pages/TeamDetailPage";

@@ -27,7 +27,6 @@ npm install
 - `electron` - Electron 런타임
 - `electron-builder` - 앱 빌드 및 패키징
 - `vite-plugin-electron` - Vite와 Electron 통합
-- `vite-plugin-electron-renderer` - Renderer 프로세스 지원
 
 ### 2. 개발 모드 실행
 
@@ -64,13 +63,10 @@ KetchupE/
 ├── electron/
 │   ├── main.ts          # Electron 메인 프로세스
 │   ├── preload.js       # Preload 스크립트 (IPC 브릿지)
-│   └── preload.ts       # Preload 타입 정의
+│   └── ipc/             # 폴더 스캔·파일 열기
 ├── src/
 │   ├── electron.d.ts    # Electron API 타입 정의
-│   ├── lib/
-│   │   └── syncedFolders.ts  # 동기화 폴더 관리
-│   └── Features/Chatbot/components/
-│       └── FolderSyncModal.tsx  # 폴더 동기화 UI (웹/일렉트론 겸용)
+│   └── Features/TeamDetail/ # 폴더 업로드 UI와 로직
 ├── dist-electron/       # 빌드된 Electron 코드
 ├── dist/                # 빌드된 React 앱
 └── release/             # 패키징된 앱

@@ -7,14 +7,6 @@ import {
 // 메시지 종류 (answer, error, thinking, retrieve)
 export type MessageKind = "answer" | "error" | "thinking" | "retrieve";
 
-export type ConnectionPhase =
-  | "idle"
-  | "connecting"
-  | "configuring"
-  | "ready"
-  | "streaming"
-  | "waiting_interrupt";
-
 export type FeedbackInterruptType = "feedback_score" | "feedback_reason";
 
 export interface FeedbackInterruptContent {
@@ -50,15 +42,10 @@ export type InterruptContent =
   | CanvasInterruptContent
   | AnchorChoiceInterruptContent;
 
-// 클라이언트가 UI로 응답을 받는 interrupt (pendingInterrupt 상태로 관리)
-export type PendingInterrupt =
-  | FeedbackInterruptContent
-  | CanvasInterruptContent
-  | AnchorChoiceInterruptContent;
+export type PendingInterrupt = InterruptContent;
 
 // anchor 선택 응답 방식
-// use_selected: 선택한 문서 참고 / anchor_only: 선택한 문서에서만 참고 / skip: 문서 참고 안 함
-export type AnchorChoiceAction = "use_selected" | "anchor_only" | "skip";
+export type AnchorChoiceAction = "use_selected" | "skip";
 
 // ============ Resume Content Types ============
 // interrupt 하위 타입마다 resume으로 보내야 할 content 형태가 다르다.
@@ -167,9 +154,6 @@ export interface ChatMessagesHook {
   messages: Message[];
   inputMessage: string;
   isGenerating: boolean;
-  feedbackModeEnabled: boolean;
-  isConfigured: boolean;
-  connectionPhase: ConnectionPhase;
   pendingInterrupt: PendingInterrupt | null;
   isSubmittingResume: boolean;
   sessionId: string | null;
@@ -180,7 +164,6 @@ export interface ChatMessagesHook {
   showMissingTermsForm: boolean;
   setInputMessage: (message: string) => void;
   handleSubmit: (e: React.FormEvent) => Promise<void>;
-  toggleFeedbackMode: () => Promise<void>;
   sendResume: (content: string) => void;
   toggleAnchorCandidate: (documentId: string) => void;
   submitAnchorChoice: (action: AnchorChoiceAction) => void;
@@ -202,7 +185,6 @@ export interface ChatMessagesHook {
 // Client -> Server (Outgoing)
 export type WSOutgoingMessage =
   | WSAuthMessage
-  | WSConfigureMessage
   | WSChatMessage
   | WSResumeMessage;
 
@@ -217,11 +199,6 @@ export interface WSChatMessage {
   content: string;
 }
 
-export interface WSConfigureMessage {
-  type: "configure";
-  function: "feedback";
-}
-
 // interrupt 응답. content는 직전 interrupt 하위 타입에 대응하는 형태여야 한다
 export interface WSResumeMessage {
   type: "resume";
@@ -231,7 +208,6 @@ export interface WSResumeMessage {
 // Server -> Client (Incoming)
 export type WSIncomingMessage =
   | WSAuthenticatedMessage
-  | WSConfiguredMessage
   | WSRoutedMessage
   | WSThinkingMessage
   | WSMiscMessage
@@ -251,10 +227,6 @@ export interface WSRoutedMessage {
 export interface WSAuthenticatedMessage {
   type: "authenticated";
   session_id: string;
-}
-
-export interface WSConfiguredMessage {
-  type: "configured";
 }
 
 export interface WSThinkingMessage {
