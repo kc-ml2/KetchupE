@@ -11,9 +11,14 @@ interface MessageRouterProps {
   msg: Message;
   index: number;
   retrieveDocs?: RetrieveDocument[];
+  onOpenCanvas?: (canvasId: string) => void;
 }
 
-const MessageRouter = ({ msg, retrieveDocs }: MessageRouterProps) => {
+const MessageRouter = ({
+  msg,
+  retrieveDocs,
+  onOpenCanvas,
+}: MessageRouterProps) => {
   const isAssistant = msg.role === "assistant";
   const kind = msg.kind;
   const [isCopied, setIsCopied] = useState(false);
@@ -84,7 +89,7 @@ const MessageRouter = ({ msg, retrieveDocs }: MessageRouterProps) => {
         <div className="flex items-start flex-row">
           <img src={ragIcon} alt="Assistant" className="w-7 h-7 object-cover" />
           <div className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-[#262626] text-sm text-gray-900 dark:text-[#FAFAFA]">
-            <ThinkingMessage />
+            <ThinkingMessage content={msg.content} />
           </div>
         </div>
       </div>
@@ -122,6 +127,15 @@ const MessageRouter = ({ msg, retrieveDocs }: MessageRouterProps) => {
             retrieveDocs={retrieveDocs}
             showCopy={!msg.isInterruptPrompt}
           />
+          {msg.canvasRef && (
+            <button
+              type="button"
+              onClick={() => onOpenCanvas?.(msg.canvasRef!.canvas_id)}
+              className="mt-3 inline-flex items-center rounded-lg border border-[#0066FF] px-3 py-1.5 text-xs font-semibold text-[#0066FF] transition-colors hover:bg-[#0066FF] hover:text-white"
+            >
+              {msg.canvasRef.title} 열기
+            </button>
+          )}
           {!msg.isInterruptPrompt && retrieveDocs && retrieveDocs.length > 0 && (
             <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
               <RetrieveMessage documents={retrieveDocs} />

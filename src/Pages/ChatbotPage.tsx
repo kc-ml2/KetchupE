@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { IoSend } from "react-icons/io5";
 import { FaStopCircle } from "react-icons/fa";
 // import { isMobile } from "react-device-detect";
@@ -7,6 +7,12 @@ import { useChatMessages } from "@Features/Chatbot/hooks/useChatMessage";
 import { useTextareaResize } from "@Features/Chatbot/hooks/useTextareaResize";
 import { useScrollToBottom } from "@Features/Chatbot/hooks/useScrollToBottom";
 import MessageRouter from "@Features/Chatbot/components/MessageRouter";
+import CanvasPanel, {
+  CanvasPanelFallback,
+} from "@Features/Chatbot/components/CanvasPanel";
+import AnchorChoicePrompt from "@Features/Chatbot/components/AnchorChoicePrompt";
+import MissingTermsForm from "@Features/Chatbot/components/MissingTermsForm";
+import ErrorBoundary from "@Features/Shared/components/ErrorBoundary";
 import KetchupE from "@images/rag.png";
 import Sidebar from "@Features/Sidebar/components/Sidebar";
 import { guideCopy } from "@config/guideCopy";
@@ -20,12 +26,28 @@ const ChatbotPage = (): React.JSX.Element => {
     connectionPhase,
     pendingInterrupt,
     isSubmittingResume,
+    canvasData,
+    canvasActionContexts,
+    changedBlockIds,
+    selectedAnchorIds,
+    showMissingTermsForm,
     setInputMessage,
     handleSubmit,
     // toggleFeedbackMode,
     sendResume,
+    toggleAnchorCandidate,
+    submitAnchorChoice,
+    openCanvas,
+    removeCanvasActionContext,
+    startEditBlock,
+    startAddBlockAfter,
+    deleteBlock,
+    submitMissingTerms,
+    changeCanvasVersion,
+    finalizeCanvas,
     stopGenerating,
     startNewSession,
+    closeCanvas,
   } = useChatMessages();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -40,6 +62,12 @@ const ChatbotPage = (): React.JSX.Element => {
     messages,
   ]);
 
+  useEffect(() => {
+    if (canvasActionContexts.length > 0) {
+      textareaRef.current?.focus();
+    }
+  }, [canvasActionContexts]);
+
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -53,7 +81,8 @@ const ChatbotPage = (): React.JSX.Element => {
   const isInputDisabled =
     isGenerating ||
     isFeedbackPreparing ||
-    pendingInterrupt?.type === "feedback_score";
+    pendingInterrupt?.type === "feedback_score" ||
+    pendingInterrupt?.type === "awaiting_anchor_choice";
 
   // const handleFeedbackToggle = async () => {
   //   await toggleFeedbackMode();
@@ -63,18 +92,56 @@ const ChatbotPage = (): React.JSX.Element => {
     sendResume(String(score));
   };
 
-  const inputPlaceholder =
-    pendingInterrupt?.type === "feedback_reason"
-      ? "추가 의견을 입력해 주세요..."
-      : "메시지를 입력하세요...";
-  const composerModeLabel =
-    pendingInterrupt?.type === "feedback_score"
-      ? "피드백 점수 선택 대기 중"
-      : pendingInterrupt?.type === "feedback_reason"
-        ? "추가 의견 입력 모드"
-        : feedbackModeEnabled
-          ? "Feedback Mode 활성화"
-          : null;
+  const inputPlaceholder = (() => {
+    if (canvasActionContexts.length > 1) {
+      return `선택한 ${canvasActionContexts.length}개 작업에 적용할 내용을 입력해 주세요...`;
+    }
+    const context = canvasActionContexts[0];
+    if (context?.op === "edit") {
+      return "선택한 블록을 어떻게 수정할지 입력해 주세요...";
+    }
+    if (context?.op === "add") {
+      return "선택한 블록 아래에 추가할 내용을 입력해 주세요...";
+    }
+    if (pendingInterrupt?.type === "feedback_reason") {
+      return "추가 의견을 입력해 주세요...";
+    }
+    if (pendingInterrupt?.type === "awaiting_anchor_choice") {
+      return "위에서 참고할 문서를 선택해 주세요...";
+    }
+    if (pendingInterrupt?.type === "awaiting_edit") {
+      return "캔버스 전체에 대한 수정 의견을 입력해 주세요...";
+    }
+    return "메시지를 입력하세요...";
+  })();
+  const composerModeLabel = (() => {
+    if (canvasActionContexts.length > 1) {
+      return `${canvasActionContexts.length}개 작업 일괄 편집 모드`;
+    }
+    const context = canvasActionContexts[0];
+    if (context?.op === "edit") {
+      return "선택한 블록 수정 모드";
+    }
+    if (context?.op === "add") {
+      return "선택한 블록 아래에 추가 모드";
+    }
+    if (pendingInterrupt?.type === "feedback_score") {
+      return "피드백 점수 선택 대기 중";
+    }
+    if (pendingInterrupt?.type === "feedback_reason") {
+      return "추가 의견 입력 모드";
+    }
+    if (pendingInterrupt?.type === "awaiting_anchor_choice") {
+      return "참고 문서 선택 대기 중";
+    }
+    if (pendingInterrupt?.type === "awaiting_edit") {
+      return "캔버스 전체 수정 모드";
+    }
+    if (feedbackModeEnabled) {
+      return "Feedback Mode 활성화";
+    }
+    return null;
+  })();
 
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden font-['Inter',sans-serif]">
@@ -141,9 +208,18 @@ const ChatbotPage = (): React.JSX.Element => {
                     msg={msg}
                     index={index}
                     retrieveDocs={retrieveDocs}
+                    onOpenCanvas={openCanvas}
                   />
                 );
               })}
+
+              {canvasData && showMissingTermsForm && (
+                <MissingTermsForm
+                  terms={canvasData.missing_terms}
+                  disabled={isGenerating || isSubmittingResume}
+                  onSubmit={submitMissingTerms}
+                />
+              )}
 
               {pendingInterrupt?.type === "feedback_score" && (
                 <div className="flex flex-col mb-2 items-start">
@@ -173,6 +249,16 @@ const ChatbotPage = (): React.JSX.Element => {
                     </div>
                   </div>
                 </div>
+              )}
+
+              {pendingInterrupt?.type === "awaiting_anchor_choice" && (
+                <AnchorChoicePrompt
+                  candidates={pendingInterrupt.candidates}
+                  selectedIds={selectedAnchorIds}
+                  disabled={isSubmittingResume}
+                  onToggle={toggleAnchorCandidate}
+                  onSubmit={submitAnchorChoice}
+                />
               )}
 
               {pendingInterrupt?.type === "feedback_reason" && (
@@ -243,9 +329,45 @@ const ChatbotPage = (): React.JSX.Element => {
 
         {composerModeLabel && (
           <div className="px-5 pb-2">
-            <p className="text-xs text-[#71717A] dark:text-[#A1A1AA]">
+            <p
+              className={`inline-flex text-xs ${
+                pendingInterrupt?.type === "awaiting_edit"
+                  ? "rounded-full bg-[#EFF6FF] px-2.5 py-1 font-semibold text-[#0066FF] dark:bg-[#0B1B33] dark:text-[#60A5FA]"
+                  : "text-[#71717A] dark:text-[#A1A1AA]"
+              }`}
+            >
               {composerModeLabel}
             </p>
+          </div>
+        )}
+
+        {canvasActionContexts.length > 0 && (
+          <div className="px-5 pb-2">
+            <div className="flex flex-wrap gap-2">
+              {canvasActionContexts.map((context) => (
+                <div
+                  key={
+                    context.op === "edit"
+                      ? `edit:${context.block_id}`
+                      : `add:${context.after_block_id}`
+                  }
+                  className="inline-flex max-w-full items-center gap-2 rounded-full border border-[#0066FF] bg-[#EFF6FF] px-3 py-1.5 text-xs font-medium text-[#0066FF] dark:bg-[#0B1B33]"
+                >
+                  <span className="truncate">
+                    {context.label}{" "}
+                    {context.op === "edit" ? "수정" : "아래 추가"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeCanvasActionContext(context)}
+                    className="flex h-4 w-4 items-center justify-center rounded-full text-[#0066FF] transition-colors hover:bg-[#0066FF] hover:text-white"
+                    title="선택 해제"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -327,6 +449,31 @@ const ChatbotPage = (): React.JSX.Element => {
         </div>
         {/* Input Area */}
       </div>
+
+      {/* Canvas Panel (계약서 초안 수신 시 표시) */}
+      {canvasData && (
+        <ErrorBoundary fallback={<CanvasPanelFallback onClose={closeCanvas} />}>
+          <CanvasPanel
+            canvas={canvasData}
+            changedBlockIds={changedBlockIds}
+            canUndo={
+              pendingInterrupt?.type === "awaiting_edit" &&
+              pendingInterrupt.can_undo === true
+            }
+            canRedo={
+              pendingInterrupt?.type === "awaiting_edit" &&
+              pendingInterrupt.can_redo === true
+            }
+            onClose={closeCanvas}
+            activeActionContexts={canvasActionContexts}
+            onEditBlock={startEditBlock}
+            onAddBlockAfter={startAddBlockAfter}
+            onDeleteBlock={deleteBlock}
+            onChangeVersion={changeCanvasVersion}
+            onFinalize={finalizeCanvas}
+          />
+        </ErrorBoundary>
+      )}
     </div>
   );
 };
