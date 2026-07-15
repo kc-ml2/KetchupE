@@ -7687,3255 +7687,6 @@
     },
     {
       "type": "frame",
-      "id": "2vbOS",
-      "x": 0,
-      "y": 3451,
-      "name": "Tutorial 1 - Chat Channel",
-      "width": 1280,
-      "height": 800,
-      "fill": "#FFFFFF",
-      "layout": "none",
-      "children": [
-        {
-          "type": "frame",
-          "id": "Jpm25",
-          "x": 0,
-          "y": 0,
-          "name": "Sidebar",
-          "width": 260,
-          "height": "fill_container(800)",
-          "fill": "#18181B",
-          "layout": "vertical",
-          "padding": [
-            16,
-            12
-          ],
-          "children": [
-            {
-              "type": "frame",
-              "id": "7M8dU",
-              "name": "App Header",
-              "width": "fill_container",
-              "height": 44,
-              "gap": 10,
-              "padding": [
-                0,
-                4
-              ],
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "icon_font",
-                  "id": "NOg8F",
-                  "name": "logo",
-                  "width": 22,
-                  "height": 22,
-                  "iconFontName": "message-square",
-                  "iconFontFamily": "lucide",
-                  "fill": "#0066FF"
-                },
-                {
-                  "type": "text",
-                  "id": "1tXr7",
-                  "name": "titleText",
-                  "fill": "#FAFAFA",
-                  "content": "TeamRAG",
-                  "fontFamily": "Inter",
-                  "fontSize": 18,
-                  "fontWeight": "600"
-                }
-              ]
-            },
-            {
-              "type": "rectangle",
-              "id": "WEXig",
-              "name": "divider1",
-              "fill": "#27272A",
-              "width": "fill_container",
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "w9N3H",
-              "name": "Chat Channel",
-              "width": "fill_container",
-              "layout": "vertical",
-              "gap": 4,
-              "padding": [
-                12,
-                0
-              ],
-              "children": [
-                {
-                  "type": "text",
-                  "id": "wjI43",
-                  "name": "chatLabel",
-                  "fill": "#71717A",
-                  "content": "채널",
-                  "fontFamily": "Inter",
-                  "fontSize": 11,
-                  "fontWeight": "500",
-                  "letterSpacing": 0.5
-                },
-                {
-                  "type": "frame",
-                  "id": "iLZ8j",
-                  "name": "chatItem",
-                  "width": "fill_container",
-                  "height": 36,
-                  "fill": "#0066FF",
-                  "cornerRadius": 6,
-                  "gap": 10,
-                  "padding": [
-                    0,
-                    8
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "2LQ91",
-                      "name": "chatIcon",
-                      "width": 18,
-                      "height": 18,
-                      "iconFontName": "hash",
-                      "iconFontFamily": "lucide",
-                      "fill": "#FFFFFF"
-                    },
-                    {
-                      "type": "text",
-                      "id": "YK9oc",
-                      "name": "chatName",
-                      "fill": "#FFFFFF",
-                      "content": "채팅",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "500"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "rectangle",
-              "id": "4qftg",
-              "name": "divider2",
-              "fill": "#27272A",
-              "width": "fill_container",
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "OetmK",
-              "name": "Groups Section",
-              "width": "fill_container",
-              "height": "fill_container",
-              "layout": "vertical",
-              "gap": 4,
-              "padding": [
-                12,
-                0
-              ],
-              "children": [
-                {
-                  "type": "text",
-                  "id": "bVqwY",
-                  "name": "groupLabel",
-                  "fill": "#71717A",
-                  "content": "내 그룹",
-                  "fontFamily": "Inter",
-                  "fontSize": 11,
-                  "fontWeight": "500",
-                  "letterSpacing": 0.5
-                },
-                {
-                  "type": "frame",
-                  "id": "YBlIR",
-                  "name": "group1",
-                  "width": "fill_container",
-                  "height": 36,
-                  "cornerRadius": 6,
-                  "gap": 10,
-                  "padding": [
-                    0,
-                    8
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "Xdf0E",
-                      "name": "group1Icon",
-                      "width": 18,
-                      "height": 18,
-                      "iconFontName": "users",
-                      "iconFontFamily": "lucide",
-                      "fill": "#71717A"
-                    },
-                    {
-                      "type": "text",
-                      "id": "5BAvF",
-                      "name": "group1Name",
-                      "fill": "#FAFAFA",
-                      "content": "개발팀",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "EXtXJ",
-                  "name": "group2",
-                  "width": "fill_container",
-                  "height": 36,
-                  "cornerRadius": 6,
-                  "gap": 10,
-                  "padding": [
-                    0,
-                    8
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "4kbuu",
-                      "name": "group2Icon",
-                      "width": 18,
-                      "height": 18,
-                      "iconFontName": "users",
-                      "iconFontFamily": "lucide",
-                      "fill": "#71717A"
-                    },
-                    {
-                      "type": "text",
-                      "id": "0LfPm",
-                      "name": "group2Name",
-                      "fill": "#FAFAFA",
-                      "content": "마케팅팀",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "v6gUE",
-                  "name": "group3",
-                  "width": "fill_container",
-                  "height": 36,
-                  "cornerRadius": 6,
-                  "gap": 10,
-                  "padding": [
-                    0,
-                    8
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "O3g3I",
-                      "name": "group3Icon",
-                      "width": 18,
-                      "height": 18,
-                      "iconFontName": "users",
-                      "iconFontFamily": "lucide",
-                      "fill": "#71717A"
-                    },
-                    {
-                      "type": "text",
-                      "id": "4Fr3n",
-                      "name": "group3Name",
-                      "fill": "#FAFAFA",
-                      "content": "디자인팀",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "rectangle",
-              "id": "xpJfa",
-              "name": "divider3",
-              "fill": "#27272A",
-              "width": "fill_container",
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "KZbJh",
-              "name": "Add Group Button",
-              "width": "fill_container",
-              "height": 40,
-              "cornerRadius": 8,
-              "stroke": {
-                "align": "inside",
-                "thickness": 1,
-                "fill": "#27272A"
-              },
-              "gap": 8,
-              "justifyContent": "center",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "icon_font",
-                  "id": "TNyo1",
-                  "name": "addIcon",
-                  "width": 18,
-                  "height": 18,
-                  "iconFontName": "plus",
-                  "iconFontFamily": "lucide",
-                  "fill": "#71717A"
-                },
-                {
-                  "type": "text",
-                  "id": "xECoc",
-                  "name": "addText",
-                  "fill": "#71717A",
-                  "content": "그룹 추가하기",
-                  "fontFamily": "Inter",
-                  "fontSize": 14,
-                  "fontWeight": "500"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "frame",
-          "id": "GGgDb",
-          "x": 260,
-          "y": 0,
-          "name": "Main Content",
-          "width": "fill_container(1)",
-          "height": "fill_container(800)",
-          "fill": "#FFFFFF",
-          "layout": "vertical",
-          "children": [
-            {
-              "type": "frame",
-              "id": "ihETG",
-              "name": "Chat Header",
-              "width": "fill_container",
-              "height": 60,
-              "stroke": {
-                "align": "inside",
-                "thickness": {
-                  "bottom": 1
-                },
-                "fill": "#E4E4E7"
-              },
-              "padding": [
-                0,
-                24
-              ],
-              "justifyContent": "space_between",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "Dr9Ml",
-                  "name": "chatHeaderLeft",
-                  "gap": 12,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "7P24y",
-                      "name": "chatHeaderIcon",
-                      "width": 24,
-                      "height": 24,
-                      "iconFontName": "hash",
-                      "iconFontFamily": "lucide",
-                      "fill": "#18181B"
-                    },
-                    {
-                      "type": "text",
-                      "id": "u4kHn",
-                      "name": "chatHeaderTitle",
-                      "fill": "#18181B",
-                      "content": "채팅",
-                      "fontFamily": "Inter",
-                      "fontSize": 18,
-                      "fontWeight": "600"
-                    },
-                    {
-                      "type": "text",
-                      "id": "TUWyU",
-                      "name": "chatHeaderDesc",
-                      "fill": "#71717A",
-                      "content": "AI 챗봇과 대화하기",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "7dPuO",
-              "name": "Chat Content",
-              "width": "fill_container",
-              "height": "fill_container",
-              "layout": "vertical",
-              "gap": 16,
-              "padding": 24,
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "TgZcG",
-                  "name": "Messages",
-                  "width": "fill_container",
-                  "height": "fill_container",
-                  "layout": "vertical",
-                  "gap": 16,
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "MMeL9",
-                      "name": "AI Message",
-                      "width": "fill_container",
-                      "gap": 12,
-                      "children": [
-                        {
-                          "type": "rectangle",
-                          "id": "6NlFH",
-                          "rotation": 0.12319624212958122,
-                          "fill": {
-                            "type": "image",
-                            "enabled": true,
-                            "url": "제목_없는_아트워크 15.png",
-                            "mode": "fill"
-                          },
-                          "width": 54,
-                          "height": 54
-                        },
-                        {
-                          "type": "frame",
-                          "id": "iZnwz",
-                          "name": "aiBubble",
-                          "width": 500,
-                          "fill": "#F4F4F5",
-                          "cornerRadius": 12,
-                          "layout": "vertical",
-                          "gap": 8,
-                          "padding": 16,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "0fuUm",
-                              "name": "aiText",
-                              "fill": "#18181B",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "안녕하세요! TeamRAG 챗봇입니다. 무엇을 도와드릴까요? 그룹에 업로드된 문서를 기반으로 질문에 답변해 드릴 수 있습니다.",
-                              "lineHeight": 1.5,
-                              "fontFamily": "Inter",
-                              "fontSize": 14,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "X7xBf",
-                      "name": "User Message",
-                      "width": "fill_container",
-                      "gap": 12,
-                      "justifyContent": "end",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "4gBOI",
-                          "name": "userBubble",
-                          "width": 400,
-                          "fill": "#0066FF",
-                          "cornerRadius": 12,
-                          "layout": "vertical",
-                          "gap": 8,
-                          "padding": 16,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "v8Rgo",
-                              "name": "userText",
-                              "fill": "#FFFFFF",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "개발팀 폴더에서 API 문서를 찾아줘",
-                              "lineHeight": 1.5,
-                              "fontFamily": "Inter",
-                              "fontSize": 14,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "kHqCS",
-                      "name": "AI Response",
-                      "width": "fill_container",
-                      "gap": 12,
-                      "children": [
-                        {
-                          "type": "rectangle",
-                          "id": "ufdQo",
-                          "rotation": 0.12319624212958122,
-                          "fill": {
-                            "type": "image",
-                            "enabled": true,
-                            "url": "제목_없는_아트워크 15.png",
-                            "mode": "fill"
-                          },
-                          "width": 54,
-                          "height": 54
-                        },
-                        {
-                          "type": "frame",
-                          "id": "DjAcS",
-                          "name": "aiBubble2",
-                          "width": 550,
-                          "fill": "#F4F4F5",
-                          "cornerRadius": 12,
-                          "layout": "vertical",
-                          "gap": 12,
-                          "padding": 16,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "Me9FV",
-                              "name": "aiText2",
-                              "fill": "#18181B",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "개발팀 폴더에서 API 관련 문서를 찾았습니다:",
-                              "lineHeight": 1.5,
-                              "fontFamily": "Inter",
-                              "fontSize": 14,
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "frame",
-                              "id": "AtlLu",
-                              "name": "docList",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 8,
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "FdgzL",
-                                  "name": "doc1",
-                                  "width": "fill_container",
-                                  "fill": "#FFFFFF",
-                                  "cornerRadius": 8,
-                                  "stroke": {
-                                    "align": "inside",
-                                    "thickness": 1,
-                                    "fill": "#E4E4E7"
-                                  },
-                                  "gap": 12,
-                                  "padding": 12,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon_font",
-                                      "id": "d55MZ",
-                                      "name": "doc1Icon",
-                                      "width": 20,
-                                      "height": 20,
-                                      "iconFontName": "file-text",
-                                      "iconFontFamily": "lucide",
-                                      "fill": "#0066FF"
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "CIV5k",
-                                      "name": "doc1Info",
-                                      "width": "fill_container",
-                                      "layout": "vertical",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "1LlF7",
-                                          "name": "doc1Name",
-                                          "fill": "#18181B",
-                                          "content": "API_Reference_v2.md",
-                                          "fontFamily": "Inter",
-                                          "fontSize": 14,
-                                          "fontWeight": "500"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "oPmSS",
-                                          "name": "doc1Path",
-                                          "fill": "#71717A",
-                                          "content": "개발팀/문서/API",
-                                          "fontFamily": "Inter",
-                                          "fontSize": 12,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "DFuaB",
-                                  "name": "doc2",
-                                  "width": "fill_container",
-                                  "fill": "#FFFFFF",
-                                  "cornerRadius": 8,
-                                  "stroke": {
-                                    "align": "inside",
-                                    "thickness": 1,
-                                    "fill": "#E4E4E7"
-                                  },
-                                  "gap": 12,
-                                  "padding": 12,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon_font",
-                                      "id": "tDwfm",
-                                      "name": "doc2Icon",
-                                      "width": 20,
-                                      "height": 20,
-                                      "iconFontName": "file-text",
-                                      "iconFontFamily": "lucide",
-                                      "fill": "#0066FF"
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "dEWlu",
-                                      "name": "doc2Info",
-                                      "width": "fill_container",
-                                      "layout": "vertical",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "1s59G",
-                                          "name": "doc2Name",
-                                          "fill": "#18181B",
-                                          "content": "REST_API_Guide.pdf",
-                                          "fontFamily": "Inter",
-                                          "fontSize": 14,
-                                          "fontWeight": "500"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "mOztI",
-                                          "name": "doc2Path",
-                                          "fill": "#71717A",
-                                          "content": "개발팀/문서/API",
-                                          "fontFamily": "Inter",
-                                          "fontSize": 12,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "HS6QP",
-                  "name": "Search Filter",
-                  "width": "fill_container",
-                  "gap": 8,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "NoE2r",
-                      "name": "filterLabel",
-                      "gap": 6,
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon_font",
-                          "id": "6dE7C",
-                          "name": "filterIcon",
-                          "width": 14,
-                          "height": 14,
-                          "iconFontName": "search",
-                          "iconFontFamily": "lucide",
-                          "fill": "#71717A"
-                        },
-                        {
-                          "type": "text",
-                          "id": "h4cF2",
-                          "name": "filterText",
-                          "fill": "#71717A",
-                          "content": "검색 범위",
-                          "fontFamily": "Inter",
-                          "fontSize": 13,
-                          "fontWeight": "500"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "4SBbH",
-                      "name": "filterDivider",
-                      "fill": "#E4E4E7",
-                      "width": 1,
-                      "height": 20
-                    },
-                    {
-                      "type": "frame",
-                      "id": "zaAsP",
-                      "name": "Filter Chips",
-                      "gap": 6,
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "OEMd2",
-                          "name": "chip-dev",
-                          "fill": "#0066FF",
-                          "cornerRadius": 16,
-                          "gap": 6,
-                          "padding": [
-                            6,
-                            10
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon_font",
-                              "id": "45Q6k",
-                              "name": "chip1Icon",
-                              "width": 12,
-                              "height": 12,
-                              "iconFontName": "check",
-                              "iconFontFamily": "lucide",
-                              "fill": "#FFFFFF"
-                            },
-                            {
-                              "type": "text",
-                              "id": "W5FbY",
-                              "name": "chip1Text",
-                              "fill": "#FFFFFF",
-                              "content": "개발팀",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "FOHjD",
-                          "name": "chip-marketing",
-                          "fill": "#0066FF",
-                          "cornerRadius": 16,
-                          "gap": 6,
-                          "padding": [
-                            6,
-                            10
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon_font",
-                              "id": "G4EDk",
-                              "name": "chip2Icon",
-                              "width": 12,
-                              "height": 12,
-                              "iconFontName": "check",
-                              "iconFontFamily": "lucide",
-                              "fill": "#FFFFFF"
-                            },
-                            {
-                              "type": "text",
-                              "id": "dRe41",
-                              "name": "chip2Text",
-                              "fill": "#FFFFFF",
-                              "content": "마케팅팀",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "yg0iQ",
-                          "name": "chip-design",
-                          "cornerRadius": 16,
-                          "stroke": {
-                            "align": "inside",
-                            "thickness": 1,
-                            "fill": "#E4E4E7"
-                          },
-                          "gap": 6,
-                          "padding": [
-                            6,
-                            10
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "QpRYE",
-                              "name": "chip3Text",
-                              "fill": "#71717A",
-                              "content": "디자인팀",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "500"
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "sp5mv",
-                  "name": "Input Area",
-                  "width": "fill_container",
-                  "height": 52,
-                  "cornerRadius": 12,
-                  "stroke": {
-                    "align": "inside",
-                    "thickness": 1,
-                    "fill": "#E4E4E7"
-                  },
-                  "gap": 12,
-                  "padding": [
-                    0,
-                    16
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "R4ZNy",
-                      "name": "inputIcon",
-                      "width": 20,
-                      "height": 20,
-                      "iconFontName": "paperclip",
-                      "iconFontFamily": "lucide",
-                      "fill": "#71717A"
-                    },
-                    {
-                      "type": "text",
-                      "id": "j3NJh",
-                      "name": "inputText",
-                      "fill": "#71717A",
-                      "content": "메시지를 입력하세요...",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "f8VvY",
-                      "name": "sendBtn",
-                      "width": 36,
-                      "height": 36,
-                      "fill": "#0066FF",
-                      "cornerRadius": 8,
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon_font",
-                          "id": "pWaiu",
-                          "name": "sendIcon",
-                          "width": 18,
-                          "height": 18,
-                          "iconFontName": "send",
-                          "iconFontFamily": "lucide",
-                          "fill": "#FFFFFF"
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "frame",
-          "id": "fgC9q",
-          "x": 0,
-          "y": 0,
-          "name": "Tutorial Overlay",
-          "width": 1280,
-          "height": 800,
-          "fill": "#000000CC",
-          "layout": "none",
-          "children": [
-            {
-              "type": "frame",
-              "id": "plZ1J",
-              "x": 12,
-              "y": 95,
-              "name": "Chat Highlight",
-              "width": 236,
-              "height": 48,
-              "cornerRadius": 8,
-              "stroke": {
-                "align": "outside",
-                "thickness": 3,
-                "fill": "#0066FF"
-              }
-            },
-            {
-              "type": "frame",
-              "id": "mFhBA",
-              "x": 270,
-              "y": 85,
-              "name": "Tooltip",
-              "width": 320,
-              "fill": "#FFFFFF",
-              "cornerRadius": 12,
-              "layout": "vertical",
-              "gap": 12,
-              "padding": 16,
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "1bOKv",
-                  "name": "tooltipHeader1",
-                  "gap": 8,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "FQfSW",
-                      "name": "tooltipIcon1",
-                      "width": 32,
-                      "height": 32,
-                      "fill": "#0066FF",
-                      "cornerRadius": 16,
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "cgpvz",
-                          "name": "tooltipIconInner1",
-                          "fill": "#FFFFFF",
-                          "content": "1",
-                          "fontFamily": "Inter",
-                          "fontSize": 16,
-                          "fontWeight": "600"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "nSebI",
-                      "name": "tooltipTitle1",
-                      "fill": "#18181B",
-                      "content": "채팅 채널",
-                      "fontFamily": "Inter",
-                      "fontSize": 16,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
-                {
-                  "type": "text",
-                  "id": "TNiCw",
-                  "name": "tooltipDesc1",
-                  "fill": "#71717A",
-                  "textGrowth": "fixed-width",
-                  "width": "fill_container",
-                  "content": "채팅 채널을 클릭하여 AI 챗봇과 대화를 시작하세요. 업로드된 문서를 기반으로 질문에 답변해 드립니다.",
-                  "lineHeight": 1.6,
-                  "fontFamily": "Inter",
-                  "fontSize": 14,
-                  "fontWeight": "normal"
-                },
-                {
-                  "type": "frame",
-                  "id": "alroz",
-                  "name": "tooltipNav1",
-                  "width": "fill_container",
-                  "justifyContent": "space_between",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "3M3i0",
-                      "name": "tooltipSkip1",
-                      "fill": "#71717A",
-                      "content": "건너뛰기",
-                      "fontFamily": "Inter",
-                      "fontSize": 13,
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "K0Akx",
-                      "name": "tooltipNext1",
-                      "fill": "#0066FF",
-                      "cornerRadius": 8,
-                      "gap": 8,
-                      "padding": [
-                        8,
-                        16
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "0OpXE",
-                          "name": "tooltipNextText1",
-                          "fill": "#FFFFFF",
-                          "content": "다음",
-                          "fontFamily": "Inter",
-                          "fontSize": 13,
-                          "fontWeight": "500"
-                        },
-                        {
-                          "type": "icon_font",
-                          "id": "zztiP",
-                          "name": "tooltipNextIcon1",
-                          "width": 16,
-                          "height": 16,
-                          "iconFontName": "arrow-right",
-                          "iconFontFamily": "lucide",
-                          "fill": "#FFFFFF"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "fsotG",
-                  "name": "dots1",
-                  "width": "fill_container",
-                  "gap": 6,
-                  "justifyContent": "center",
-                  "children": [
-                    {
-                      "type": "ellipse",
-                      "id": "U7s2l",
-                      "name": "dot1a",
-                      "fill": "#0066FF",
-                      "width": 8,
-                      "height": 8
-                    },
-                    {
-                      "type": "ellipse",
-                      "id": "ATn03",
-                      "name": "dot1b",
-                      "fill": "#E4E4E7",
-                      "width": 8,
-                      "height": 8
-                    },
-                    {
-                      "type": "ellipse",
-                      "id": "64EQj",
-                      "name": "dot1c",
-                      "fill": "#E4E4E7",
-                      "width": 8,
-                      "height": 8
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "frame",
-      "id": "4PZVY",
-      "x": 1380,
-      "y": 3451,
-      "name": "Tutorial 2 - Search Filter",
-      "width": 1280,
-      "height": 800,
-      "fill": "#FFFFFF",
-      "layout": "none",
-      "children": [
-        {
-          "type": "frame",
-          "id": "Jx5di",
-          "x": 0,
-          "y": 0,
-          "name": "Sidebar",
-          "width": 260,
-          "height": "fill_container(800)",
-          "fill": "#18181B",
-          "layout": "vertical",
-          "padding": [
-            16,
-            12
-          ],
-          "children": [
-            {
-              "type": "frame",
-              "id": "mXpNX",
-              "name": "App Header",
-              "width": "fill_container",
-              "height": 44,
-              "gap": 10,
-              "padding": [
-                0,
-                4
-              ],
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "icon_font",
-                  "id": "dVojo",
-                  "name": "logo",
-                  "width": 22,
-                  "height": 22,
-                  "iconFontName": "message-square",
-                  "iconFontFamily": "lucide",
-                  "fill": "#0066FF"
-                },
-                {
-                  "type": "text",
-                  "id": "pQMvi",
-                  "name": "titleText",
-                  "fill": "#FAFAFA",
-                  "content": "TeamRAG",
-                  "fontFamily": "Inter",
-                  "fontSize": 18,
-                  "fontWeight": "600"
-                }
-              ]
-            },
-            {
-              "type": "rectangle",
-              "id": "VLrlF",
-              "name": "divider1",
-              "fill": "#27272A",
-              "width": "fill_container",
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "i7KPw",
-              "name": "Chat Channel",
-              "width": "fill_container",
-              "layout": "vertical",
-              "gap": 4,
-              "padding": [
-                12,
-                0
-              ],
-              "children": [
-                {
-                  "type": "text",
-                  "id": "u3ynb",
-                  "name": "chatLabel",
-                  "fill": "#71717A",
-                  "content": "채널",
-                  "fontFamily": "Inter",
-                  "fontSize": 11,
-                  "fontWeight": "500",
-                  "letterSpacing": 0.5
-                },
-                {
-                  "type": "frame",
-                  "id": "t3AFy",
-                  "name": "chatItem",
-                  "width": "fill_container",
-                  "height": 36,
-                  "fill": "#0066FF",
-                  "cornerRadius": 6,
-                  "gap": 10,
-                  "padding": [
-                    0,
-                    8
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "2vxBB",
-                      "name": "chatIcon",
-                      "width": 18,
-                      "height": 18,
-                      "iconFontName": "hash",
-                      "iconFontFamily": "lucide",
-                      "fill": "#FFFFFF"
-                    },
-                    {
-                      "type": "text",
-                      "id": "aMxPW",
-                      "name": "chatName",
-                      "fill": "#FFFFFF",
-                      "content": "채팅",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "500"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "rectangle",
-              "id": "WSSLU",
-              "name": "divider2",
-              "fill": "#27272A",
-              "width": "fill_container",
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "sUWW4",
-              "name": "Groups Section",
-              "width": "fill_container",
-              "height": "fill_container",
-              "layout": "vertical",
-              "gap": 4,
-              "padding": [
-                12,
-                0
-              ],
-              "children": [
-                {
-                  "type": "text",
-                  "id": "HXv9X",
-                  "name": "groupLabel",
-                  "fill": "#71717A",
-                  "content": "내 그룹",
-                  "fontFamily": "Inter",
-                  "fontSize": 11,
-                  "fontWeight": "500",
-                  "letterSpacing": 0.5
-                },
-                {
-                  "type": "frame",
-                  "id": "qJBpL",
-                  "name": "group1",
-                  "width": "fill_container",
-                  "height": 36,
-                  "cornerRadius": 6,
-                  "gap": 10,
-                  "padding": [
-                    0,
-                    8
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "6NWWJ",
-                      "name": "group1Icon",
-                      "width": 18,
-                      "height": 18,
-                      "iconFontName": "users",
-                      "iconFontFamily": "lucide",
-                      "fill": "#71717A"
-                    },
-                    {
-                      "type": "text",
-                      "id": "Gyg8g",
-                      "name": "group1Name",
-                      "fill": "#FAFAFA",
-                      "content": "개발팀",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "9YwLD",
-                  "name": "group2",
-                  "width": "fill_container",
-                  "height": 36,
-                  "cornerRadius": 6,
-                  "gap": 10,
-                  "padding": [
-                    0,
-                    8
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "t5hAv",
-                      "name": "group2Icon",
-                      "width": 18,
-                      "height": 18,
-                      "iconFontName": "users",
-                      "iconFontFamily": "lucide",
-                      "fill": "#71717A"
-                    },
-                    {
-                      "type": "text",
-                      "id": "VZsbq",
-                      "name": "group2Name",
-                      "fill": "#FAFAFA",
-                      "content": "마케팅팀",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "Mpiaf",
-                  "name": "group3",
-                  "width": "fill_container",
-                  "height": 36,
-                  "cornerRadius": 6,
-                  "gap": 10,
-                  "padding": [
-                    0,
-                    8
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "kzfrQ",
-                      "name": "group3Icon",
-                      "width": 18,
-                      "height": 18,
-                      "iconFontName": "users",
-                      "iconFontFamily": "lucide",
-                      "fill": "#71717A"
-                    },
-                    {
-                      "type": "text",
-                      "id": "HglWk",
-                      "name": "group3Name",
-                      "fill": "#FAFAFA",
-                      "content": "디자인팀",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "rectangle",
-              "id": "tILat",
-              "name": "divider3",
-              "fill": "#27272A",
-              "width": "fill_container",
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "UqEsW",
-              "name": "Add Group Button",
-              "width": "fill_container",
-              "height": 40,
-              "cornerRadius": 8,
-              "stroke": {
-                "align": "inside",
-                "thickness": 1,
-                "fill": "#27272A"
-              },
-              "gap": 8,
-              "justifyContent": "center",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "icon_font",
-                  "id": "ycuDL",
-                  "name": "addIcon",
-                  "width": 18,
-                  "height": 18,
-                  "iconFontName": "plus",
-                  "iconFontFamily": "lucide",
-                  "fill": "#71717A"
-                },
-                {
-                  "type": "text",
-                  "id": "SxJTh",
-                  "name": "addText",
-                  "fill": "#71717A",
-                  "content": "그룹 추가하기",
-                  "fontFamily": "Inter",
-                  "fontSize": 14,
-                  "fontWeight": "500"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "frame",
-          "id": "aa0QD",
-          "x": 260,
-          "y": 0,
-          "name": "Main Content",
-          "width": "fill_container(1020)",
-          "height": "fill_container(800)",
-          "fill": "#FFFFFF",
-          "layout": "vertical",
-          "children": [
-            {
-              "type": "frame",
-              "id": "ykC1F",
-              "name": "Chat Header",
-              "width": "fill_container",
-              "height": 60,
-              "stroke": {
-                "align": "inside",
-                "thickness": {
-                  "bottom": 1
-                },
-                "fill": "#E4E4E7"
-              },
-              "padding": [
-                0,
-                24
-              ],
-              "justifyContent": "space_between",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "fy9Dw",
-                  "name": "chatHeaderLeft",
-                  "gap": 12,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "opcTt",
-                      "name": "chatHeaderIcon",
-                      "width": 24,
-                      "height": 24,
-                      "iconFontName": "hash",
-                      "iconFontFamily": "lucide",
-                      "fill": "#18181B"
-                    },
-                    {
-                      "type": "text",
-                      "id": "d54yL",
-                      "name": "chatHeaderTitle",
-                      "fill": "#18181B",
-                      "content": "채팅",
-                      "fontFamily": "Inter",
-                      "fontSize": 18,
-                      "fontWeight": "600"
-                    },
-                    {
-                      "type": "text",
-                      "id": "IpT2u",
-                      "name": "chatHeaderDesc",
-                      "fill": "#71717A",
-                      "content": "AI 챗봇과 대화하기",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "JCqQz",
-              "name": "Chat Content",
-              "width": "fill_container",
-              "height": "fill_container",
-              "layout": "vertical",
-              "gap": 16,
-              "padding": 24,
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "maGTT",
-                  "name": "Messages",
-                  "width": "fill_container",
-                  "height": "fill_container",
-                  "layout": "vertical",
-                  "gap": 16,
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "7BYwV",
-                      "name": "AI Message",
-                      "width": "fill_container",
-                      "gap": 12,
-                      "children": [
-                        {
-                          "type": "rectangle",
-                          "id": "prBiY",
-                          "rotation": 0.12319624212958122,
-                          "fill": {
-                            "type": "image",
-                            "enabled": true,
-                            "url": "제목_없는_아트워크 15.png",
-                            "mode": "fill"
-                          },
-                          "width": 54,
-                          "height": 54
-                        },
-                        {
-                          "type": "frame",
-                          "id": "RQTxj",
-                          "name": "aiBubble",
-                          "width": 500,
-                          "fill": "#F4F4F5",
-                          "cornerRadius": 12,
-                          "layout": "vertical",
-                          "gap": 8,
-                          "padding": 16,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "SXiZn",
-                              "name": "aiText",
-                              "fill": "#18181B",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "안녕하세요! TeamRAG 챗봇입니다. 무엇을 도와드릴까요? 그룹에 업로드된 문서를 기반으로 질문에 답변해 드릴 수 있습니다.",
-                              "lineHeight": 1.5,
-                              "fontFamily": "Inter",
-                              "fontSize": 14,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "PmPAD",
-                      "name": "User Message",
-                      "width": "fill_container",
-                      "gap": 12,
-                      "justifyContent": "end",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "TQuE6",
-                          "name": "userBubble",
-                          "width": 400,
-                          "fill": "#0066FF",
-                          "cornerRadius": 12,
-                          "layout": "vertical",
-                          "gap": 8,
-                          "padding": 16,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "UFUB9",
-                              "name": "userText",
-                              "fill": "#FFFFFF",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "개발팀 폴더에서 API 문서를 찾아줘",
-                              "lineHeight": 1.5,
-                              "fontFamily": "Inter",
-                              "fontSize": 14,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "xnvpB",
-                      "name": "AI Response",
-                      "width": "fill_container",
-                      "gap": 12,
-                      "children": [
-                        {
-                          "type": "rectangle",
-                          "id": "lrHKg",
-                          "rotation": 0.12319624212958122,
-                          "fill": {
-                            "type": "image",
-                            "enabled": true,
-                            "url": "제목_없는_아트워크 15.png",
-                            "mode": "fill"
-                          },
-                          "width": 54,
-                          "height": 54
-                        },
-                        {
-                          "type": "frame",
-                          "id": "kQQzu",
-                          "name": "aiBubble2",
-                          "width": 550,
-                          "fill": "#F4F4F5",
-                          "cornerRadius": 12,
-                          "layout": "vertical",
-                          "gap": 12,
-                          "padding": 16,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "rl1k2",
-                              "name": "aiText2",
-                              "fill": "#18181B",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "개발팀 폴더에서 API 관련 문서를 찾았습니다:",
-                              "lineHeight": 1.5,
-                              "fontFamily": "Inter",
-                              "fontSize": 14,
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "frame",
-                              "id": "uxfsP",
-                              "name": "docList",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 8,
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "4IaZs",
-                                  "name": "doc1",
-                                  "width": "fill_container",
-                                  "fill": "#FFFFFF",
-                                  "cornerRadius": 8,
-                                  "stroke": {
-                                    "align": "inside",
-                                    "thickness": 1,
-                                    "fill": "#E4E4E7"
-                                  },
-                                  "gap": 12,
-                                  "padding": 12,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon_font",
-                                      "id": "1hvFV",
-                                      "name": "doc1Icon",
-                                      "width": 20,
-                                      "height": 20,
-                                      "iconFontName": "file-text",
-                                      "iconFontFamily": "lucide",
-                                      "fill": "#0066FF"
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "s5ptR",
-                                      "name": "doc1Info",
-                                      "width": "fill_container",
-                                      "layout": "vertical",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "N2mOK",
-                                          "name": "doc1Name",
-                                          "fill": "#18181B",
-                                          "content": "API_Reference_v2.md",
-                                          "fontFamily": "Inter",
-                                          "fontSize": 14,
-                                          "fontWeight": "500"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "WcPoM",
-                                          "name": "doc1Path",
-                                          "fill": "#71717A",
-                                          "content": "개발팀/문서/API",
-                                          "fontFamily": "Inter",
-                                          "fontSize": 12,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "rdqZR",
-                                  "name": "doc2",
-                                  "width": "fill_container",
-                                  "fill": "#FFFFFF",
-                                  "cornerRadius": 8,
-                                  "stroke": {
-                                    "align": "inside",
-                                    "thickness": 1,
-                                    "fill": "#E4E4E7"
-                                  },
-                                  "gap": 12,
-                                  "padding": 12,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon_font",
-                                      "id": "fQyR9",
-                                      "name": "doc2Icon",
-                                      "width": 20,
-                                      "height": 20,
-                                      "iconFontName": "file-text",
-                                      "iconFontFamily": "lucide",
-                                      "fill": "#0066FF"
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "6TmYp",
-                                      "name": "doc2Info",
-                                      "width": "fill_container",
-                                      "layout": "vertical",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "ArvSh",
-                                          "name": "doc2Name",
-                                          "fill": "#18181B",
-                                          "content": "REST_API_Guide.pdf",
-                                          "fontFamily": "Inter",
-                                          "fontSize": 14,
-                                          "fontWeight": "500"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "3oHmN",
-                                          "name": "doc2Path",
-                                          "fill": "#71717A",
-                                          "content": "개발팀/문서/API",
-                                          "fontFamily": "Inter",
-                                          "fontSize": 12,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "tJGeN",
-                  "name": "Search Filter",
-                  "width": "fill_container",
-                  "gap": 8,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "5jTcz",
-                      "name": "filterLabel",
-                      "gap": 6,
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon_font",
-                          "id": "aRdag",
-                          "name": "filterIcon",
-                          "width": 14,
-                          "height": 14,
-                          "iconFontName": "search",
-                          "iconFontFamily": "lucide",
-                          "fill": "#71717A"
-                        },
-                        {
-                          "type": "text",
-                          "id": "uqCDC",
-                          "name": "filterText",
-                          "fill": "#71717A",
-                          "content": "검색 범위",
-                          "fontFamily": "Inter",
-                          "fontSize": 13,
-                          "fontWeight": "500"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "xiE4x",
-                      "name": "filterDivider",
-                      "fill": "#E4E4E7",
-                      "width": 1,
-                      "height": 20
-                    },
-                    {
-                      "type": "frame",
-                      "id": "B8BBG",
-                      "name": "Filter Chips",
-                      "gap": 6,
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "LbrlP",
-                          "name": "chip-dev",
-                          "fill": "#0066FF",
-                          "cornerRadius": 16,
-                          "gap": 6,
-                          "padding": [
-                            6,
-                            10
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon_font",
-                              "id": "eANjO",
-                              "name": "chip1Icon",
-                              "width": 12,
-                              "height": 12,
-                              "iconFontName": "check",
-                              "iconFontFamily": "lucide",
-                              "fill": "#FFFFFF"
-                            },
-                            {
-                              "type": "text",
-                              "id": "j4CDR",
-                              "name": "chip1Text",
-                              "fill": "#FFFFFF",
-                              "content": "개발팀",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "9f1AE",
-                          "name": "chip-marketing",
-                          "fill": "#0066FF",
-                          "cornerRadius": 16,
-                          "gap": 6,
-                          "padding": [
-                            6,
-                            10
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon_font",
-                              "id": "A0Nmz",
-                              "name": "chip2Icon",
-                              "width": 12,
-                              "height": 12,
-                              "iconFontName": "check",
-                              "iconFontFamily": "lucide",
-                              "fill": "#FFFFFF"
-                            },
-                            {
-                              "type": "text",
-                              "id": "MBzt0",
-                              "name": "chip2Text",
-                              "fill": "#FFFFFF",
-                              "content": "마케팅팀",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "K3vkJ",
-                          "name": "chip-design",
-                          "cornerRadius": 16,
-                          "stroke": {
-                            "align": "inside",
-                            "thickness": 1,
-                            "fill": "#E4E4E7"
-                          },
-                          "gap": 6,
-                          "padding": [
-                            6,
-                            10
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "iU7rA",
-                              "name": "chip3Text",
-                              "fill": "#71717A",
-                              "content": "디자인팀",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "500"
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "O67bH",
-                  "name": "Input Area",
-                  "width": "fill_container",
-                  "height": 52,
-                  "cornerRadius": 12,
-                  "stroke": {
-                    "align": "inside",
-                    "thickness": 1,
-                    "fill": "#E4E4E7"
-                  },
-                  "gap": 12,
-                  "padding": [
-                    0,
-                    16
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "rgWyG",
-                      "name": "inputIcon",
-                      "width": 20,
-                      "height": 20,
-                      "iconFontName": "paperclip",
-                      "iconFontFamily": "lucide",
-                      "fill": "#71717A"
-                    },
-                    {
-                      "type": "text",
-                      "id": "6UUsj",
-                      "name": "inputText",
-                      "fill": "#71717A",
-                      "content": "메시지를 입력하세요...",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "MFAZ6",
-                      "name": "sendBtn",
-                      "width": 36,
-                      "height": 36,
-                      "fill": "#0066FF",
-                      "cornerRadius": 8,
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon_font",
-                          "id": "PbsaL",
-                          "name": "sendIcon",
-                          "width": 18,
-                          "height": 18,
-                          "iconFontName": "send",
-                          "iconFontFamily": "lucide",
-                          "fill": "#FFFFFF"
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "frame",
-          "id": "2kxgO",
-          "x": 0,
-          "y": 0,
-          "name": "Tutorial Overlay",
-          "width": 1280,
-          "height": 800,
-          "fill": "#000000CC",
-          "layout": "none",
-          "children": [
-            {
-              "type": "frame",
-              "id": "Ropa4",
-              "x": 284,
-              "y": 708,
-              "name": "Filter Highlight",
-              "width": 280,
-              "height": 32,
-              "cornerRadius": 8,
-              "stroke": {
-                "align": "outside",
-                "thickness": 3,
-                "fill": "#0066FF"
-              }
-            },
-            {
-              "type": "frame",
-              "id": "RXZdf",
-              "x": 284,
-              "y": 620,
-              "name": "Tooltip",
-              "width": 340,
-              "fill": "#FFFFFF",
-              "cornerRadius": 12,
-              "layout": "vertical",
-              "gap": 12,
-              "padding": 16,
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "inmOu",
-                  "name": "tooltipHeader2",
-                  "gap": 8,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "jkcZO",
-                      "name": "tooltipIcon2",
-                      "width": 32,
-                      "height": 32,
-                      "fill": "#0066FF",
-                      "cornerRadius": 16,
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "sX8Iq",
-                          "name": "tooltipIconInner2",
-                          "fill": "#FFFFFF",
-                          "content": "2",
-                          "fontFamily": "Inter",
-                          "fontSize": 16,
-                          "fontWeight": "600"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "Rlt3N",
-                      "name": "tooltipTitle2",
-                      "fill": "#18181B",
-                      "content": "검색 범위 설정",
-                      "fontFamily": "Inter",
-                      "fontSize": 16,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
-                {
-                  "type": "text",
-                  "id": "exkfH",
-                  "name": "tooltipDesc2",
-                  "fill": "#71717A",
-                  "textGrowth": "fixed-width",
-                  "width": "fill_container",
-                  "content": "검색할 그룹을 선택하세요. 특정 그룹의 문서만 검색하거나, 여러 그룹을 동시에 검색할 수 있습니다.",
-                  "lineHeight": 1.6,
-                  "fontFamily": "Inter",
-                  "fontSize": 14,
-                  "fontWeight": "normal"
-                },
-                {
-                  "type": "frame",
-                  "id": "yepnc",
-                  "name": "tooltipNav2",
-                  "width": "fill_container",
-                  "justifyContent": "space_between",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "Xxii5",
-                      "name": "tooltipSkip2",
-                      "fill": "#71717A",
-                      "content": "건너뛰기",
-                      "fontFamily": "Inter",
-                      "fontSize": 13,
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "AdtMS",
-                      "name": "tooltipNext2",
-                      "fill": "#0066FF",
-                      "cornerRadius": 8,
-                      "gap": 8,
-                      "padding": [
-                        8,
-                        16
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "gLpJi",
-                          "name": "tooltipNextText2",
-                          "fill": "#FFFFFF",
-                          "content": "다음",
-                          "fontFamily": "Inter",
-                          "fontSize": 13,
-                          "fontWeight": "500"
-                        },
-                        {
-                          "type": "icon_font",
-                          "id": "WIdz8",
-                          "name": "tooltipNextIcon2",
-                          "width": 16,
-                          "height": 16,
-                          "iconFontName": "arrow-right",
-                          "iconFontFamily": "lucide",
-                          "fill": "#FFFFFF"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "G5gl9",
-                  "name": "dots2",
-                  "width": "fill_container",
-                  "gap": 6,
-                  "justifyContent": "center",
-                  "children": [
-                    {
-                      "type": "ellipse",
-                      "id": "krjVA",
-                      "name": "dot2a",
-                      "fill": "#E4E4E7",
-                      "width": 8,
-                      "height": 8
-                    },
-                    {
-                      "type": "ellipse",
-                      "id": "fUlyG",
-                      "name": "dot2b",
-                      "fill": "#0066FF",
-                      "width": 8,
-                      "height": 8
-                    },
-                    {
-                      "type": "ellipse",
-                      "id": "50Psn",
-                      "name": "dot2c",
-                      "fill": "#E4E4E7",
-                      "width": 8,
-                      "height": 8
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "frame",
-      "id": "iUx69",
-      "x": 2760,
-      "y": 3451,
-      "name": "Tutorial 3 - Add Group",
-      "width": 1280,
-      "height": 800,
-      "fill": "#FFFFFF",
-      "layout": "none",
-      "children": [
-        {
-          "type": "frame",
-          "id": "0TKU0",
-          "x": 0,
-          "y": 0,
-          "name": "Sidebar",
-          "width": 260,
-          "height": "fill_container(800)",
-          "fill": "#18181B",
-          "layout": "vertical",
-          "padding": [
-            16,
-            12
-          ],
-          "children": [
-            {
-              "type": "frame",
-              "id": "qi4Za",
-              "name": "App Header",
-              "width": "fill_container",
-              "height": 44,
-              "gap": 10,
-              "padding": [
-                0,
-                4
-              ],
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "icon_font",
-                  "id": "PL7XF",
-                  "name": "logo",
-                  "width": 22,
-                  "height": 22,
-                  "iconFontName": "message-square",
-                  "iconFontFamily": "lucide",
-                  "fill": "#0066FF"
-                },
-                {
-                  "type": "text",
-                  "id": "RNLQj",
-                  "name": "titleText",
-                  "fill": "#FAFAFA",
-                  "content": "TeamRAG",
-                  "fontFamily": "Inter",
-                  "fontSize": 18,
-                  "fontWeight": "600"
-                }
-              ]
-            },
-            {
-              "type": "rectangle",
-              "id": "EjVsn",
-              "name": "divider1",
-              "fill": "#27272A",
-              "width": "fill_container",
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "E1wUC",
-              "name": "Chat Channel",
-              "width": "fill_container",
-              "layout": "vertical",
-              "gap": 4,
-              "padding": [
-                12,
-                0
-              ],
-              "children": [
-                {
-                  "type": "text",
-                  "id": "3PxIi",
-                  "name": "chatLabel",
-                  "fill": "#71717A",
-                  "content": "채널",
-                  "fontFamily": "Inter",
-                  "fontSize": 11,
-                  "fontWeight": "500",
-                  "letterSpacing": 0.5
-                },
-                {
-                  "type": "frame",
-                  "id": "WM3uQ",
-                  "name": "chatItem",
-                  "width": "fill_container",
-                  "height": 36,
-                  "fill": "#0066FF",
-                  "cornerRadius": 6,
-                  "gap": 10,
-                  "padding": [
-                    0,
-                    8
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "AXsQ4",
-                      "name": "chatIcon",
-                      "width": 18,
-                      "height": 18,
-                      "iconFontName": "hash",
-                      "iconFontFamily": "lucide",
-                      "fill": "#FFFFFF"
-                    },
-                    {
-                      "type": "text",
-                      "id": "gKZXD",
-                      "name": "chatName",
-                      "fill": "#FFFFFF",
-                      "content": "채팅",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "500"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "rectangle",
-              "id": "3D7p2",
-              "name": "divider2",
-              "fill": "#27272A",
-              "width": "fill_container",
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "Aomk0",
-              "name": "Groups Section",
-              "width": "fill_container",
-              "height": "fill_container",
-              "layout": "vertical",
-              "gap": 4,
-              "padding": [
-                12,
-                0
-              ],
-              "children": [
-                {
-                  "type": "text",
-                  "id": "6BmCA",
-                  "name": "groupLabel",
-                  "fill": "#71717A",
-                  "content": "내 그룹",
-                  "fontFamily": "Inter",
-                  "fontSize": 11,
-                  "fontWeight": "500",
-                  "letterSpacing": 0.5
-                },
-                {
-                  "type": "frame",
-                  "id": "MktUr",
-                  "name": "group1",
-                  "width": "fill_container",
-                  "height": 36,
-                  "cornerRadius": 6,
-                  "gap": 10,
-                  "padding": [
-                    0,
-                    8
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "KIi3B",
-                      "name": "group1Icon",
-                      "width": 18,
-                      "height": 18,
-                      "iconFontName": "users",
-                      "iconFontFamily": "lucide",
-                      "fill": "#71717A"
-                    },
-                    {
-                      "type": "text",
-                      "id": "Tjs7x",
-                      "name": "group1Name",
-                      "fill": "#FAFAFA",
-                      "content": "개발팀",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "ZByBW",
-                  "name": "group2",
-                  "width": "fill_container",
-                  "height": 36,
-                  "cornerRadius": 6,
-                  "gap": 10,
-                  "padding": [
-                    0,
-                    8
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "rNRkv",
-                      "name": "group2Icon",
-                      "width": 18,
-                      "height": 18,
-                      "iconFontName": "users",
-                      "iconFontFamily": "lucide",
-                      "fill": "#71717A"
-                    },
-                    {
-                      "type": "text",
-                      "id": "ZmoIz",
-                      "name": "group2Name",
-                      "fill": "#FAFAFA",
-                      "content": "마케팅팀",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "itbkd",
-                  "name": "group3",
-                  "width": "fill_container",
-                  "height": 36,
-                  "cornerRadius": 6,
-                  "gap": 10,
-                  "padding": [
-                    0,
-                    8
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "wbhbd",
-                      "name": "group3Icon",
-                      "width": 18,
-                      "height": 18,
-                      "iconFontName": "users",
-                      "iconFontFamily": "lucide",
-                      "fill": "#71717A"
-                    },
-                    {
-                      "type": "text",
-                      "id": "R5wZI",
-                      "name": "group3Name",
-                      "fill": "#FAFAFA",
-                      "content": "디자인팀",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "rectangle",
-              "id": "UEM94",
-              "name": "divider3",
-              "fill": "#27272A",
-              "width": "fill_container",
-              "height": 1
-            },
-            {
-              "type": "frame",
-              "id": "3juoT",
-              "name": "Add Group Button",
-              "width": "fill_container",
-              "height": 40,
-              "cornerRadius": 8,
-              "stroke": {
-                "align": "inside",
-                "thickness": 1,
-                "fill": "#27272A"
-              },
-              "gap": 8,
-              "justifyContent": "center",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "icon_font",
-                  "id": "pVqHH",
-                  "name": "addIcon",
-                  "width": 18,
-                  "height": 18,
-                  "iconFontName": "plus",
-                  "iconFontFamily": "lucide",
-                  "fill": "#71717A"
-                },
-                {
-                  "type": "text",
-                  "id": "amuE8",
-                  "name": "addText",
-                  "fill": "#71717A",
-                  "content": "그룹 추가하기",
-                  "fontFamily": "Inter",
-                  "fontSize": 14,
-                  "fontWeight": "500"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "frame",
-          "id": "YiJVh",
-          "x": 260,
-          "y": 0,
-          "name": "Main Content",
-          "width": "fill_container(1020)",
-          "height": "fill_container(800)",
-          "fill": "#FFFFFF",
-          "layout": "vertical",
-          "children": [
-            {
-              "type": "frame",
-              "id": "zk0fL",
-              "name": "Chat Header",
-              "width": "fill_container",
-              "height": 60,
-              "stroke": {
-                "align": "inside",
-                "thickness": {
-                  "bottom": 1
-                },
-                "fill": "#E4E4E7"
-              },
-              "padding": [
-                0,
-                24
-              ],
-              "justifyContent": "space_between",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "BfLkM",
-                  "name": "chatHeaderLeft",
-                  "gap": 12,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "lLKlS",
-                      "name": "chatHeaderIcon",
-                      "width": 24,
-                      "height": 24,
-                      "iconFontName": "hash",
-                      "iconFontFamily": "lucide",
-                      "fill": "#18181B"
-                    },
-                    {
-                      "type": "text",
-                      "id": "22MQt",
-                      "name": "chatHeaderTitle",
-                      "fill": "#18181B",
-                      "content": "채팅",
-                      "fontFamily": "Inter",
-                      "fontSize": 18,
-                      "fontWeight": "600"
-                    },
-                    {
-                      "type": "text",
-                      "id": "JnubX",
-                      "name": "chatHeaderDesc",
-                      "fill": "#71717A",
-                      "content": "AI 챗봇과 대화하기",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "nuZwa",
-              "name": "Chat Content",
-              "width": "fill_container",
-              "height": "fill_container",
-              "layout": "vertical",
-              "gap": 16,
-              "padding": 24,
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "r1l6P",
-                  "name": "Messages",
-                  "width": "fill_container",
-                  "height": "fill_container",
-                  "layout": "vertical",
-                  "gap": 16,
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "JaY4c",
-                      "name": "AI Message",
-                      "width": "fill_container",
-                      "gap": 12,
-                      "children": [
-                        {
-                          "type": "rectangle",
-                          "id": "4HwDL",
-                          "rotation": 0.12319624212958122,
-                          "fill": {
-                            "type": "image",
-                            "enabled": true,
-                            "url": "제목_없는_아트워크 15.png",
-                            "mode": "fill"
-                          },
-                          "width": 54,
-                          "height": 54
-                        },
-                        {
-                          "type": "frame",
-                          "id": "N5YhX",
-                          "name": "aiBubble",
-                          "width": 500,
-                          "fill": "#F4F4F5",
-                          "cornerRadius": 12,
-                          "layout": "vertical",
-                          "gap": 8,
-                          "padding": 16,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "4u689",
-                              "name": "aiText",
-                              "fill": "#18181B",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "안녕하세요! TeamRAG 챗봇입니다. 무엇을 도와드릴까요? 그룹에 업로드된 문서를 기반으로 질문에 답변해 드릴 수 있습니다.",
-                              "lineHeight": 1.5,
-                              "fontFamily": "Inter",
-                              "fontSize": 14,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "EqTxv",
-                      "name": "User Message",
-                      "width": "fill_container",
-                      "gap": 12,
-                      "justifyContent": "end",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "l6C3P",
-                          "name": "userBubble",
-                          "width": 400,
-                          "fill": "#0066FF",
-                          "cornerRadius": 12,
-                          "layout": "vertical",
-                          "gap": 8,
-                          "padding": 16,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "mRV9C",
-                              "name": "userText",
-                              "fill": "#FFFFFF",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "개발팀 폴더에서 API 문서를 찾아줘",
-                              "lineHeight": 1.5,
-                              "fontFamily": "Inter",
-                              "fontSize": 14,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "Xdha8",
-                      "name": "AI Response",
-                      "width": "fill_container",
-                      "gap": 12,
-                      "children": [
-                        {
-                          "type": "rectangle",
-                          "id": "pOALN",
-                          "rotation": 0.12319624212958122,
-                          "fill": {
-                            "type": "image",
-                            "enabled": true,
-                            "url": "제목_없는_아트워크 15.png",
-                            "mode": "fill"
-                          },
-                          "width": 54,
-                          "height": 54
-                        },
-                        {
-                          "type": "frame",
-                          "id": "YQtYE",
-                          "name": "aiBubble2",
-                          "width": 550,
-                          "fill": "#F4F4F5",
-                          "cornerRadius": 12,
-                          "layout": "vertical",
-                          "gap": 12,
-                          "padding": 16,
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "FBwls",
-                              "name": "aiText2",
-                              "fill": "#18181B",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "개발팀 폴더에서 API 관련 문서를 찾았습니다:",
-                              "lineHeight": 1.5,
-                              "fontFamily": "Inter",
-                              "fontSize": 14,
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "frame",
-                              "id": "smTH5",
-                              "name": "docList",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 8,
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "XPkXy",
-                                  "name": "doc1",
-                                  "width": "fill_container",
-                                  "fill": "#FFFFFF",
-                                  "cornerRadius": 8,
-                                  "stroke": {
-                                    "align": "inside",
-                                    "thickness": 1,
-                                    "fill": "#E4E4E7"
-                                  },
-                                  "gap": 12,
-                                  "padding": 12,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon_font",
-                                      "id": "DfOSw",
-                                      "name": "doc1Icon",
-                                      "width": 20,
-                                      "height": 20,
-                                      "iconFontName": "file-text",
-                                      "iconFontFamily": "lucide",
-                                      "fill": "#0066FF"
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "dwb3p",
-                                      "name": "doc1Info",
-                                      "width": "fill_container",
-                                      "layout": "vertical",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "IyVwU",
-                                          "name": "doc1Name",
-                                          "fill": "#18181B",
-                                          "content": "API_Reference_v2.md",
-                                          "fontFamily": "Inter",
-                                          "fontSize": 14,
-                                          "fontWeight": "500"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "0f1J2",
-                                          "name": "doc1Path",
-                                          "fill": "#71717A",
-                                          "content": "개발팀/문서/API",
-                                          "fontFamily": "Inter",
-                                          "fontSize": 12,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "7pR0Q",
-                                  "name": "doc2",
-                                  "width": "fill_container",
-                                  "fill": "#FFFFFF",
-                                  "cornerRadius": 8,
-                                  "stroke": {
-                                    "align": "inside",
-                                    "thickness": 1,
-                                    "fill": "#E4E4E7"
-                                  },
-                                  "gap": 12,
-                                  "padding": 12,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon_font",
-                                      "id": "OC0uG",
-                                      "name": "doc2Icon",
-                                      "width": 20,
-                                      "height": 20,
-                                      "iconFontName": "file-text",
-                                      "iconFontFamily": "lucide",
-                                      "fill": "#0066FF"
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "Hr9g5",
-                                      "name": "doc2Info",
-                                      "width": "fill_container",
-                                      "layout": "vertical",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "p1yGv",
-                                          "name": "doc2Name",
-                                          "fill": "#18181B",
-                                          "content": "REST_API_Guide.pdf",
-                                          "fontFamily": "Inter",
-                                          "fontSize": 14,
-                                          "fontWeight": "500"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "plFLL",
-                                          "name": "doc2Path",
-                                          "fill": "#71717A",
-                                          "content": "개발팀/문서/API",
-                                          "fontFamily": "Inter",
-                                          "fontSize": 12,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "wgulL",
-                  "name": "Search Filter",
-                  "width": "fill_container",
-                  "gap": 8,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "wvAMR",
-                      "name": "filterLabel",
-                      "gap": 6,
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon_font",
-                          "id": "BeysQ",
-                          "name": "filterIcon",
-                          "width": 14,
-                          "height": 14,
-                          "iconFontName": "search",
-                          "iconFontFamily": "lucide",
-                          "fill": "#71717A"
-                        },
-                        {
-                          "type": "text",
-                          "id": "KlHoK",
-                          "name": "filterText",
-                          "fill": "#71717A",
-                          "content": "검색 범위",
-                          "fontFamily": "Inter",
-                          "fontSize": 13,
-                          "fontWeight": "500"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "rectangle",
-                      "id": "ayOxP",
-                      "name": "filterDivider",
-                      "fill": "#E4E4E7",
-                      "width": 1,
-                      "height": 20
-                    },
-                    {
-                      "type": "frame",
-                      "id": "n2sfi",
-                      "name": "Filter Chips",
-                      "gap": 6,
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "Tnfn0",
-                          "name": "chip-dev",
-                          "fill": "#0066FF",
-                          "cornerRadius": 16,
-                          "gap": 6,
-                          "padding": [
-                            6,
-                            10
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon_font",
-                              "id": "4BO1N",
-                              "name": "chip1Icon",
-                              "width": 12,
-                              "height": 12,
-                              "iconFontName": "check",
-                              "iconFontFamily": "lucide",
-                              "fill": "#FFFFFF"
-                            },
-                            {
-                              "type": "text",
-                              "id": "kWDTw",
-                              "name": "chip1Text",
-                              "fill": "#FFFFFF",
-                              "content": "개발팀",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "M9uUn",
-                          "name": "chip-marketing",
-                          "fill": "#0066FF",
-                          "cornerRadius": 16,
-                          "gap": 6,
-                          "padding": [
-                            6,
-                            10
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon_font",
-                              "id": "UDHeZ",
-                              "name": "chip2Icon",
-                              "width": 12,
-                              "height": 12,
-                              "iconFontName": "check",
-                              "iconFontFamily": "lucide",
-                              "fill": "#FFFFFF"
-                            },
-                            {
-                              "type": "text",
-                              "id": "OZ2mG",
-                              "name": "chip2Text",
-                              "fill": "#FFFFFF",
-                              "content": "마케팅팀",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "500"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "chHt4",
-                          "name": "chip-design",
-                          "cornerRadius": 16,
-                          "stroke": {
-                            "align": "inside",
-                            "thickness": 1,
-                            "fill": "#E4E4E7"
-                          },
-                          "gap": 6,
-                          "padding": [
-                            6,
-                            10
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "pDKri",
-                              "name": "chip3Text",
-                              "fill": "#71717A",
-                              "content": "디자인팀",
-                              "fontFamily": "Inter",
-                              "fontSize": 12,
-                              "fontWeight": "500"
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "pA2CQ",
-                  "name": "Input Area",
-                  "width": "fill_container",
-                  "height": 52,
-                  "cornerRadius": 12,
-                  "stroke": {
-                    "align": "inside",
-                    "thickness": 1,
-                    "fill": "#E4E4E7"
-                  },
-                  "gap": 12,
-                  "padding": [
-                    0,
-                    16
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon_font",
-                      "id": "Wn4qc",
-                      "name": "inputIcon",
-                      "width": 20,
-                      "height": 20,
-                      "iconFontName": "paperclip",
-                      "iconFontFamily": "lucide",
-                      "fill": "#71717A"
-                    },
-                    {
-                      "type": "text",
-                      "id": "YfA4A",
-                      "name": "inputText",
-                      "fill": "#71717A",
-                      "content": "메시지를 입력하세요...",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "OE2Gr",
-                      "name": "sendBtn",
-                      "width": 36,
-                      "height": 36,
-                      "fill": "#0066FF",
-                      "cornerRadius": 8,
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon_font",
-                          "id": "QhVug",
-                          "name": "sendIcon",
-                          "width": 18,
-                          "height": 18,
-                          "iconFontName": "send",
-                          "iconFontFamily": "lucide",
-                          "fill": "#FFFFFF"
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "frame",
-          "id": "77ulq",
-          "x": 0,
-          "y": 0,
-          "name": "Tutorial Overlay",
-          "width": 1280,
-          "height": 800,
-          "fill": "#000000CC",
-          "layout": "none",
-          "children": [
-            {
-              "type": "frame",
-              "id": "oxznO",
-              "x": 12,
-              "y": 744,
-              "name": "AddGroup Highlight",
-              "width": 236,
-              "height": 40,
-              "cornerRadius": 8,
-              "stroke": {
-                "align": "outside",
-                "thickness": 3,
-                "fill": "#0066FF"
-              }
-            },
-            {
-              "type": "frame",
-              "id": "NrPBH",
-              "x": 270,
-              "y": 640,
-              "name": "Tooltip",
-              "width": 340,
-              "fill": "#FFFFFF",
-              "cornerRadius": 12,
-              "layout": "vertical",
-              "gap": 12,
-              "padding": 16,
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "8zIN3",
-                  "name": "tooltipHeader3",
-                  "gap": 8,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "9pJ2s",
-                      "name": "tooltipIcon3",
-                      "width": 32,
-                      "height": 32,
-                      "fill": "#0066FF",
-                      "cornerRadius": 16,
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "BBNOk",
-                          "name": "tooltipIconInner3",
-                          "fill": "#FFFFFF",
-                          "content": "3",
-                          "fontFamily": "Inter",
-                          "fontSize": 16,
-                          "fontWeight": "600"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "wmIIt",
-                      "name": "tooltipTitle3",
-                      "fill": "#18181B",
-                      "content": "그룹 추가하기",
-                      "fontFamily": "Inter",
-                      "fontSize": 16,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
-                {
-                  "type": "text",
-                  "id": "2IE6s",
-                  "name": "tooltipDesc3",
-                  "fill": "#71717A",
-                  "textGrowth": "fixed-width",
-                  "width": "fill_container",
-                  "content": "새로운 그룹을 만들어 팀원들과 문서를 공유하세요. 그룹별로 폴더를 업로드하고 관리할 수 있습니다.",
-                  "lineHeight": 1.6,
-                  "fontFamily": "Inter",
-                  "fontSize": 14,
-                  "fontWeight": "normal"
-                },
-                {
-                  "type": "frame",
-                  "id": "cJ4ZP",
-                  "name": "tooltipNav3",
-                  "width": "fill_container",
-                  "justifyContent": "space_between",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "JbyRV",
-                      "name": "tooltipSkip3",
-                      "fill": "#71717A",
-                      "content": "건너뛰기",
-                      "fontFamily": "Inter",
-                      "fontSize": 13,
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "oOSi3",
-                      "name": "tooltipFinish3",
-                      "fill": "#0066FF",
-                      "cornerRadius": 8,
-                      "gap": 8,
-                      "padding": [
-                        8,
-                        16
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "jhzQE",
-                          "name": "tooltipFinishText3",
-                          "fill": "#FFFFFF",
-                          "content": "시작하기",
-                          "fontFamily": "Inter",
-                          "fontSize": 13,
-                          "fontWeight": "500"
-                        },
-                        {
-                          "type": "icon_font",
-                          "id": "l7BYl",
-                          "name": "tooltipFinishIcon3",
-                          "width": 16,
-                          "height": 16,
-                          "iconFontName": "check",
-                          "iconFontFamily": "lucide",
-                          "fill": "#FFFFFF"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "mMrzG",
-                  "name": "dots3",
-                  "width": "fill_container",
-                  "gap": 6,
-                  "justifyContent": "center",
-                  "children": [
-                    {
-                      "type": "ellipse",
-                      "id": "KqmC0",
-                      "name": "dot3a",
-                      "fill": "#E4E4E7",
-                      "width": 8,
-                      "height": 8
-                    },
-                    {
-                      "type": "ellipse",
-                      "id": "oAkgD",
-                      "name": "dot3b",
-                      "fill": "#E4E4E7",
-                      "width": 8,
-                      "height": 8
-                    },
-                    {
-                      "type": "ellipse",
-                      "id": "9E6uM",
-                      "name": "dot3c",
-                      "fill": "#0066FF",
-                      "width": 8,
-                      "height": 8
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "frame",
       "id": "gnpQK",
       "x": 5520,
       "y": 0,
@@ -12476,6 +9227,1547 @@
                               ]
                             }
                           ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "HnRjX",
+      "type": "ref",
+      "ref": "ElsGq",
+      "x": -0.23061486551569033,
+      "y": 3203.369220668723,
+      "rotation": 0.03304839799121867,
+      "name": "5. Chat View with artifacts/canvas",
+      "descendants": {
+        "XND6K": {
+          "width": 260,
+          "height": "fill_container",
+          "x": 0,
+          "y": 0
+        },
+        "G3ipN": {
+          "width": "fill_container",
+          "height": "fill_container",
+          "x": 260,
+          "y": 0
+        },
+        "8Sexc": {
+          "width": "fill_container",
+          "height": 60,
+          "x": 0,
+          "y": 0
+        },
+        "swLgJ": {
+          "width": "fill_container",
+          "height": "fill_container",
+          "x": 0,
+          "y": 60
+        }
+      }
+    },
+    {
+      "type": "frame",
+      "id": "Z5fC9",
+      "x": 1401,
+      "y": 3181,
+      "name": "A. 기본 채팅 + Canvas",
+      "width": 1440,
+      "height": 900,
+      "fill": "$--background",
+      "children": [
+        {
+          "type": "frame",
+          "id": "P75Vv",
+          "name": "Left Side (Sidebar + Chat)",
+          "width": 980,
+          "height": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "il6f1",
+              "name": "sidebarNew",
+              "width": 260,
+              "height": "fill_container",
+              "fill": "$--sidebar-bg",
+              "layout": "vertical",
+              "gap": 12,
+              "padding": [
+                16,
+                12
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "csnUg",
+                  "name": "sidebarHeader",
+                  "gap": 10,
+                  "padding": [
+                    0,
+                    4
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "uBFNk",
+                      "name": "logo",
+                      "width": 22,
+                      "height": 22,
+                      "iconFontName": "message-square",
+                      "iconFontFamily": "lucide",
+                      "fill": "#0066FF"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Q4AIQ",
+                      "name": "logoText",
+                      "fill": "$--sidebar-foreground",
+                      "content": "TeamRAG",
+                      "fontFamily": "Inter",
+                      "fontSize": 18,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "rectangle",
+                  "id": "U6nGv",
+                  "name": "divider1",
+                  "fill": "$--sidebar-border",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "ErUvT",
+                  "name": "channelSection",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "padding": [
+                    12,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "SSTD2",
+                      "name": "channelLabel",
+                      "fill": "$--sidebar-muted",
+                      "content": "채널",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "500",
+                      "letterSpacing": 0.5
+                    },
+                    {
+                      "type": "frame",
+                      "id": "kx6V5",
+                      "name": "activeChannel",
+                      "width": "fill_container",
+                      "height": 36,
+                      "fill": "$--sidebar-active",
+                      "cornerRadius": 6,
+                      "gap": 10,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "IUA8d",
+                          "name": "channelIcon",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "hash",
+                          "iconFontFamily": "lucide",
+                          "fill": "$--sidebar-foreground"
+                        },
+                        {
+                          "type": "text",
+                          "id": "7EtHO",
+                          "name": "channelText",
+                          "fill": "$--sidebar-foreground",
+                          "content": "일반",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "kpbWS",
+              "name": "chatAreaNew",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "$--background",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "u7aEf",
+                  "name": "chatHeaderNew",
+                  "height": 60,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": {
+                      "bottom": 1
+                    },
+                    "fill": "$--border"
+                  },
+                  "padding": [
+                    0,
+                    24
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "x53Z0",
+                      "name": "chatTitleNew",
+                      "fill": "$--foreground",
+                      "content": "채팅",
+                      "fontFamily": "Inter",
+                      "fontSize": 16,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "C0kgN",
+                  "name": "chatContentNew",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 24,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "wzIoy",
+                      "name": "messagesNew",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "gap": 16,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "HzCmx",
+                          "name": "aiMsg",
+                          "width": "fill_container",
+                          "fill": "#F4F4F5",
+                          "cornerRadius": 12,
+                          "layout": "vertical",
+                          "gap": 8,
+                          "padding": 16,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "QJ8dA",
+                              "name": "aiLabel",
+                              "fill": "$--muted-foreground",
+                              "content": "AI",
+                              "fontFamily": "Inter",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "WbTDC",
+                              "name": "aiText",
+                              "fill": "$--foreground",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "용역 계약서 초안을 생성했습니다. 오른쪽 Canvas에서 확인해 주세요.",
+                              "lineHeight": 1.5,
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "RJT0Y",
+                      "name": "inputSection",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "j98Xb",
+                          "name": "inputArea",
+                          "width": "fill_container",
+                          "height": 52,
+                          "cornerRadius": 12,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "$--border"
+                          },
+                          "gap": 12,
+                          "padding": [
+                            0,
+                            16
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "9h56r",
+                              "name": "inputPlaceholder",
+                              "fill": "$--muted-foreground",
+                              "content": "메시지를 입력하세요.",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "4KNbO",
+          "name": "canvasPanel",
+          "width": "fill_container",
+          "height": "fill_container",
+          "fill": "$--background",
+          "stroke": {
+            "align": "inside",
+            "thickness": {
+              "left": 1
+            },
+            "fill": "$--border"
+          },
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "eGpHK",
+              "name": "canvasHeader",
+              "width": "fill_container",
+              "height": 60,
+              "stroke": {
+                "align": "inside",
+                "thickness": {
+                  "bottom": 1
+                },
+                "fill": "$--border"
+              },
+              "padding": [
+                0,
+                24
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "mbMa6",
+                  "name": "canvasTitle",
+                  "fill": "$--foreground",
+                  "content": "계약서 초안",
+                  "fontFamily": "Inter",
+                  "fontSize": 16,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "YlXzg",
+                  "name": "versionText",
+                  "fill": "$--muted-foreground",
+                  "content": "버전 1.0",
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "FQEpg",
+              "name": "canvasContent",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "padding": 24,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "AFkRB",
+                  "name": "docMeta",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    0,
+                    16,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "XYUf1",
+                      "name": "docTitle",
+                      "fill": "$--foreground",
+                      "content": "용역 계약서",
+                      "fontFamily": "Inter",
+                      "fontSize": 24,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "bWCvO",
+                      "name": "docInfo",
+                      "gap": 16,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ZgefC",
+                          "name": "infoType",
+                          "fill": "$--muted-foreground",
+                          "content": "계약 유형: 용역계약",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "X7j61",
+                          "name": "infoDate",
+                          "fill": "$--muted-foreground",
+                          "content": "최종 수정: 2026-06-24 14:32",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "rectangle",
+                  "id": "98bKt",
+                  "name": "divCanvas",
+                  "fill": "$--border",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "zENPB",
+                  "name": "blocksCanvas",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": [
+                    16,
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "ZYyif",
+                      "name": "block1Canvas",
+                      "width": "fill_container",
+                      "cornerRadius": 8,
+                      "layout": "vertical",
+                      "gap": 12,
+                      "padding": 20,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "ec6X1",
+                          "name": "block1Header",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "RIMzX",
+                              "name": "block1TitleRow",
+                              "gap": 12,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "igv72",
+                                  "name": "block1No",
+                                  "fill": "$--foreground",
+                                  "content": "제1조",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "xdPcB",
+                                  "name": "block1Title",
+                                  "fill": "$--foreground",
+                                  "content": "목적",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "yrEvH",
+                                  "name": "block1Badge",
+                                  "fill": "#F4F4F5",
+                                  "cornerRadius": 12,
+                                  "gap": 4,
+                                  "padding": [
+                                    4,
+                                    10
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "TRnlC",
+                                      "name": "block1BadgeText",
+                                      "fill": "#71717A",
+                                      "content": "작성됨",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 11,
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "CJSNS",
+                              "name": "block1Actions",
+                              "width": "fit_content(0)",
+                              "height": 0,
+                              "gap": 8
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "PdKgs",
+                          "name": "block1Body",
+                          "fill": "$--foreground",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "본 계약은 갑과 을 사이의 용역 제공에 관한 권리와 의무를 정함을 목적으로 한다.",
+                          "lineHeight": 1.6,
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "BrRD5",
+                      "name": "block2Canvas",
+                      "width": "fill_container",
+                      "cornerRadius": 8,
+                      "layout": "vertical",
+                      "gap": 12,
+                      "padding": 20,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "DuNCK",
+                          "name": "block2Header",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "AdxNg",
+                              "name": "block2TitleRow",
+                              "gap": 12,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "6Rlhg",
+                                  "name": "block2No",
+                                  "fill": "$--foreground",
+                                  "content": "제2조",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "kUfcB",
+                                  "name": "block2Title",
+                                  "fill": "$--foreground",
+                                  "content": "용역의 범위",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "ozDMr",
+                                  "name": "block2Badge",
+                                  "fill": "#F4F4F5",
+                                  "cornerRadius": 12,
+                                  "gap": 4,
+                                  "padding": [
+                                    4,
+                                    10
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "NxPVS",
+                                      "name": "block2BadgeText",
+                                      "fill": "#71717A",
+                                      "content": "작성됨",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 11,
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "uklNl",
+                              "name": "block2Actions",
+                              "width": "fit_content(0)",
+                              "height": 0,
+                              "gap": 8
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "Wsn2J",
+                          "name": "block2Body",
+                          "fill": "$--foreground",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "을은 본 계약에 따라 다음 각 호의 업무를 수행한다.\n1. 시스템 개발 및 유지보수\n2. 기술 지원 및 컨설팅\n3. 교육 및 훈련",
+                          "lineHeight": 1.6,
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "uXZ2w",
+                      "name": "block3Canvas",
+                      "width": "fill_container",
+                      "cornerRadius": 8,
+                      "layout": "vertical",
+                      "gap": 12,
+                      "padding": 20,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "oUzco",
+                          "name": "block3Header",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "aIZpZ",
+                              "name": "block3TitleRow",
+                              "gap": 12,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "9DaSI",
+                                  "name": "block3No",
+                                  "fill": "$--foreground",
+                                  "content": "제3조",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "htXiz",
+                                  "name": "block3Title",
+                                  "fill": "$--foreground",
+                                  "content": "계약기간",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "DhVM4",
+                                  "name": "block3Badge",
+                                  "fill": "#F4F4F5",
+                                  "cornerRadius": 12,
+                                  "gap": 4,
+                                  "padding": [
+                                    4,
+                                    10
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "EKcQv",
+                                      "name": "block3BadgeText",
+                                      "fill": "#71717A",
+                                      "content": "작성됨",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 11,
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "TGTPh",
+                              "name": "block3Actions",
+                              "width": "fit_content(0)",
+                              "height": 0,
+                              "gap": 8
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "Reau0",
+                          "name": "block3Body",
+                          "fill": "$--foreground",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "본 계약의 유효기간은 계약 체결일로부터 1년으로 한다.",
+                          "lineHeight": 1.6,
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "GTTTE",
+                      "name": "block8Canvas",
+                      "width": "fill_container",
+                      "fill": "#EFF6FF",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 2,
+                        "fill": "#3B82F6"
+                      },
+                      "layout": "vertical",
+                      "gap": 12,
+                      "padding": 20,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "4qBX3",
+                          "name": "block8Header",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "Bq3XY",
+                              "name": "block8TitleRow",
+                              "gap": 12,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ujmpb",
+                                  "name": "block8No",
+                                  "fill": "$--foreground",
+                                  "content": "제8조",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "BFGVz",
+                                  "name": "block8Title",
+                                  "fill": "$--foreground",
+                                  "content": "손해배상",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "4GmPf",
+                              "name": "block8Actions",
+                              "height": 32,
+                              "gap": 8,
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "03f30",
+                                  "name": "feedbackBtn",
+                                  "fill": "$--background",
+                                  "cornerRadius": 6,
+                                  "stroke": {
+                                    "align": "inside",
+                                    "thickness": 1,
+                                    "fill": "$--border"
+                                  },
+                                  "gap": 6,
+                                  "padding": [
+                                    8,
+                                    16
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon_font",
+                                      "id": "qsxte",
+                                      "name": "feedbackIcon",
+                                      "width": 14,
+                                      "height": 14,
+                                      "iconFontName": "message-circle",
+                                      "iconFontFamily": "lucide",
+                                      "fill": "$--foreground"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "EzqoN",
+                                      "name": "feedbackText",
+                                      "fill": "$--foreground",
+                                      "content": "피드백 주기",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 12,
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "HUAI1",
+                          "name": "block8Body",
+                          "fill": "$--foreground",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "일방 당사자는 본 계약 위반으로 상대방에게 발생한 손해를 배상한다.",
+                          "lineHeight": 1.6,
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "3sLTQ",
+      "x": 3144,
+      "y": 3181,
+      "name": "E. 피드백 버튼 클릭 후 - Input Target",
+      "width": 1440,
+      "height": 900,
+      "fill": "$--background",
+      "children": [
+        {
+          "type": "frame",
+          "id": "q6IfJ",
+          "name": "leftSideE",
+          "width": 980,
+          "height": "fill_container",
+          "children": [
+            {
+              "type": "frame",
+              "id": "O3aTH",
+              "name": "sidebarE",
+              "width": 260,
+              "height": "fill_container",
+              "fill": "$--sidebar-bg",
+              "layout": "vertical",
+              "gap": 12,
+              "padding": [
+                16,
+                12
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "VuM8I",
+                  "name": "sidebarHeaderE",
+                  "gap": 10,
+                  "padding": [
+                    0,
+                    4
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "QBVfo",
+                      "name": "logoE",
+                      "width": 22,
+                      "height": 22,
+                      "iconFontName": "message-square",
+                      "iconFontFamily": "lucide",
+                      "fill": "#0066FF"
+                    },
+                    {
+                      "type": "text",
+                      "id": "btyK8",
+                      "name": "logoTextE",
+                      "fill": "$--sidebar-foreground",
+                      "content": "TeamRAG",
+                      "fontFamily": "Inter",
+                      "fontSize": 18,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "rectangle",
+                  "id": "38vrX",
+                  "name": "dividerE",
+                  "fill": "$--sidebar-border",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "euX0M",
+                  "name": "channelSectionE",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "padding": [
+                    12,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "eSwEb",
+                      "name": "channelLabelE",
+                      "fill": "$--sidebar-muted",
+                      "content": "채널",
+                      "fontFamily": "Inter",
+                      "fontSize": 11,
+                      "fontWeight": "500",
+                      "letterSpacing": 0.5
+                    },
+                    {
+                      "type": "frame",
+                      "id": "OMXj0",
+                      "name": "activeChannelE",
+                      "width": "fill_container",
+                      "height": 36,
+                      "fill": "$--sidebar-active",
+                      "cornerRadius": 6,
+                      "gap": 10,
+                      "padding": [
+                        0,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "19gI4",
+                          "name": "channelIconE",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "hash",
+                          "iconFontFamily": "lucide",
+                          "fill": "$--sidebar-foreground"
+                        },
+                        {
+                          "type": "text",
+                          "id": "ABxvw",
+                          "name": "channelTextE",
+                          "fill": "$--sidebar-foreground",
+                          "content": "일반",
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "qLCI2",
+              "name": "chatAreaE",
+              "width": "fill_container",
+              "height": "fill_container",
+              "fill": "$--background",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "81I57",
+                  "name": "chatHeaderE",
+                  "height": 60,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": {
+                      "bottom": 1
+                    },
+                    "fill": "$--border"
+                  },
+                  "padding": [
+                    0,
+                    24
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "atRzf",
+                      "name": "chatTitleE",
+                      "fill": "$--foreground",
+                      "content": "채팅",
+                      "fontFamily": "Inter",
+                      "fontSize": 16,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "BWdvQ",
+                  "name": "chatContentE",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 24,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "RyheJ",
+                      "name": "messagesE",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "gap": 16,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "ECdY8",
+                          "name": "aiMsgE",
+                          "width": "fill_container",
+                          "fill": "#F4F4F5",
+                          "cornerRadius": 12,
+                          "layout": "vertical",
+                          "gap": 8,
+                          "padding": 16,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "pEALh",
+                              "name": "aiLabelE",
+                              "fill": "$--muted-foreground",
+                              "content": "AI",
+                              "fontFamily": "Inter",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "Av4Cq",
+                              "name": "aiTextE",
+                              "fill": "$--foreground",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "용역 계약서 초안을 생성했습니다. 오른쪽 Canvas에서 확인해 주세요.",
+                              "lineHeight": 1.5,
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "d8ilU",
+                      "name": "inputSectionE",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "9DOLK",
+                          "name": "targetInfo",
+                          "width": 671,
+                          "height": 29,
+                          "fill": "#EFF6FF",
+                          "cornerRadius": 8,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "#3B82F6"
+                          },
+                          "gap": 8,
+                          "padding": [
+                            8,
+                            12
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "ZAjkH",
+                              "name": "targetIcon",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "target",
+                              "iconFontFamily": "lucide",
+                              "fill": "#3B82F6"
+                            },
+                            {
+                              "type": "text",
+                              "id": "9L1a6",
+                              "name": "targetLabel",
+                              "fill": "#3B82F6",
+                              "content": "제8조 손해배상",
+                              "fontFamily": "Inter",
+                              "fontSize": 13,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "AoaGz",
+                              "name": "targetDesc",
+                              "fill": "#3B82F6",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "일방 당사자는 본 계약 위반으로 상대방에게 발생한 손해를 배상한다.",
+                              "fontFamily": "Inter",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "uCMh5",
+                              "name": "closeTarget",
+                              "width": 18,
+                              "height": 18,
+                              "fill": "#3B82F6",
+                              "cornerRadius": 9,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon_font",
+                                  "id": "lfYpm",
+                                  "name": "closeIcon",
+                                  "width": 11,
+                                  "height": 11,
+                                  "iconFontName": "x",
+                                  "iconFontFamily": "lucide",
+                                  "fill": "#FFFFFF"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "nTOHr",
+                          "name": "inputAreaE",
+                          "width": "fill_container",
+                          "height": 46,
+                          "cornerRadius": 12,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 2,
+                            "fill": "#3B82F6"
+                          },
+                          "gap": 12,
+                          "padding": [
+                            0,
+                            16
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "COOmp",
+                              "name": "inputPlaceholderE",
+                              "fill": "$--muted-foreground",
+                              "content": "이 조항에 대한 피드백을 입력하세요.",
+                              "fontFamily": "Inter",
+                              "fontSize": 14,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "sQpjE",
+          "name": "canvasPanelE",
+          "width": "fill_container",
+          "height": "fill_container",
+          "fill": "$--background",
+          "stroke": {
+            "align": "inside",
+            "thickness": {
+              "left": 1
+            },
+            "fill": "$--border"
+          },
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "yHvhH",
+              "name": "canvasHeaderE",
+              "width": "fill_container",
+              "height": 60,
+              "stroke": {
+                "align": "inside",
+                "thickness": {
+                  "bottom": 1
+                },
+                "fill": "$--border"
+              },
+              "padding": [
+                0,
+                24
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "voj98",
+                  "name": "canvasTitleE",
+                  "fill": "$--foreground",
+                  "content": "계약서 초안",
+                  "fontFamily": "Inter",
+                  "fontSize": 16,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "SHNdA",
+              "name": "canvasContentE",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "padding": 24,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "tWLSQ",
+                  "name": "docMetaE",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": [
+                    0,
+                    0,
+                    16,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "iy1if",
+                      "name": "docTitleE",
+                      "fill": "$--foreground",
+                      "content": "용역 계약서",
+                      "fontFamily": "Inter",
+                      "fontSize": 24,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "rectangle",
+                  "id": "RUa33",
+                  "name": "divE",
+                  "fill": "$--border",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "24fGg",
+                  "name": "blocksE",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": [
+                    16,
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "dKAtZ",
+                      "name": "block1E",
+                      "width": "fill_container",
+                      "cornerRadius": 8,
+                      "layout": "vertical",
+                      "gap": 12,
+                      "padding": 20,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "hIgGh",
+                          "name": "block1Header",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "sr54t",
+                              "name": "block1TitleRow",
+                              "gap": 12,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "0m2pf",
+                                  "name": "block1No",
+                                  "fill": "$--foreground",
+                                  "content": "제1조",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "jBumB",
+                                  "name": "block1Title",
+                                  "fill": "$--foreground",
+                                  "content": "목적",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "2zf0B",
+                                  "name": "block1Badge",
+                                  "fill": "#F4F4F5",
+                                  "cornerRadius": 12,
+                                  "gap": 4,
+                                  "padding": [
+                                    4,
+                                    10
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "xjEtw",
+                                      "name": "block1BadgeText",
+                                      "fill": "#71717A",
+                                      "content": "작성됨",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 11,
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "l3vkZ",
+                              "name": "block1Actions",
+                              "width": "fit_content(0)",
+                              "height": 0,
+                              "gap": 8
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "kZCob",
+                          "name": "block1Body",
+                          "fill": "$--foreground",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "본 계약은 갑과 을 사이의 용역 제공에 관한 권리와 의무를 정함을 목적으로 한다.",
+                          "lineHeight": 1.6,
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ulOVc",
+                      "name": "block8SelE",
+                      "width": "fill_container",
+                      "fill": "#EFF6FF",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 2,
+                        "fill": "#3B82F6"
+                      },
+                      "layout": "vertical",
+                      "gap": 12,
+                      "padding": 20,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "4MxFa",
+                          "name": "block8HeaderE",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "RHmfv",
+                              "name": "block8TitleRowE",
+                              "gap": 12,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "l5rWw",
+                                  "name": "block8NoE",
+                                  "fill": "$--foreground",
+                                  "content": "제8조",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "rbCWn",
+                                  "name": "block8TitleE",
+                                  "fill": "$--foreground",
+                                  "content": "손해배상",
+                                  "fontFamily": "Inter",
+                                  "fontSize": 14,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "L8uR6",
+                                  "name": "block8BadgeE",
+                                  "fill": "#DBEAFE",
+                                  "cornerRadius": 12,
+                                  "gap": 4,
+                                  "padding": [
+                                    4,
+                                    10
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "icon_font",
+                                      "id": "7TcXM",
+                                      "name": "block8BadgeIconE",
+                                      "width": 12,
+                                      "height": 12,
+                                      "iconFontName": "mouse-pointer-2",
+                                      "iconFontFamily": "lucide",
+                                      "fill": "#3B82F6"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "dazAq",
+                                      "name": "block8BadgeTextE",
+                                      "fill": "#3B82F6",
+                                      "content": "선택됨",
+                                      "fontFamily": "Inter",
+                                      "fontSize": 11,
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "gzY4v",
+                          "name": "block8BodyE",
+                          "fill": "$--foreground",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "일방 당사자는 본 계약 위반으로 상대방에게 발생한 손해를 배상한다.",
+                          "lineHeight": 1.6,
+                          "fontFamily": "Inter",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
                         }
                       ]
                     }

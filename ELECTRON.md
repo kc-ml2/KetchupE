@@ -137,6 +137,11 @@ KetchupE/
 
 ### 자동 배포 (권장): GitHub Actions + Release (Windows `.exe` 전용)
 
+GitHub Actions에서 생성되는 `.exe`는 로컬 `.env`를 읽지 않습니다.
+API 서버 주소는 GitHub 저장소의 **Settings → Secrets and variables → Actions**
+에서 Repository variable `VITE_API_URL`로 설정합니다.
+이미 secret으로 관리 중인 환경에서는 Repository secret `VITE_API_URL`도 사용할 수 있습니다.
+
 1. `package.json`의 `version`을 올립니다 (예: `2.0.8` → `2.0.9`).
 2. 태그를 생성해서 푸시합니다.
    ```bash
