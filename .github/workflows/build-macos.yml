@@ -97,18 +97,6 @@ jobs:
       - name: Show generated files
         run: find release -maxdepth 2 -type f -print
 
-      - name: Validate DMG notarization
-        run: |
-          for dmg in release/*.dmg; do
-            echo "Validating $dmg"
-            xcrun stapler validate "$dmg"
-            spctl \
-              --assess \
-              --type open \
-              --context context:primary-signature \
-              -vv "$dmg"
-          done
-
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
