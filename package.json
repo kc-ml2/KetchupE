@@ -17,7 +17,7 @@
     "test:coverage": "vitest --coverage"
   },
   "build": {
-    "appId": "com.KetchupE.app",
+    "appId": "com.kcml2.ketchupe",
     "productName": "KetchupE",
     "artifactName": "${name}-${version}-${arch}.${ext}",
     "publish": [
@@ -50,9 +50,23 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "icon.icns",
+      "hardenedRuntime": true,
+      "notarize": true,
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ]
     },
     "win": {
