@@ -80,7 +80,11 @@ jobs:
 
       - name: Build frontend and Electron
         run: npm run build
-
+        env:
+          # Vite embeds VITE_* values into the renderer bundle at build time.
+          # Prefer a repository variable for the API URL; allow a secret fallback
+          # for environments that already store it there.
+          VITE_API_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL }}
       - name: Build, sign and notarize macOS app
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
