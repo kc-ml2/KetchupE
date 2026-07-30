@@ -1,5 +1,5 @@
 import { useState, useContext, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   LuBuilding2,
   LuUsers,
@@ -34,6 +34,7 @@ import { getTeamScopeInfo } from "@lib/teamScopeInfo";
 import { getPathLeafName } from "@lib/pathDisplay";
 import { AuthContext } from "@Contexts/AuthContext";
 import { AuthContextType } from "@app-types/AuthContext.types";
+import { FetchError } from "@lib/fetchClient";
 import { guideCopy } from "@config/guideCopy";
 
 const MEMBER_COLORS = [
@@ -60,6 +61,7 @@ const TOAST_DURATION_MS = 2000;
 
 const TeamDetailPage = (): React.JSX.Element => {
   const { teamId } = useParams<{ teamId: string }>();
+  const navigate = useNavigate();
   const {
     team,
     isLoading,
@@ -79,6 +81,9 @@ const TeamDetailPage = (): React.JSX.Element => {
   const [deletingDoc, setDeletingDoc] = useState<IngestDocument | null>(null);
   const [deletingFolder, setDeletingFolder] = useState<TeamFolder | null>(null);
   const [isDeletingFolder, setIsDeletingFolder] = useState(false);
+  const [isDeleteTeamModalOpen, setIsDeleteTeamModalOpen] = useState(false);
+  const [isDeletingTeam, setIsDeletingTeam] = useState(false);
+  const [deleteTeamError, setDeleteTeamError] = useState<string | null>(null);
   const [isNotAdminModalOpen, setIsNotAdminModalOpen] = useState(false);
   // 재시도 진행 중인 대상 키. 문서는 doc.id, 폴더는 `folder-${id}`.
   const [retryingId, setRetryingId] = useState<string | null>(null);
@@ -180,6 +185,45 @@ const TeamDetailPage = (): React.JSX.Element => {
     }
   };
 
+  const handleDeleteTeamClick = () => {
+    if (!isAdmin) {
+      setIsNotAdminModalOpen(true);
+      return;
+    }
+    setDeleteTeamError(null);
+    setIsDeleteTeamModalOpen(true);
+  };
+
+  const handleDeleteTeamConfirm = async () => {
+    if (!teamId || !isAdmin || isDeletingTeam) return;
+    setIsDeletingTeam(true);
+    setDeleteTeamError(null);
+
+    try {
+      await fetchClient.del(`/teams/${teamId}`);
+      navigate("/chatbot", { replace: true });
+    } catch (err) {
+      const status = err instanceof FetchError ? err.status : null;
+      setDeleteTeamError(
+        status === 409
+          ? "처리 중인 문서가 있어서 삭제를 보류했어요. 잠시 후 다시 시도해 주세요."
+          : status === 403
+            ? "팀 관리자만 팀을 삭제할 수 있어요."
+            : status === 404
+              ? "삭제하려는 팀을 찾을 수 없어요."
+              : "팀 삭제에 실패했어요. 잠시 후 다시 시도해 주세요.",
+      );
+    } finally {
+      setIsDeletingTeam(false);
+    }
+  };
+
+  const handleDeleteTeamModalClose = () => {
+    if (isDeletingTeam) return;
+    setIsDeleteTeamModalOpen(false);
+    setDeleteTeamError(null);
+  };
+
   const handleRetryDoc = async (doc: IngestDocument) => {
     if (retryingId) return;
     setRetryingId(doc.id);
@@ -225,7 +269,7 @@ const TeamDetailPage = (): React.JSX.Element => {
       {/* Main Content */}
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-[#F2F3F7] dark:bg-[#0F0F0F]">
         {/* Header */}
-        <div className="flex items-center px-6 py-3 border-b border-[#E4E4E7] dark:border-[#27272A]">
+        <div className="flex items-start justify-between gap-4 px-6 py-3 border-b border-[#E4E4E7] dark:border-[#27272A]">
           <div className="flex items-start gap-3">
             <LuUsers className="mt-0.5 w-6 h-6 text-[#18181B] dark:text-[#FAFAFA]" />
             <div className="flex flex-col gap-1">
@@ -262,6 +306,16 @@ const TeamDetailPage = (): React.JSX.Element => {
               )}
             </div>
           </div>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleDeleteTeamClick}
+              className="mt-0.5 inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-50 dark:border-red-900/60 dark:hover:bg-red-900/20"
+            >
+              <LuTrash2 className="h-4 w-4" />
+              팀 삭제하기
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -414,6 +468,73 @@ const TeamDetailPage = (): React.JSX.Element => {
         upload={folderUpload}
         onUploadComplete={handleUploadComplete}
       />
+
+      {/* 팀 삭제 확인 모달 */}
+      {isDeleteTeamModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={handleDeleteTeamModalClose}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-team-title"
+            className="relative mx-4 flex w-full max-w-[420px] flex-col gap-4 rounded-2xl bg-white px-6 py-5 shadow-xl dark:bg-[#18181B]"
+          >
+            <div className="flex items-center gap-3">
+              <LuTrash2 className="h-5 w-5 flex-shrink-0 text-red-500" />
+              <h2
+                id="delete-team-title"
+                className="text-base font-semibold text-[#18181B] dark:text-[#FAFAFA]"
+              >
+                팀 삭제
+              </h2>
+            </div>
+            <p className="text-sm leading-relaxed text-[#52525B] dark:text-[#D4D4D8]">
+              <span className="font-semibold text-[#18181B] dark:text-[#FAFAFA]">
+                {getTeamDisplayName(team.name)}
+              </span>
+              <span className="ml-1">
+                팀을 삭제하시겠어요? 팀의 멤버, 폴더, 문서가 모두 삭제됩니다.
+              </span>
+            </p>
+            <p className="text-xs leading-5 text-[#71717A] dark:text-[#A1A1AA]">
+              삭제 기록은 보존됩니다. 문서가 처리 중이면 잠시 후 다시 시도해야
+              합니다.
+            </p>
+            {deleteTeamError && (
+              <p
+                role="alert"
+                className="rounded-lg bg-red-50 px-3 py-2 text-sm leading-5 text-red-600 dark:bg-red-900/20 dark:text-red-300"
+              >
+                {deleteTeamError}
+              </p>
+            )}
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleDeleteTeamModalClose}
+                disabled={isDeletingTeam}
+                className="rounded-lg border border-[#E4E4E7] px-4 py-2 text-sm font-medium text-[#18181B] transition-colors hover:bg-[#F4F4F5] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#27272A] dark:text-[#FAFAFA] dark:hover:bg-[#27272A]"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteTeamConfirm}
+                disabled={isDeletingTeam}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isDeletingTeam && (
+                  <LuLoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                )}
+                {deleteTeamError ? "다시 시도" : "삭제"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 관리자 아님 모달 */}
       {isNotAdminModalOpen && (

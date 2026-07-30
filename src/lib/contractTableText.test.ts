@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseContractTableGrid } from "./contractTableText";
+import {
+  parseContractTableGrid,
+  serializeContractTableGrid,
+} from "./contractTableText";
 
 describe("parseContractTableGrid", () => {
   it("행 구분과 셀 내부 줄바꿈이 모두 <br>인 2열 표를 파싱한다", () => {
@@ -49,5 +52,30 @@ describe("parseContractTableGrid", () => {
       header: null,
       rows: [],
     });
+  });
+});
+
+describe("serializeContractTableGrid", () => {
+  it("header/셀 내부 줄바꿈을 포함한 grid를 마크다운으로 직렬화하고 파싱과 round-trip된다", () => {
+    const grid = {
+      header: ["구분", "내용"],
+      rows: [["대표이사", "{성명} ({생년월일})\n{주소}"]],
+    };
+
+    const markdown = serializeContractTableGrid(grid);
+
+    expect(markdown).toBe(
+      "| 구분 | 내용 |\n| --- | --- |\n| 대표이사 | {성명} ({생년월일})<br>{주소} |",
+    );
+    expect(parseContractTableGrid(markdown)).toEqual(grid);
+  });
+
+  it("header 없는 grid는 데이터 행만 직렬화한다", () => {
+    expect(
+      serializeContractTableGrid({
+        header: null,
+        rows: [["회사", "케이씨"]],
+      }),
+    ).toBe("| 회사 | 케이씨 |");
   });
 });

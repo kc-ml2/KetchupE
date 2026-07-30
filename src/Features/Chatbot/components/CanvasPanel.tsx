@@ -5,13 +5,17 @@ import {
   LuPencilLine,
   LuPlus,
   LuRedo2,
+  LuTextCursorInput,
   LuTrash2,
   LuUndo2,
   LuX,
 } from "react-icons/lu";
 import { CanvasActionContext } from "@app-types/Chatbot.types";
 import { useCanvasDocxExport } from "../hooks/useCanvasDocxExport";
-import { parseContractTableGrid } from "@lib/contractTableText";
+import {
+  parseContractTableGrid,
+  serializeContractTableGrid,
+} from "@lib/contractTableText";
 import { getPathLeafName } from "@lib/pathDisplay";
 import {
   ContractBlock,
@@ -30,6 +34,11 @@ interface CanvasPanelProps {
   onEditBlock: (section: ContractSection, block: ContractBlock) => void;
   onAddBlockAfter: (section: ContractSection, block: ContractBlock) => void;
   onDeleteBlock: (section: ContractSection, block: ContractBlock) => void;
+  onUpdateBlockContent: (
+    section: ContractSection,
+    block: ContractBlock,
+    content: string,
+  ) => boolean;
   onChangeVersion: (op: "undo" | "redo") => boolean;
   onFinalize: () => boolean;
 }
@@ -139,6 +148,169 @@ const BlockText = ({ block }: { block: ContractBlock }) => {
   );
 };
 
+// 직접 수정용 편집 모델: 일반 텍스트 또는 표(grid)
+// 표는 pair({cell,value})/마크다운 문자열 모두 grid로 통일해 셀 단위로 편집하고,
+// 저장 시 마크다운 표 문자열로 직렬화해 content로 보낸다.
+type BlockDraft =
+  | { kind: "text"; text: string }
+  | { kind: "grid"; header: string[] | null; rows: string[][] };
+
+const getBlockDraft = (block: ContractBlock): BlockDraft => {
+  const pairRows = getBlockPairRows(block);
+  if (pairRows.length > 0) {
+    return {
+      kind: "grid",
+      header: null,
+      rows: pairRows.flatMap((row) =>
+        row.map((cell) => [cell.cell, cell.value]),
+      ),
+    };
+  }
+  const text = typeof block.text === "string" ? block.text : "";
+  if (block.block_type === "table") {
+    const grid = parseContractTableGrid(text);
+    if (grid.header || grid.rows.length > 0) return { kind: "grid", ...grid };
+  }
+  return { kind: "text", text };
+};
+
+const serializeBlockDraft = (draft: BlockDraft): string =>
+  draft.kind === "text"
+    ? draft.text
+    : serializeContractTableGrid({ header: draft.header, rows: draft.rows });
+
+const editorCellClassName =
+  "w-full resize-y rounded-md border border-[#D4D4D8] bg-white px-2 py-1 text-sm leading-relaxed text-[#18181B] outline-none focus:border-[#0066FF] dark:border-[#3F3F46] dark:bg-[#171717] dark:text-[#FAFAFA]";
+
+// 블록 인라인 편집기: 저장 시 content를 그대로 서버에 보낸다 (LLM 호출 없음)
+const BlockEditor = ({
+  block,
+  onSave,
+  onCancel,
+}: {
+  block: ContractBlock;
+  onSave: (content: string) => void;
+  onCancel: () => void;
+}) => {
+  const [draft, setDraft] = useState<BlockDraft>(() => getBlockDraft(block));
+
+  const handleSave = () => {
+    const content = serializeBlockDraft(draft).trim();
+    // 원본과 같으면 무의미한 버전 생성을 막기 위해 전송 없이 닫는다
+    if (content === serializeBlockDraft(getBlockDraft(block)).trim()) {
+      onCancel();
+      return;
+    }
+    onSave(content);
+  };
+
+  const setHeaderCell = (cellIndex: number, value: string) =>
+    setDraft((prev) =>
+      prev.kind === "grid" && prev.header
+        ? {
+            ...prev,
+            header: prev.header.map((cell, index) =>
+              index === cellIndex ? value : cell,
+            ),
+          }
+        : prev,
+    );
+
+  const setRowCell = (rowIndex: number, cellIndex: number, value: string) =>
+    setDraft((prev) =>
+      prev.kind === "grid"
+        ? {
+            ...prev,
+            rows: prev.rows.map((row, currentRowIndex) =>
+              currentRowIndex === rowIndex
+                ? row.map((cell, index) => (index === cellIndex ? value : cell))
+                : row,
+            ),
+          }
+        : prev,
+    );
+
+  return (
+    <div
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Escape") onCancel();
+        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          handleSave();
+        }
+      }}
+      className="flex flex-col gap-1.5"
+    >
+      {draft.kind === "text" ? (
+        <textarea
+          autoFocus
+          value={draft.text}
+          onChange={(event) =>
+            setDraft({ kind: "text", text: event.target.value })
+          }
+          rows={Math.min(12, Math.max(3, draft.text.split("\n").length + 1))}
+          className={editorCellClassName}
+        />
+      ) : (
+        <table className="w-full border-collapse text-sm">
+          <tbody>
+            {draft.header && (
+              <tr>
+                {draft.header.map((cell, cellIndex) => (
+                  <td key={cellIndex} className="p-0.5">
+                    <textarea
+                      value={cell}
+                      rows={cell.split("\n").length}
+                      onChange={(event) =>
+                        setHeaderCell(cellIndex, event.target.value)
+                      }
+                      className={`${editorCellClassName} font-medium`}
+                    />
+                  </td>
+                ))}
+              </tr>
+            )}
+            {draft.rows.map((row, rowIndex) => (
+              <tr key={rowIndex}>
+                {row.map((cell, cellIndex) => (
+                  <td key={cellIndex} className="p-0.5">
+                    <textarea
+                      value={cell}
+                      rows={cell.split("\n").length}
+                      onChange={(event) =>
+                        setRowCell(rowIndex, cellIndex, event.target.value)
+                      }
+                      className={editorCellClassName}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div className="flex justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-[#D4D4D8] px-2.5 py-1 text-xs font-semibold text-[#52525B] transition-colors hover:border-[#A1A1AA] dark:border-[#3F3F46] dark:text-[#D4D4D8]"
+        >
+          취소
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          className="rounded-lg bg-[#0066FF] px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#0052CC]"
+        >
+          저장
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // 블록 하나 = 부분 수정의 최소 단위
 const BlockCard = ({
   block,
@@ -149,6 +321,7 @@ const BlockCard = ({
   onEditBlock,
   onAddBlockAfter,
   onAskDelete,
+  onUpdateBlockContent,
 }: {
   block: ContractBlock;
   section: ContractSection;
@@ -158,14 +331,22 @@ const BlockCard = ({
   onEditBlock: (section: ContractSection, block: ContractBlock) => void;
   onAddBlockAfter: (section: ContractSection, block: ContractBlock) => void;
   onAskDelete: (section: ContractSection, block: ContractBlock) => void;
+  onUpdateBlockContent: (
+    section: ContractSection,
+    block: ContractBlock,
+    content: string,
+  ) => boolean;
 }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const canOpenFeedback = isEditable && !isEditing;
+
   return (
     <div
-      role={isEditable ? "button" : undefined}
-      tabIndex={isEditable ? 0 : -1}
-      onClick={() => isEditable && onEditBlock(section, block)}
+      role={canOpenFeedback ? "button" : undefined}
+      tabIndex={canOpenFeedback ? 0 : -1}
+      onClick={() => canOpenFeedback && onEditBlock(section, block)}
       onKeyDown={(event) => {
-        if (isEditable && (event.key === "Enter" || event.key === " ")) {
+        if (canOpenFeedback && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
           onEditBlock(section, block);
         }
@@ -178,21 +359,41 @@ const BlockCard = ({
             }`
       }`}
     >
-      <div
-        className={
-          isChanged
-            ? "text-[#0066FF] [&_*]:!text-[#0066FF] dark:text-[#60A5FA] dark:[&_*]:!text-[#60A5FA]"
-            : undefined
-        }
-      >
-        <BlockText block={block} />
-      </div>
-      {isEditable && (
+      {isEditing ? (
+        <BlockEditor
+          block={block}
+          onSave={(content) => {
+            if (onUpdateBlockContent(section, block, content)) {
+              setIsEditing(false);
+            }
+          }}
+          onCancel={() => setIsEditing(false)}
+        />
+      ) : (
+        <div
+          className={
+            isChanged
+              ? "text-[#0066FF] [&_*]:!text-[#0066FF] dark:text-[#60A5FA] dark:[&_*]:!text-[#60A5FA]"
+              : undefined
+          }
+        >
+          <BlockText block={block} />
+        </div>
+      )}
+      {isEditable && !isEditing && (
         <div className="mt-1.5 flex flex-wrap items-center justify-end gap-1.5">
           {[
             {
+              key: "direct-edit" as const,
+              label: "직접 수정하기",
+              icon: LuTextCursorInput,
+              className:
+                "text-[#A1A1AA] hover:bg-[#EFF6FF] hover:text-[#0066FF] dark:text-[#52525B] dark:hover:bg-[#1E293B]",
+              onClick: () => setIsEditing(true),
+            },
+            {
               key: "edit" as const,
-              label: "내용 수정하기",
+              label: "AI에게 수정 요청하기",
               icon: LuPencilLine,
               className:
                 "text-[#A1A1AA] hover:bg-[#EFF6FF] hover:text-[#0066FF] dark:text-[#52525B] dark:hover:bg-[#1E293B]",
@@ -248,6 +449,7 @@ const SectionGroup = ({
   onEditBlock,
   onAddBlockAfter,
   onAskDelete,
+  onUpdateBlockContent,
 }: {
   section: ContractSection;
   changedBlockIds: string[];
@@ -256,6 +458,11 @@ const SectionGroup = ({
   onEditBlock: (section: ContractSection, block: ContractBlock) => void;
   onAddBlockAfter: (section: ContractSection, block: ContractBlock) => void;
   onAskDelete: (section: ContractSection, block: ContractBlock) => void;
+  onUpdateBlockContent: (
+    section: ContractSection,
+    block: ContractBlock,
+    content: string,
+  ) => boolean;
 }) => {
   const sourceNames = [
     ...new Set(
@@ -295,6 +502,7 @@ const SectionGroup = ({
           onEditBlock={onEditBlock}
           onAddBlockAfter={onAddBlockAfter}
           onAskDelete={onAskDelete}
+          onUpdateBlockContent={onUpdateBlockContent}
         />
       ))}
     </section>
@@ -332,6 +540,7 @@ const CanvasPanel = ({
   onEditBlock,
   onAddBlockAfter,
   onDeleteBlock,
+  onUpdateBlockContent,
   onChangeVersion,
   onFinalize,
 }: CanvasPanelProps) => {
@@ -421,6 +630,7 @@ const CanvasPanel = ({
             activeActionContexts={activeActionContexts}
             onEditBlock={onEditBlock}
             onAddBlockAfter={onAddBlockAfter}
+            onUpdateBlockContent={onUpdateBlockContent}
             onAskDelete={(targetSection, targetBlock) =>
               setDeleteTarget({ section: targetSection, block: targetBlock })
             }

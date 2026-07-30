@@ -126,9 +126,7 @@ const Sidebar = (): React.JSX.Element => {
           {/* App Header */}
           <div className="flex items-center gap-2.5 h-11 px-1">
             <LuMessageSquare className="w-[22px] h-[22px] text-[#0066FF]" />
-            <span className="text-lg font-semibold text-[#FAFAFA]">
-              케찹이 팀즈
-            </span>
+            <span className="text-lg font-semibold text-[#FAFAFA]">케찹이</span>
           </div>
 
           {/* Divider */}
@@ -198,9 +196,7 @@ const Sidebar = (): React.JSX.Element => {
                       >
                         {teamScopeInfo.tagLabel}
                       </span>
-                      <span
-                        className="pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-50 hidden min-w-[176px] -translate-y-1/2 rounded-lg bg-[#0066FF] px-3 py-2 text-left shadow-xl group-hover/team:block"
-                      >
+                      <span className="pointer-events-none absolute left-[calc(100%+10px)] top-1/2 z-50 hidden min-w-[176px] -translate-y-1/2 rounded-lg bg-[#0066FF] px-3 py-2 text-left shadow-xl group-hover/team:block">
                         <span className="absolute -left-1 top-1/2 h-2.5 w-2.5 -translate-y-1/2 rotate-45 bg-[#0066FF]" />
                         <span className="block text-[11px] font-semibold leading-4 text-white/75">
                           {teamScopeInfo.label}
