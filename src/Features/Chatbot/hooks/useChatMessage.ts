@@ -144,7 +144,7 @@ const conversationsToMessages = (items: Conversation[]): Message[] =>
     },
   ]);
 
-export const useChatMessages = (): ChatMessagesHook => {
+export const useChatMessages = (teamIds: number[] = []): ChatMessagesHook => {
   const { fetchClient } = useContext(AuthContext) as AuthContextType;
   const { sessionId, ensureSession, createNewSession } = useSession();
 
@@ -170,6 +170,8 @@ export const useChatMessages = (): ChatMessagesHook => {
   const [submittedTermsCanvasKey, setSubmittedTermsCanvasKey] = useState<
     string | null
   >(null);
+  // RAG 검색 대상으로 활성화된 팀 id 목록 (초기에는 모든 팀 활성화)
+  const [activeTeamIds, setActiveTeamIds] = useState<number[]>(teamIds);
 
   const canvasData = activeCanvasId ? canvasesById[activeCanvasId] ?? null : null;
   const changedBlockIds = activeCanvasId
@@ -185,6 +187,7 @@ export const useChatMessages = (): ChatMessagesHook => {
   );
 
   const wsRef = useRef<WebSocket | null>(null);
+  const teamScopeInitializedRef = useRef(teamIds.length > 0);
   const canvasesByIdRef = useRef<Record<string, ContractCanvas>>({});
   // canvas 수신 이후에는 complete가 와도 연결을 닫지 않기 위한 플래그
   // (연결이 끊기면 서버가 canvas 편집 대기 상태를 버리고 새 계약서를 생성한다)
@@ -200,6 +203,13 @@ export const useChatMessages = (): ChatMessagesHook => {
     resolve: () => void;
     reject: (error: Error) => void;
   } | null>(null);
+
+  useEffect(() => {
+    if (!teamScopeInitializedRef.current && teamIds.length > 0) {
+      setActiveTeamIds(teamIds);
+      teamScopeInitializedRef.current = true;
+    }
+  }, [teamIds]);
 
   const storeCanvas = useCallback((canvas: ContractCanvas) => {
     const previous = canvasesByIdRef.current[canvas.canvas_id];
@@ -799,6 +809,7 @@ export const useChatMessages = (): ChatMessagesHook => {
         const chatMessage: WSChatMessage = {
           type: "message",
           content: userMessage,
+          team_ids: activeTeamIds,
         };
         wsRef.current.send(JSON.stringify(chatMessage));
       } catch (error) {
@@ -819,8 +830,17 @@ export const useChatMessages = (): ChatMessagesHook => {
         }
       }
     },
-    [connectWithAuth, isGenerating, isSubmittingResume, pendingInterrupt],
+    [activeTeamIds, connectWithAuth, isGenerating, isSubmittingResume, pendingInterrupt],
   );
+
+  // 검색 대상 팀 활성화/비활성화 토글
+  const toggleTeamId = useCallback((teamId: number) => {
+    setActiveTeamIds((prev) =>
+      prev.includes(teamId)
+        ? prev.filter((id) => id !== teamId)
+        : [...prev, teamId],
+    );
+  }, []);
 
   const sendResume = useCallback(
     (content: string) => {
@@ -1219,6 +1239,8 @@ export const useChatMessages = (): ChatMessagesHook => {
     changedBlockIds,
     selectedAnchorIds,
     showMissingTermsForm,
+    activeTeamIds,
+    toggleTeamId,
     setInputMessage,
     handleSubmit,
     sendResume,

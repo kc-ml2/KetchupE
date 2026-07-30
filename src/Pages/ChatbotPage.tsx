@@ -1,7 +1,12 @@
 import { useEffect, useRef } from "react";
 import { IoSend } from "react-icons/io5";
 import { FaStopCircle } from "react-icons/fa";
-import { LuMessageSquare, LuPlus } from "react-icons/lu";
+import {
+  LuChevronDown,
+  LuDatabase,
+  LuMessageSquare,
+  LuPlus,
+} from "react-icons/lu";
 import { useChatMessages } from "@Features/Chatbot/hooks/useChatMessage";
 import { useTextareaResize } from "@Features/Chatbot/hooks/useTextareaResize";
 import { useScrollToBottom } from "@Features/Chatbot/hooks/useScrollToBottom";
@@ -14,9 +19,14 @@ import MissingTermsForm from "@Features/Chatbot/components/MissingTermsForm";
 import ErrorBoundary from "@Features/Shared/components/ErrorBoundary";
 import KetchupE from "@images/rag.png";
 import Sidebar from "@Features/Sidebar/components/Sidebar";
+import { useTeams } from "@Features/TeamDetail/hooks/useTeams";
+import { getTeamDisplayName } from "@lib/teamDisplayName";
 import { guideCopy } from "@config/guideCopy";
 
 const ChatbotPage = (): React.JSX.Element => {
+  const { teams } = useTeams();
+  const teamIds = teams.map((team) => team.id);
+
   const {
     messages,
     inputMessage,
@@ -28,6 +38,8 @@ const ChatbotPage = (): React.JSX.Element => {
     changedBlockIds,
     selectedAnchorIds,
     showMissingTermsForm,
+    activeTeamIds,
+    toggleTeamId,
     setInputMessage,
     handleSubmit,
     sendResume,
@@ -45,7 +57,7 @@ const ChatbotPage = (): React.JSX.Element => {
     stopGenerating,
     startNewSession,
     closeCanvas,
-  } = useChatMessages();
+  } = useChatMessages(teamIds);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -123,6 +135,14 @@ const ChatbotPage = (): React.JSX.Element => {
     }
     return null;
   })();
+
+  const allTeamsSelected =
+    teams.length > 0 && teams.every((team) => activeTeamIds.includes(team.id));
+  const teamScopeLabel = allTeamsSelected
+    ? "전체 팀"
+    : activeTeamIds.length === 0
+      ? "사용 안 함"
+      : `${activeTeamIds.length}개 팀`;
 
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden font-['Inter',sans-serif]">
@@ -316,6 +336,71 @@ const ChatbotPage = (): React.JSX.Element => {
             </span>
           </div>
         </div>
+        {/* RAG 검색 범위: 활성화된 팀 id 목록을 항상 전송한다. */}
+        {teams.length > 0 && (
+          <div className="relative px-5 pb-2">
+            <details className="group">
+              <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-lg border border-[#E4E4E7] bg-white px-3 py-2 text-xs text-[#52525B] transition-colors hover:border-[#0066FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0066FF]/30 dark:border-[#3F3F46] dark:bg-[#171717] dark:text-[#D4D4D8] [&::-webkit-details-marker]:hidden">
+                <LuDatabase
+                  className="h-3.5 w-3.5 text-[#0066FF] dark:text-[#60A5FA]"
+                  aria-hidden="true"
+                />
+                <span className="font-medium">검색 범위</span>
+                <span className="text-[#71717A] dark:text-[#A1A1AA]">
+                  · {teamScopeLabel}
+                </span>
+                <LuChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+              </summary>
+
+              <div
+                role="group"
+                aria-labelledby="rag-context-label"
+                className="absolute bottom-full left-5 z-20 mb-2 w-80 max-w-[calc(100vw-2.5rem)] overflow-hidden rounded-xl border border-[#D4D4D8] bg-white shadow-xl dark:border-[#3F3F46] dark:bg-[#171717]"
+              >
+                <div className="flex items-center justify-between gap-3 border-b border-[#E4E4E7] px-3 py-2.5 dark:border-[#27272A]">
+                  <p
+                    id="rag-context-label"
+                    className="text-xs font-semibold text-[#18181B] dark:text-[#FAFAFA]"
+                  >
+                    검색 범위
+                  </p>
+                  <span className="text-[11px] text-[#71717A] dark:text-[#A1A1AA]">
+                    {teamScopeLabel}
+                  </span>
+                </div>
+
+                <div className="px-3 py-2.5">
+                  <p className="mb-2 text-[11px] leading-4 text-[#71717A] dark:text-[#A1A1AA]">
+                    선택한 팀의 문서만 검색합니다.
+                  </p>
+                  <div className="flex flex-col gap-0.5">
+                    {teams.map((team) => {
+                      const isActive = activeTeamIds.includes(team.id);
+                      return (
+                        <label
+                          key={team.id}
+                          htmlFor={`rag-context-${team.id}`}
+                          className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-xs text-[#52525B] transition-colors hover:bg-[#F4F4F5] dark:text-[#D4D4D8] dark:hover:bg-[#27272A]"
+                        >
+                          <input
+                            id={`rag-context-${team.id}`}
+                            type="checkbox"
+                            checked={isActive}
+                            onChange={() => toggleTeamId(team.id)}
+                            className="h-4 w-4 shrink-0 accent-[#0066FF]"
+                          />
+                          <span className="min-w-0 truncate font-medium">
+                            {getTeamDisplayName(team.name)}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+        )}
         <div className="px-5 pb-6">
           <form
             ref={formRef}

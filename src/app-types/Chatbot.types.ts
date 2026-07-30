@@ -163,6 +163,8 @@ export interface ChatMessagesHook {
   changedBlockIds: string[];
   selectedAnchorIds: string[];
   showMissingTermsForm: boolean;
+  activeTeamIds: number[];
+  toggleTeamId: (teamId: number) => void;
   setInputMessage: (message: string) => void;
   handleSubmit: (e: React.FormEvent) => Promise<void>;
   sendResume: (content: string) => void;
@@ -203,6 +205,8 @@ export interface WSAuthMessage {
 export interface WSChatMessage {
   type: "message";
   content: string;
+  // 검색 대상 팀 필터. 빈 배열이면 모든 팀 컨텍스트를 제외한다.
+  team_ids: number[];
 }
 
 // interrupt 응답. content는 직전 interrupt 하위 타입에 대응하는 형태여야 한다
