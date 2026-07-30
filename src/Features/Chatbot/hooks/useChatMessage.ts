@@ -1110,6 +1110,20 @@ export const useChatMessages = (): ChatMessagesHook => {
     [canvasData, sendCanvasResume],
   );
 
+  // 사용자가 canvas에서 직접 수정한 블록 내용을 LLM 호출 없이 즉시 적용 (content 우선 규칙)
+  const updateBlockContent = useCallback(
+    (section: ContractSection, block: ContractBlock, content: string): boolean => {
+      if (!canvasData) return false;
+      const trimmedContent = content.trim();
+      if (!trimmedContent) return false;
+      return sendCanvasResume(
+        { op: "edit", block_id: block.block_id, content: trimmedContent },
+        `블록 직접 수정: ${getBlockActionLabel(section, block)}`,
+      );
+    },
+    [canvasData, sendCanvasResume],
+  );
+
   const submitMissingTerms = useCallback(
     (terms: CanvasTermValue[]): boolean => {
       if (!canvasData || terms.length === 0) return false;
@@ -1215,6 +1229,7 @@ export const useChatMessages = (): ChatMessagesHook => {
     startEditBlock,
     startAddBlockAfter,
     deleteBlock,
+    updateBlockContent,
     submitMissingTerms,
     changeCanvasVersion,
     finalizeCanvas,

@@ -70,7 +70,8 @@ export interface CanvasPartyValue {
 }
 
 export type CanvasAtomicEditOp =
-  | { op: "edit"; block_id: string; feedback?: string }
+  // content가 있으면 LLM 호출 없이 즉시 적용, 없으면 feedback 기반 LLM 재작성 (둘 중 하나만 보낸다)
+  | { op: "edit"; block_id: string; feedback?: string; content?: string }
   | {
       op: "add";
       content?: string;
@@ -172,6 +173,11 @@ export interface ChatMessagesHook {
   startEditBlock: (section: ContractSection, block: ContractBlock) => void;
   startAddBlockAfter: (section: ContractSection, block: ContractBlock) => void;
   deleteBlock: (section: ContractSection, block: ContractBlock) => void;
+  updateBlockContent: (
+    section: ContractSection,
+    block: ContractBlock,
+    content: string,
+  ) => boolean;
   submitMissingTerms: (terms: CanvasTermValue[]) => boolean;
   changeCanvasVersion: (op: "undo" | "redo") => boolean;
   finalizeCanvas: () => boolean;

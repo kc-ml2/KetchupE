@@ -38,6 +38,7 @@ const ChatbotPage = (): React.JSX.Element => {
     startEditBlock,
     startAddBlockAfter,
     deleteBlock,
+    updateBlockContent,
     submitMissingTerms,
     changeCanvasVersion,
     finalizeCanvas,
@@ -257,12 +258,10 @@ const ChatbotPage = (): React.JSX.Element => {
                   </div>
                 </div>
               )}
-
             </div>
 
             <div ref={messagesEndRef} />
           </div>
-
         </div>
 
         {composerModeLabel && (
@@ -374,6 +373,7 @@ const ChatbotPage = (): React.JSX.Element => {
             onEditBlock={startEditBlock}
             onAddBlockAfter={startAddBlockAfter}
             onDeleteBlock={deleteBlock}
+            onUpdateBlockContent={updateBlockContent}
             onChangeVersion={changeCanvasVersion}
             onFinalize={finalizeCanvas}
           />

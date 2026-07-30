@@ -40,6 +40,20 @@ const toRowCells = (rowLine: string): string[] =>
 const isDelimiterRow = (cells: string[]): boolean =>
   cells.length > 0 && cells.every((cell) => DELIMITER_CELL_PATTERN.test(cell));
 
+// grid → 마크다운 표 문자열. 셀 내부 줄바꿈은 <br>로 표기해 GFM 행 구조를 유지한다.
+export const serializeContractTableGrid = ({
+  header,
+  rows,
+}: ContractTableGrid): string => {
+  const toLine = (cells: string[]) =>
+    `| ${cells.map((cell) => cell.replace(/\n/g, "<br>")).join(" | ")} |`;
+  const lines = rows.map(toLine);
+  if (header) {
+    lines.unshift(toLine(header), `| ${header.map(() => "---").join(" | ")} |`);
+  }
+  return lines.join("\n");
+};
+
 // 표 문법이 아닌 경우(구분자 "|"가 없는 일반 문단 등)에는 빈 grid를 반환한다.
 export const parseContractTableGrid = (text: string): ContractTableGrid => {
   if (!text.includes("|")) return { header: null, rows: [] };
