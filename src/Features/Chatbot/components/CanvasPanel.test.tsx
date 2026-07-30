@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import CanvasPanel from "./CanvasPanel";
-import { ContractCanvas } from "@app-types/Canvas.types";
+import {
+  ContractBlock,
+  ContractCanvas,
+  ContractSection,
+} from "@app-types/Canvas.types";
 
 const canvas: ContractCanvas = {
   schema_version: "contract.v1",
@@ -150,7 +154,10 @@ describe("CanvasPanel", () => {
   });
 
   it("표 블록을 셀 단위로 수정하면 마크다운 표 content로 저장 콜백을 부른다", async () => {
-    const onUpdateBlockContent = vi.fn(() => true);
+    const onUpdateBlockContent = vi.fn(
+      (_section: ContractSection, _block: ContractBlock, _content: string) =>
+        true,
+    );
     render(
       <CanvasPanel
         canvas={canvas}
