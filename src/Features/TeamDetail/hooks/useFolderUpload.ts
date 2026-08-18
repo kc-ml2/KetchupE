@@ -60,6 +60,7 @@ const SESSION_EXPIRED_MESSAGE = "세션이 만료되었습니다. 다시 로그�
 export interface UseFolderUploadReturn {
   state: UploadState;
   selectFolder: () => Promise<void>;
+  processFolder: (folderPath: string) => Promise<void>;
   startUpload: () => Promise<TeamFolder | null>;
   reset: () => void;
 }
@@ -86,7 +87,7 @@ export const useFolderUpload = (teamId: number): UseFolderUploadReturn => {
     return true;
   }, [getAccessToken]);
 
-  const selectFolder = useCallback(async () => {
+  const processFolder = useCallback(async (folderPath: string) => {
     const electronAPI = window.electronAPI;
     if (!electronAPI) {
       setState((prev) => ({
@@ -97,12 +98,7 @@ export const useFolderUpload = (teamId: number): UseFolderUploadReturn => {
       return;
     }
 
-    // Step 1: Open directory dialog
-    const folderPath = await electronAPI.openDirectory();
-    if (!folderPath) return;
-
-    // 다이얼로그가 열려 있는 동안 토큰이 만료될 수 있으므로
-    // API 호출 전에 토큰 존재 여부를 확인
+    // 다이얼로그/드롭 이후 토큰이 만료될 수 있으므로 API 호출 전에 존재 여부를 확인
     if (!ensureToken()) return;
 
     const folderName = folderPath.split(/[/\\]/).pop() ?? folderPath;
@@ -192,6 +188,23 @@ export const useFolderUpload = (teamId: number): UseFolderUploadReturn => {
       }));
     }
   }, [teamId, fetchClient, ensureToken]);
+
+  const selectFolder = useCallback(async () => {
+    const electronAPI = window.electronAPI;
+    if (!electronAPI) {
+      setState((prev) => ({
+        ...prev,
+        step: "error",
+        errorMessage: "PC앱(🍅공개 예정)에서만 가능한 기능입니다.",
+      }));
+      return;
+    }
+
+    const folderPath = await electronAPI.openDirectory();
+    if (!folderPath) return;
+
+    await processFolder(folderPath);
+  }, [processFolder]);
 
   const startUpload = useCallback(async (): Promise<TeamFolder | null> => {
     const electronAPI = window.electronAPI;
@@ -289,5 +302,5 @@ export const useFolderUpload = (teamId: number): UseFolderUploadReturn => {
     ensureToken,
   ]);
 
-  return { state, selectFolder, startUpload, reset };
+  return { state, selectFolder, processFolder, startUpload, reset };
 };

@@ -8,6 +8,7 @@ export interface ScannedFile {
 
 export interface ElectronAPI {
   openDirectory: () => Promise<string | null>;
+  getPathForFile: (file: File) => string;
   scanFolder: (folderPath: string) => Promise<{
     success: boolean;
     files?: ScannedFile[];

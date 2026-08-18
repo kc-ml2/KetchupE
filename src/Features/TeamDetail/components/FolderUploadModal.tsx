@@ -1,4 +1,4 @@
-import { Fragment, useEffect } from "react";
+import { Fragment, useState, type DragEvent } from "react";
 import {
   LuX,
   LuFolderOpen,
@@ -26,15 +26,29 @@ const FolderUploadModal = ({
   upload,
   onUploadComplete,
 }: FolderUploadModalProps): React.JSX.Element | null => {
-  const { state, selectFolder, startUpload, reset } = upload;
-
-  useEffect(() => {
-    if (isOpen && state.step === "idle") {
-      selectFolder();
-    }
-  }, [isOpen, state.step, selectFolder]);
+  const { state, selectFolder, processFolder, startUpload, reset } = upload;
+  const [isDragOver, setIsDragOver] = useState(false);
 
   if (!isOpen) return null;
+
+  const handleDragOver = (e: DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => setIsDragOver(false);
+
+  const handleDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const entry = e.dataTransfer.items?.[0]?.webkitGetAsEntry?.();
+    const file = e.dataTransfer.files?.[0];
+    if (!file || !window.electronAPI || (entry && !entry.isDirectory)) return;
+
+    const folderPath = window.electronAPI.getPathForFile(file);
+    processFolder(folderPath);
+  };
 
   const handleClose = () => {
     reset();
@@ -86,6 +100,31 @@ const FolderUploadModal = ({
               </Fragment>
             ))}
           </p>
+
+          {/* Idle - drag & drop zone */}
+          {state.step === "idle" && (
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`flex flex-col items-center gap-3 py-10 rounded-xl border-2 border-dashed transition-colors ${
+                isDragOver
+                  ? "border-[#0066FF] bg-[#0066FF]/5"
+                  : "border-[#E4E4E7] dark:border-[#27272A]"
+              }`}
+            >
+              <LuFolderOpen className="w-10 h-10 text-[#0066FF]" />
+              <p className="text-sm text-[#71717A]">
+                업로드할 폴더를 여기로 드래그하세요
+              </p>
+              <button
+                onClick={selectFolder}
+                className="mt-1 text-sm font-medium text-[#0066FF] hover:underline"
+              >
+                또는 폴더 선택
+              </button>
+            </div>
+          )}
 
           {/* Scanning / Checking */}
           {isProcessing && (
