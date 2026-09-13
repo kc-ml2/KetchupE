@@ -14,7 +14,17 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "test:electron": "vitest run electron",
+    "typecheck:electron": "tsc -p tsconfig.electron.json",
+    "smoke:litellm": "vite-node scripts/litellm-smoke.ts",
+    "bench:parse": "vite-node bench/runner/parse.ts",
+    "bench:chunk": "vite-node bench/runner/chunk.ts",
+    "bench:retrieval": "vite-node bench/runner/retrieval.ts",
+    "bench:policy": "vite-node bench/runner/policy.ts",
+    "bench:agent": "vite-node bench/runner/agent.ts",
+    "bench:compare": "vite-node bench/runner/compare.ts",
+    "trajectory": "vite-node scripts/trajectory.ts"
   },
   "build": {
     "appId": "com.kcml2.ketchupe",
@@ -56,13 +66,15 @@
         {
           "target": "dmg",
           "arch": [
-            "arm64"
+            "arm64",
+            "x64"
           ]
         },
         {
           "target": "zip",
           "arch": [
-            "arm64"
+            "arm64",
+            "x64"
           ]
         }
       ]
@@ -83,12 +95,23 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false
-    }
+    },
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/**",
+      "node_modules/@img/**",
+      "node_modules/sharp/**",
+      "node_modules/kordoc/**"
+    ]
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^3.0.43",
+    "@huggingface/transformers": "^4.2.0",
     "agentation": "^2.3.2",
+    "ai": "^7.0.92",
     "docx": "^9.7.1",
+    "dotenv": "^16.4.5",
     "electron-updater": "^6.8.3",
+    "kordoc": "^4.10.0",
     "react": "^19.0.0",
     "react-device-detect": "^2.2.3",
     "react-dom": "^19.0.0",
@@ -98,7 +121,8 @@
     "react-router-dom": "^7.5.2",
     "react-syntax-highlighter": "^16.1.0",
     "rehype-raw": "^7.0.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
@@ -127,5 +151,12 @@
     "vite-plugin-electron": "^0.29.0",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.1.4"
+  },
+  "overrides": {
+    "adm-zip": "^0.6.0",
+    "sharp": "^0.35.0"
+  },
+  "engines": {
+    "node": ">=22.5"
   }
 }

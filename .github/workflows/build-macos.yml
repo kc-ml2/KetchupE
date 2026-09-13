@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Contract, Tomato keyword, and fixture harness tests
+        run: npm run test:electron
+
       - name: Install Developer ID certificate
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
@@ -84,7 +87,6 @@ jobs:
           # Vite embeds VITE_* values into the renderer bundle at build time.
           # Prefer a repository variable for the API URL; allow a secret fallback
           # for environments that already store it there.
-          VITE_API_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL }}
       - name: Build, sign and notarize macOS app
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}

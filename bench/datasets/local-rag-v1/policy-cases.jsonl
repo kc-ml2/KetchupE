@@ -1,0 +1,12 @@
+{"caseId": "policy-001", "stateFixture": "states/policy-001.json", "difficulty": 1, "allowedActions": ["SEARCH"], "successWithinBudget": true, "requiredReasonCodes": ["MISSING_EVIDENCE"]}
+{"caseId": "policy-002", "stateFixture": "states/policy-002.json", "difficulty": 0, "allowedActions": ["ANSWER"], "successWithinBudget": true, "requiredReasonCodes": ["NO_RETRIEVAL_NEEDED"]}
+{"caseId": "policy-003", "stateFixture": "states/policy-003.json", "difficulty": 1, "allowedActions": ["ANSWER"], "successWithinBudget": true, "requiredReasonCodes": ["ENOUGH_EVIDENCE"]}
+{"caseId": "policy-004", "stateFixture": "states/policy-004.json", "difficulty": 3, "allowedActions": ["ASK", "SEARCH"], "successWithinBudget": true, "requiredReasonCodes": ["MISSING_USER_INPUT", "MISSING_EVIDENCE"]}
+{"caseId": "policy-005", "stateFixture": "states/policy-005.json", "difficulty": 3, "allowedActions": ["ASK", "ANSWER"], "successWithinBudget": true}
+{"caseId": "policy-006", "stateFixture": "states/policy-006.json", "difficulty": 2, "allowedActions": ["SEARCH", "STOP"], "successWithinBudget": false, "requiredReasonCodes": ["QUERY_REWRITE", "MISSING_EVIDENCE", "UNSUPPORTED"]}
+{"caseId": "policy-007", "stateFixture": "states/policy-007.json", "difficulty": 2, "allowedActions": ["STOP"], "successWithinBudget": false, "requiredReasonCodes": ["UNSUPPORTED", "BUDGET_LIMIT", "MISSING_EVIDENCE"]}
+{"caseId": "policy-008", "stateFixture": "states/policy-008.json", "difficulty": 2, "allowedActions": ["SEARCH"], "successWithinBudget": true, "requiredReasonCodes": ["QUERY_REWRITE", "NEED_NEIGHBORS", "MISSING_EVIDENCE"]}
+{"caseId": "policy-009", "stateFixture": "states/policy-009.json", "difficulty": 1, "allowedActions": ["ANSWER", "VERIFY"], "successWithinBudget": true}
+{"caseId": "policy-010", "stateFixture": "states/policy-010.json", "difficulty": 2, "allowedActions": ["VERIFY", "ANSWER"], "successWithinBudget": true, "requiredReasonCodes": ["CONFLICTING_EVIDENCE", "ENOUGH_EVIDENCE"]}
+{"caseId": "policy-011", "stateFixture": "states/policy-011.json", "difficulty": 1, "allowedActions": ["ANSWER"], "successWithinBudget": true, "requiredReasonCodes": ["ENOUGH_EVIDENCE"]}
+{"caseId": "policy-012", "stateFixture": "states/policy-012.json", "difficulty": 3, "allowedActions": ["ASK", "SEARCH"], "successWithinBudget": true, "requiredReasonCodes": ["MISSING_USER_INPUT", "MISSING_EVIDENCE"]}

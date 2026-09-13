@@ -15,7 +15,20 @@ export default defineConfig({
           build: {
             outDir: "dist-electron",
             rollupOptions: {
-              external: ["electron", "electron-updater"],
+              external: ["electron", "electron-updater", "node:sqlite", "kordoc", "@huggingface/transformers"],
+            },
+          },
+        },
+      },
+      {
+        // Tomato utility process: parse/OCR/embedding/search off the main event loop
+        entry: "electron/workers/tomato.worker.ts",
+        vite: {
+          build: {
+            outDir: "dist-electron",
+            rollupOptions: {
+              external: ["electron", "node:sqlite", "kordoc", "@huggingface/transformers"],
+              output: { format: "es" },
             },
           },
         },

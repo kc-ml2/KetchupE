@@ -1,33 +1,8 @@
-export interface ScannedFile {
-  fileName: string;
-  relativePath: string;
-  fullPath: string;
-  size: number;
-  mtime: number;
-}
-
-export interface ElectronAPI {
-  openDirectory: () => Promise<string | null>;
-  getPathForFile: (file: File) => string;
-  scanFolder: (folderPath: string) => Promise<{
-    success: boolean;
-    files?: ScannedFile[];
-    error?: string;
-  }>;
-  readFile: (filePath: string) => Promise<{
-    success: boolean;
-    data?: ArrayBuffer;
-    error?: string;
-  }>;
-  openFileByRelativePath: (relativePath: string) => Promise<{
-    success: boolean;
-    error?: string;
-  }>;
-}
+import type { KetchupEAgentAPI } from "@app-types/Agent.types";
 
 declare global {
   interface Window {
-    electronAPI?: ElectronAPI;
+    agentAPI?: KetchupEAgentAPI;
   }
 }
 

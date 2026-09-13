@@ -1,20 +1,58 @@
-const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
-// Expose protected methods that allow the renderer process to use
-// the ipcRenderer without exposing the entire object
-contextBridge.exposeInMainWorld('electronAPI', {
-  // Dialog APIs
-  openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
+// v3 local RAG agent API — narrow surface, no paths or secrets cross this bridge.
+contextBridge.exposeInMainWorld('agentAPI', {
+  getWorkspace: () => ipcRenderer.invoke('agent:getWorkspace'),
+  setActiveTask: (workspaceId, task) => ipcRenderer.invoke('agent:setActiveTask', workspaceId, task),
+  setMemoryEnabled: (workspaceId, enabled) => ipcRenderer.invoke('agent:setMemoryEnabled', workspaceId, enabled),
 
-  // Resolve the absolute filesystem path of a File dropped via drag & drop
-  getPathForFile: (file) => webUtils.getPathForFile(file),
+  createThread: (workspaceId) => ipcRenderer.invoke('agent:createThread', workspaceId),
+  listThreads: (workspaceId) => ipcRenderer.invoke('agent:listThreads', workspaceId),
+  loadThread: (threadId, beforeMessageId, limit) => ipcRenderer.invoke('agent:loadThread', threadId, beforeMessageId, limit),
+  renameThread: (threadId, title) => ipcRenderer.invoke('agent:renameThread', threadId, title),
+  deleteThread: (threadId) => ipcRenderer.invoke('agent:deleteThread', threadId),
+  openRun: (threadId) => ipcRenderer.invoke('agent:openRun', threadId),
 
-  // Folder scanning APIs
-  scanFolder: (folderPath) => ipcRenderer.invoke('folder:scan', folderPath),
+  startRun: (input) => ipcRenderer.invoke('agent:startRun', input),
+  resumeRun: (runId, text) => ipcRenderer.invoke('agent:resumeRun', runId, text),
+  cancelRun: (runId) => ipcRenderer.invoke('agent:cancelRun', runId),
+  onAgentEvent: (listener) => {
+    const handler = (_event, payload) => listener(payload);
+    ipcRenderer.on('agent:event', handler);
+    return () => ipcRenderer.removeListener('agent:event', handler);
+  },
+  recordInteraction: (runId, kind) => ipcRenderer.invoke('agent:recordInteraction', runId, kind),
+  openCitation: (runId, evidenceId) => ipcRenderer.invoke('agent:openCitation', runId, evidenceId),
 
-  // File reading APIs
-  readFile: (filePath) => ipcRenderer.invoke('folder:readFile', filePath),
+  addCollection: () => ipcRenderer.invoke('collection:add'),
+  removeCollection: (name) => ipcRenderer.invoke('collection:remove', name),
+  syncCollection: (name) => ipcRenderer.invoke('collection:sync', name),
+  listCollections: (workspaceId) => ipcRenderer.invoke('collection:list', workspaceId),
+  setCollectionActive: (workspaceId, name, active) => ipcRenderer.invoke('collection:setActive', workspaceId, name, active),
+  onCollectionsChanged: (listener) => {
+    const handler = () => listener();
+    ipcRenderer.on('collection:changed', handler);
+    return () => ipcRenderer.removeListener('collection:changed', handler);
+  },
 
-  // File open by relative path
-  openFileByRelativePath: (relativePath) => ipcRenderer.invoke('file:openByRelativePath', relativePath),
+  listMemories: (workspaceId) => ipcRenderer.invoke('agent:listMemories', workspaceId),
+  addMemory: (workspaceId, input) => ipcRenderer.invoke('agent:addMemory', workspaceId, input),
+  updateMemory: (id, input) => ipcRenderer.invoke('agent:updateMemory', id, input),
+  setMemoryPinned: (id, pinned) => ipcRenderer.invoke('agent:setMemoryPinned', id, pinned),
+  confirmMemory: (id) => ipcRenderer.invoke('agent:confirmMemory', id),
+  deleteMemory: (id) => ipcRenderer.invoke('agent:deleteMemory', id),
+  exportTrace: (runId) => ipcRenderer.invoke('agent:exportTrace', runId),
+
+  getModelSettings: () => ipcRenderer.invoke('agent:getModelSettings'),
+  setModelSettings: (settings) => ipcRenderer.invoke('agent:setModelSettings', settings),
+  listModels: () => ipcRenderer.invoke('agent:listModels'),
+  testModelConnection: () => ipcRenderer.invoke('agent:testModelConnection'),
+  startCanvas: (input) => ipcRenderer.invoke('canvas:start', input),
+  canvasEdit: (runId, op, displayText) => ipcRenderer.invoke('canvas:edit', runId, op, displayText),
+  canvasAnchorChoice: (runId, choice) => ipcRenderer.invoke('canvas:anchorChoice', runId, choice),
+  loadCanvas: (runId) => ipcRenderer.invoke('canvas:load', runId),
+  openCanvasSource: (canvasId, documentId) => ipcRenderer.invoke('canvas:openSource', canvasId, documentId),
+  getTelemetrySettings: () => ipcRenderer.invoke('agent:getTelemetrySettings'),
+  setTelemetrySettings: (settings) => ipcRenderer.invoke('agent:setTelemetrySettings', settings),
+  testTelemetry: () => ipcRenderer.invoke('agent:testTelemetry'),
 });

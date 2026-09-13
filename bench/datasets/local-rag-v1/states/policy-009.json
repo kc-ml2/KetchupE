@@ -1,0 +1,43 @@
+{
+  "runId": "fixture",
+  "step": 2,
+  "userGoal": "비밀번호는 몇 자 이상이고 얼마나 자주 바꿔야 해?",
+  "selectedMemories": [],
+  "activeCollections": [
+    "bench"
+  ],
+  "recentMessages": [],
+  "evidence": [
+    {
+      "evidenceId": "e1",
+      "sourceId": "s-sec",
+      "chunkId": "c-sec-2",
+      "title": "보안 규정",
+      "breadcrumb": [
+        "보안 규정",
+        "비밀번호"
+      ],
+      "locator": {},
+      "snippet": "비밀번호는 12자 이상이며 90일마다 변경한다. 이전 5개 비밀번호는 재사용할 수 없다.",
+      "score": 1.0
+    }
+  ],
+  "previousDecisions": [
+    "SEARCH"
+  ],
+  "remaining": {
+    "steps": 5,
+    "modelCalls": 7,
+    "searches": 2,
+    "verifies": 1,
+    "wallTimeMs": 180000
+  },
+  "lastObservation": {
+    "kind": "search",
+    "resultIds": [
+      "e1"
+    ],
+    "effectiveMode": "hybrid",
+    "latencyMs": 25
+  }
+}

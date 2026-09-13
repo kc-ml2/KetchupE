@@ -1,0 +1,27 @@
+{
+  "runId": "fixture",
+  "step": 2,
+  "userGoal": "주차장 이용 규정 알려줘",
+  "selectedMemories": [],
+  "activeCollections": [
+    "bench"
+  ],
+  "recentMessages": [],
+  "evidence": [],
+  "previousDecisions": [
+    "SEARCH"
+  ],
+  "remaining": {
+    "steps": 5,
+    "modelCalls": 7,
+    "searches": 2,
+    "verifies": 1,
+    "wallTimeMs": 180000
+  },
+  "lastObservation": {
+    "kind": "search",
+    "resultIds": [],
+    "effectiveMode": "keyword",
+    "latencyMs": 12
+  }
+}

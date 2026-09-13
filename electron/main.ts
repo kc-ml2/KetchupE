@@ -1,3 +1,6 @@
+// Loads .env into process.env before anything reads LITELLM_*/LANGFUSE_* — Vite's own env loading only
+// exposes VITE_-prefixed vars to the renderer bundle, it never touches process.env for the main process.
+import "dotenv/config";
 import {
   app,
   BrowserWindow,
@@ -12,7 +15,9 @@ import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import electronUpdater from "electron-updater";
 const { autoUpdater } = electronUpdater;
-import { registerFolderHandlers } from "./ipc/folderHandlers";
+import { registerAgentHandlers } from "./ipc/agentHandlers.ts";
+import { registerCollectionHandlers } from "./ipc/collectionHandlers.ts";
+import { startAgentRuntime, type AgentRuntime } from "./agent/runtime.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,6 +29,7 @@ const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 app.setName(PRODUCT_NAME);
 
 let mainWindow: BrowserWindow | null = null;
+let agentRuntime: AgentRuntime | null = null;
 let tray: Tray | null = null;
 let appIconPath: string | undefined;
 let isQuitting = false;
@@ -269,7 +275,7 @@ app.whenReady().then(() => {
 
   createWindow();
   createTray();
-  registerFolderHandlers();
+  startLocalAgent();
   setupAutoUpdater();
 
   app.on("activate", () => {
@@ -281,11 +287,40 @@ app.whenReady().then(() => {
   });
 });
 
+const broadcast = (channel: string, payload?: unknown) => {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send(channel, payload);
+  }
+};
+
+function startLocalAgent() {
+  try {
+    agentRuntime = startAgentRuntime({
+      userData: app.getPath("userData"),
+      workerPath: path.join(__dirname, "tomato.worker.js"),
+      appVersion: app.getVersion(),
+      emitAgentEvent: (event) => broadcast("agent:event", event),
+      emitCollectionsChanged: () => broadcast("collection:changed"),
+    });
+    registerAgentHandlers(agentRuntime);
+    registerCollectionHandlers(agentRuntime);
+  } catch (error) {
+    console.error("[agent] failed to start local agent runtime:", error);
+  }
+}
+
 app.on("window-all-closed", () => {
   // Keep running in tray
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
   isQuitting = true;
   stopPeriodicUpdateChecks();
+  if (agentRuntime) {
+    // Flush queued telemetry once, then quit for real.
+    event.preventDefault();
+    const runtime = agentRuntime;
+    agentRuntime = null;
+    void runtime.stop().finally(() => app.quit());
+  }
 });

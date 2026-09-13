@@ -1,0 +1,43 @@
+{
+  "runId": "fixture",
+  "step": 2,
+  "userGoal": "퇴직할 때 안 쓴 연차는 어떻게 되나요?",
+  "selectedMemories": [],
+  "activeCollections": [
+    "bench"
+  ],
+  "recentMessages": [],
+  "evidence": [
+    {
+      "evidenceId": "e1",
+      "sourceId": "s-handbook",
+      "chunkId": "c-hb-2",
+      "title": "인사 규정",
+      "breadcrumb": [
+        "인사 규정",
+        "미사용 연차 정산"
+      ],
+      "locator": {},
+      "snippet": "퇴직 시 미사용 연차는 퇴직일 기준 통상임금으로 환산하여 수당으로 정산한다. 정산 신청은 인사팀에 퇴직원과 함께 제출한다.",
+      "score": 1.0
+    }
+  ],
+  "previousDecisions": [
+    "SEARCH"
+  ],
+  "remaining": {
+    "steps": 5,
+    "modelCalls": 7,
+    "searches": 2,
+    "verifies": 1,
+    "wallTimeMs": 180000
+  },
+  "lastObservation": {
+    "kind": "search",
+    "resultIds": [
+      "e1"
+    ],
+    "effectiveMode": "hybrid",
+    "latencyMs": 40
+  }
+}

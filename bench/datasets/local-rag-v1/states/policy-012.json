@@ -1,0 +1,25 @@
+{
+  "runId": "fixture",
+  "step": 1,
+  "userGoal": "휴가 며칠 쓸 수 있어?",
+  "selectedMemories": [
+    {
+      "id": "mem-002",
+      "kind": "fact",
+      "content": "사용자는 정규직이다"
+    }
+  ],
+  "activeCollections": [
+    "bench"
+  ],
+  "recentMessages": [],
+  "evidence": [],
+  "previousDecisions": [],
+  "remaining": {
+    "steps": 6,
+    "modelCalls": 8,
+    "searches": 3,
+    "verifies": 1,
+    "wallTimeMs": 180000
+  }
+}

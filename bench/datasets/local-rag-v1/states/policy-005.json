@@ -1,0 +1,43 @@
+{
+  "runId": "fixture",
+  "step": 2,
+  "userGoal": "출장 숙박비 한도가 얼마야?",
+  "selectedMemories": [],
+  "activeCollections": [
+    "bench"
+  ],
+  "recentMessages": [],
+  "evidence": [
+    {
+      "evidenceId": "e1",
+      "sourceId": "s-travel",
+      "chunkId": "c-tr-2",
+      "title": "출장 규정",
+      "breadcrumb": [
+        "출장 규정",
+        "숙박비 한도"
+      ],
+      "locator": {},
+      "snippet": "| 지역 | 1박 한도 | 비고 | | 서울 | 120,000원 | 실비 정산 | | 광역시 | 100,000원 | 실비 정산 | | 기타 국내 | 80,000원 | 실비 정산 | | 해외 | 200 USD | 환율은 출발일 기준 |",
+      "score": 1.0
+    }
+  ],
+  "previousDecisions": [
+    "SEARCH"
+  ],
+  "remaining": {
+    "steps": 5,
+    "modelCalls": 7,
+    "searches": 2,
+    "verifies": 1,
+    "wallTimeMs": 180000
+  },
+  "lastObservation": {
+    "kind": "search",
+    "resultIds": [
+      "e1"
+    ],
+    "effectiveMode": "hybrid",
+    "latencyMs": 35
+  }
+}

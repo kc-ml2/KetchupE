@@ -27,6 +27,11 @@ release
 *.sw?
 .env
 .env.*
+!.env.sample
 
 .cursor/*
 .claude/*
+.duo/
+
+# benchmark outputs
+bench/results/
