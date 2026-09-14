@@ -41,7 +41,6 @@ contextBridge.exposeInMainWorld('agentAPI', {
   setMemoryPinned: (id, pinned) => ipcRenderer.invoke('agent:setMemoryPinned', id, pinned),
   confirmMemory: (id) => ipcRenderer.invoke('agent:confirmMemory', id),
   deleteMemory: (id) => ipcRenderer.invoke('agent:deleteMemory', id),
-  exportTrace: (runId) => ipcRenderer.invoke('agent:exportTrace', runId),
 
   getModelSettings: () => ipcRenderer.invoke('agent:getModelSettings'),
   setModelSettings: (settings) => ipcRenderer.invoke('agent:setModelSettings', settings),
@@ -52,7 +51,4 @@ contextBridge.exposeInMainWorld('agentAPI', {
   canvasAnchorChoice: (runId, choice) => ipcRenderer.invoke('canvas:anchorChoice', runId, choice),
   loadCanvas: (runId) => ipcRenderer.invoke('canvas:load', runId),
   openCanvasSource: (canvasId, documentId) => ipcRenderer.invoke('canvas:openSource', canvasId, documentId),
-  getTelemetrySettings: () => ipcRenderer.invoke('agent:getTelemetrySettings'),
-  setTelemetrySettings: (settings) => ipcRenderer.invoke('agent:setTelemetrySettings', settings),
-  testTelemetry: () => ipcRenderer.invoke('agent:testTelemetry'),
 });

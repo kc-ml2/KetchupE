@@ -1,11 +1,11 @@
-// Central monitoring via Langfuse's OTLP/HTTP endpoint and scores API. No SDK, no OpenTelemetry runtime:
-// one finished run → one OTLP trace built from the local trace_events; user reactions and outcomes → scores.
-// Local SQLite stays the source of truth; this is a redacted (by default) mirror for cross-user analysis and A/B.
-import { createHash, randomUUID } from "node:crypto";
+// Service-owned OTLP monitoring. SQLite is a durable outbox; Langfuse is the central trace/evaluation surface.
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { arch, cpus, totalmem } from "node:os";
+import { extname, join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import type { InteractionKind } from "../../src/app-types/Agent.types.ts";
+import type { EmbeddingReport, UpdateReport } from "../tomato/tomato.ts";
 import type { PolicyTransition, TraceEvent } from "./contracts.ts";
 import type { TelemetrySettings } from "./settings.ts";
 import { readTrace } from "./trace.ts";
@@ -13,7 +13,7 @@ import { readTrace } from "./trace.ts";
 export const TELEMETRY_FLUSH_MS = 5_000;
 const TELEMETRY_RETRY_MAX_MS = 5 * 60_000;
 const OUTBOX_LIMIT = 100;
-const BENCH_EXPORT_SCHEMA = "ketchupe-trajectory-v1";
+export const TRAJECTORY_SCHEMA_VERSION = "ketchupe-trajectory-v2";
 
 /** Anonymous, stable per install; never derived from the machine name or the user. */
 export function loadInstallId(userData: string): string {
@@ -39,7 +39,7 @@ type OtlpSpan = {
   status?: { code: number; message?: string };
 };
 
-export type Score = { id?: string; traceId: string; name: string; value: number; dataType: "NUMERIC" | "BOOLEAN"; comment?: string };
+export type Score = { id?: string; traceId: string; parentSpanId?: string; name: string; value: number; dataType: "NUMERIC" | "BOOLEAN"; comment?: string };
 
 const INTERACTION_SCORES: Record<InteractionKind, { name: string; value: number }> = {
   accepted: { name: "user_feedback", value: 1 },
@@ -61,7 +61,12 @@ function attr(key: string, value: AttrValue | undefined): OtlpAttr[] {
 }
 
 const nanos = (iso: string, plusMs = 0) => `${(Date.parse(iso) + plusMs) * 1_000_000}`;
-const hash = (value: string) => `sha256:${createHash("sha256").update(value).digest("hex").slice(0, 16)}`;
+const hmac = (key: string, value: string) => `hmac-sha256:${createHmac("sha256", key).update(value).digest("hex").slice(0, 32)}`;
+const redactSensitiveText = (value: string) => value
+  .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, "[EMAIL]")
+  .replace(/(?:\+?82[- ]?)?0?1[016789][ -]?\d{3,4}[ -]?\d{4}/gu, "[PHONE]")
+  .replace(/\b(?:sk|pk)-[A-Za-z0-9_-]{12,}\b/gu, "[SECRET]")
+  .replace(/\bBearer\s+[A-Za-z0-9._~-]+/giu, "Bearer [SECRET]");
 export const traceIdFor = (runId: string) => runId.replace(/-/g, "").padEnd(32, "0").slice(0, 32);
 const spanIdFor = (runId: string, seq: number) => createHash("sha256").update(`${runId}:${seq}`).digest("hex").slice(0, 16);
 
@@ -71,14 +76,21 @@ export type RunSummaryRow = { id: string; thread_id: string; goal: string; statu
 export function buildRunTrace(
   db: DatabaseSync,
   runId: string,
-  options: { userId: string; includeContent: boolean; resource: Record<string, string> },
+  options: { userId: string; identityKey: string; contentMode: TelemetrySettings["contentMode"]; environment: string; tenantId: string; resource: Record<string, string> },
 ): { traceId: string; payload: unknown; scores: Score[]; terminal: boolean } | undefined {
   const run = db.prepare("SELECT id, thread_id, goal, status, error_code, created_at, finished_at FROM runs WHERE id = ?").get(runId) as RunSummaryRow | undefined;
   if (!run) return undefined;
   const events = readTrace(db, runId);
   const started = events.find((event) => event.type === "run.started");
   const answer = db.prepare("SELECT content FROM messages WHERE run_id = ? AND role = 'assistant' ORDER BY rowid DESC LIMIT 1").get(runId) as { content: string } | undefined;
-  const text = (value: string | undefined) => (value === undefined ? undefined : options.includeContent ? value : hash(value));
+  const text = (value: string | undefined) => value === undefined
+    ? undefined
+    : options.contentMode === "internal_full"
+      ? value
+      : options.contentMode === "redacted_eval"
+        ? redactSensitiveText(value)
+        : hmac(options.identityKey, value);
+  const id = (value: string | undefined) => value === undefined ? undefined : hmac(options.identityKey, value);
   const traceId = traceIdFor(runId);
   const rootSpanId = spanIdFor(runId, 0);
   const endIso = run.finished_at ?? events.at(-1)?.startedAt ?? run.created_at;
@@ -93,29 +105,35 @@ export function buildRunTrace(
   const tokens = modelCalls.reduce((sum, event) => sum + Number(event.payload.promptTokens ?? 0) + Number(event.payload.completionTokens ?? 0), 0);
   const variant = String(started?.payload.variant ?? "");
   const profiles = (started?.payload.profiles ?? {}) as Record<string, string>;
+  const activeCollections = Array.isArray(started?.payload.activeCollections) ? started.payload.activeCollections.map(String).sort() : [];
+  const corpusSnapshotId = hmac(options.identityKey, JSON.stringify({ activeCollections, retrievalProfile: profiles.retrieval ?? "" }));
   const evidenceById = new Map(transitions.flatMap((event) => (event.payload.transition as PolicyTransition).state.evidence).map((item) => [item.evidenceId, item]));
   const terminal = run.status !== "running" && run.status !== "waiting_user";
   const tags = [variant || "unassigned", run.status].filter(Boolean);
   const traceAttributes = () => [
     ...attr("langfuse.trace.name", "agent.run"),
     ...attr("langfuse.user.id", options.userId),
-    ...attr("langfuse.session.id", run.thread_id),
+    ...attr("langfuse.session.id", id(run.thread_id)),
     ...attr("langfuse.trace.tags", tags),
     ...attr("langfuse.release", options.resource["service.version"]),
-    ...attr("langfuse.trace.metadata.exportSchema", BENCH_EXPORT_SCHEMA),
+    ...attr("langfuse.environment", options.environment),
+    ...attr("langfuse.trace.metadata.trajectorySchemaVersion", TRAJECTORY_SCHEMA_VERSION),
+    ...attr("langfuse.trace.metadata.contentMode", options.contentMode),
+    ...attr("langfuse.trace.metadata.tenantId", id(options.tenantId)),
     ...attr("langfuse.trace.metadata.variant", variant),
-    ...attr("langfuse.trace.metadata.policyProfile", profiles.policy),
-    ...attr("langfuse.trace.metadata.retrievalProfile", profiles.retrieval),
-    ...attr("langfuse.trace.metadata.answerProfile", profiles.answer),
+    ...attr("langfuse.trace.metadata.policyProfileSha", profiles.policy),
+    ...attr("langfuse.trace.metadata.retrievalProfileSha", profiles.retrieval),
+    ...attr("langfuse.trace.metadata.answerProfileSha", profiles.answer),
   ];
   const exportLocator = (locator: PolicyTransition["state"]["evidence"][number]["locator"]) => ({
     ...locator,
     sheet: text(locator.sheet),
   });
-  const exportEvidence = (evidence: PolicyTransition["state"]["evidence"]) => evidence.map((item) => ({
+  const exportEvidence = (evidence: PolicyTransition["state"]["evidence"]) => evidence.map((item, index) => ({
+    rank: index + 1,
     evidenceId: item.evidenceId,
-    sourceId: item.sourceId,
-    chunkId: item.chunkId,
+    sourceId: id(item.sourceId),
+    chunkId: id(item.chunkId),
     title: text(item.title),
     breadcrumb: item.breadcrumb.map((part) => text(part)),
     locator: exportLocator(item.locator),
@@ -124,11 +142,13 @@ export function buildRunTrace(
   }));
   const exportObservation = (observation: PolicyTransition["observation"]) => observation?.kind === "verification"
     ? { ...observation, missingClaims: observation.missingClaims.map((claim) => text(claim)) }
-    : observation;
+    : observation?.kind === "user"
+      ? { ...observation, messageId: id(observation.messageId) }
+      : observation;
   const exportState = (state: PolicyTransition["state"]) => ({
     userGoal: text(state.userGoal),
     activeTask: text(state.activeTask),
-    selectedMemories: state.selectedMemories.map((memory) => ({ ...memory, content: text(memory.content) })),
+    selectedMemories: state.selectedMemories.map((memory) => ({ ...memory, id: id(memory.id), content: text(memory.content) })),
     recentMessages: state.recentMessages.map((message) => ({ ...message, content: text(message.content) })),
     activeCollections: state.activeCollections.map((name) => text(name)),
     evidence: exportEvidence(state.evidence),
@@ -170,6 +190,8 @@ export function buildRunTrace(
         ...attr("langfuse.trace.metadata.citationsRepaired", validated ? Boolean(validated.repaired) : undefined),
         ...attr("langfuse.trace.metadata.lastDifficulty", last?.taskDifficulty),
         ...attr("langfuse.trace.metadata.lastPredictedSuccess", last?.predictedSuccess),
+        ...attr("langfuse.trace.metadata.corpusSnapshotId", corpusSnapshotId),
+        ...attr("langfuse.trace.metadata.collectionCount", activeCollections.length),
         ...attr("langfuse.observation.level", failed ? "ERROR" : "DEFAULT"),
         ...attr("langfuse.observation.status_message", failed ? text(`${String(failed.code)}: ${String(failed.message)}`) : undefined),
       ],
@@ -188,12 +210,12 @@ export function buildRunTrace(
       traceId,
       spanId,
       parentSpanId: rootSpanId,
-      name: `step.${state.step}.${decision.action}`,
+      name: `policy.step.${state.step}`,
       kind: 1,
       startTimeUnixNano: nanos(event.startedAt),
       endTimeUnixNano: nanos(next?.startedAt ?? endIso),
       attributes: [
-        ...attr("langfuse.observation.type", "span"),
+        ...attr("langfuse.observation.type", "agent"),
         ...traceAttributes(),
         ...attr("langfuse.observation.input", JSON.stringify(exportState(state))),
         ...attr("langfuse.observation.output", JSON.stringify({ decision: exportDecision(decision), observation: exportObservation(transition.observation), outcome: transition.outcome })),
@@ -273,11 +295,11 @@ export function buildRunTrace(
 
   const scores: Score[] = terminal
     ? [
-        { traceId, name: "task_completed", value: run.status === "completed" ? 1 : 0, dataType: "BOOLEAN", comment: run.status },
-        ...(validated ? [{ traceId, name: "citation_valid", value: validated.failed ? 0 : 1, dataType: "BOOLEAN" as const }] : []),
-        ...(last ? [{ traceId, name: "predicted_success", value: last.predictedSuccess, dataType: "NUMERIC" as const }] : []),
-        { traceId, name: "steps", value: transitions.length, dataType: "NUMERIC" },
-        { traceId, name: "searches", value: actions.filter((action) => action === "SEARCH").length, dataType: "NUMERIC" },
+        { traceId, parentSpanId: rootSpanId, name: "runtime/completed", value: run.status === "completed" ? 1 : 0, dataType: "BOOLEAN", comment: run.status },
+        ...(validated ? [{ traceId, parentSpanId: rootSpanId, name: "runtime/citation_valid", value: validated.failed ? 0 : 1, dataType: "BOOLEAN" as const }] : []),
+        ...(last ? [{ traceId, parentSpanId: rootSpanId, name: "agent/predicted_success", value: last.predictedSuccess, dataType: "NUMERIC" as const }] : []),
+        { traceId, parentSpanId: rootSpanId, name: "runtime/steps", value: transitions.length, dataType: "NUMERIC" },
+        { traceId, parentSpanId: rootSpanId, name: "runtime/searches", value: actions.filter((action) => action === "SEARCH").length, dataType: "NUMERIC" },
       ]
     : [];
 
@@ -294,7 +316,114 @@ export function buildRunTrace(
 
 export function interactionScore(runId: string, kind: InteractionKind): Score {
   const mapped = INTERACTION_SCORES[kind];
-  return { traceId: traceIdFor(runId), name: mapped.name, value: mapped.value, dataType: mapped.name === "user_feedback" || mapped.name === "memory_feedback" ? "BOOLEAN" : "NUMERIC", comment: kind };
+  return { traceId: traceIdFor(runId), parentSpanId: spanIdFor(runId, 0), name: `user/${mapped.name}`, value: mapped.value, dataType: mapped.name === "user_feedback" || mapped.name === "memory_feedback" ? "BOOLEAN" : "NUMERIC", comment: kind };
+}
+
+export type IndexSyncTelemetry = {
+  collection: string;
+  startedAt: string;
+  durationMs: number;
+  report?: UpdateReport;
+  embedding?: EmbeddingReport & { durationMs: number };
+  error?: string;
+};
+
+function buildIndexTrace(
+  idValue: string,
+  input: IndexSyncTelemetry,
+  options: { identityKey: string; contentMode: TelemetrySettings["contentMode"]; environment: string; tenantId: string; resource: Record<string, string> },
+): unknown {
+  const traceId = traceIdFor(idValue);
+  const rootSpanId = spanIdFor(idValue, 0);
+  const text = (value: string) => options.contentMode === "internal_full"
+    ? value
+    : options.contentMode === "redacted_eval"
+      ? redactSensitiveText(value)
+      : hmac(options.identityKey, value);
+  const common = [
+    ...attr("langfuse.trace.name", "index.sync"),
+    ...attr("langfuse.trace.tags", [input.error ? "failed" : "completed", "index.sync"]),
+    ...attr("langfuse.release", options.resource["service.version"]),
+    ...attr("langfuse.environment", options.environment),
+    ...attr("langfuse.trace.metadata.trajectorySchemaVersion", TRAJECTORY_SCHEMA_VERSION),
+    ...attr("langfuse.trace.metadata.contentMode", options.contentMode),
+    ...attr("langfuse.trace.metadata.tenantId", hmac(options.identityKey, options.tenantId)),
+  ];
+  const report = input.report;
+  const output = {
+    scanned: report?.scanned ?? 0,
+    updated: report?.updated ?? 0,
+    unchanged: report?.unchanged ?? 0,
+    removed: report?.removed ?? 0,
+    failed: report?.failed.map((failure) => ({ extension: extname(failure.path).toLowerCase(), error: text(failure.error) })) ?? [],
+    pipelineFingerprint: report?.pipelineFingerprint,
+  };
+  const spans: OtlpSpan[] = [{
+    traceId,
+    spanId: rootSpanId,
+    name: "index.sync",
+    kind: 1,
+    startTimeUnixNano: nanos(input.startedAt),
+    endTimeUnixNano: nanos(input.startedAt, input.durationMs),
+    attributes: [
+      ...attr("langfuse.observation.type", "chain"),
+      ...common,
+      ...attr("langfuse.observation.input", JSON.stringify({ collection: text(input.collection) })),
+      ...attr("langfuse.observation.output", JSON.stringify(output)),
+      ...attr("langfuse.observation.metadata.pipelineProfileSha", report?.pipelineFingerprint),
+      ...attr("langfuse.observation.metadata.scanned", report?.scanned),
+      ...attr("langfuse.observation.metadata.updated", report?.updated),
+      ...attr("langfuse.observation.metadata.failed", report?.failed.length),
+      ...attr("langfuse.observation.level", input.error ? "ERROR" : "DEFAULT"),
+      ...attr("langfuse.observation.status_message", input.error ? text(input.error) : undefined),
+    ],
+    status: input.error ? { code: 2, message: "INDEX_SYNC_FAILED" } : { code: 1 },
+  }];
+  if (input.embedding) {
+    spans.push({
+      traceId,
+      spanId: spanIdFor(idValue, 1),
+      parentSpanId: rootSpanId,
+      name: "embed.batch",
+      kind: 1,
+      startTimeUnixNano: nanos(input.startedAt, Math.max(0, input.durationMs - input.embedding.durationMs)),
+      endTimeUnixNano: nanos(input.startedAt, input.durationMs),
+      attributes: [
+        ...attr("langfuse.observation.type", "embedding"),
+        ...common,
+        ...attr("langfuse.observation.model.name", input.embedding.model),
+        ...attr("langfuse.observation.metadata.dimensions", input.embedding.dimensions),
+        ...attr("langfuse.observation.metadata.total", input.embedding.total),
+        ...attr("langfuse.observation.metadata.embedded", input.embedding.embedded),
+        ...attr("langfuse.observation.metadata.skipped", input.embedding.skipped),
+      ],
+    });
+  }
+  return { resourceSpans: [{ resource: { attributes: Object.entries(options.resource).flatMap(([key, value]) => attr(key, value)) }, scopeSpans: [{ scope: { name: "ketchupe-index" }, spans }] }] };
+}
+
+function scoreTrace(score: Score, resource: Record<string, string>, environment: string): unknown {
+  const timestamp = new Date().toISOString();
+  const idValue = score.id ?? randomUUID();
+  return { resourceSpans: [{ resource: { attributes: Object.entries(resource).flatMap(([key, value]) => attr(key, value)) }, scopeSpans: [{ scope: { name: "ketchupe-feedback" }, spans: [{
+    traceId: score.traceId,
+    spanId: spanIdFor(idValue, 0),
+    parentSpanId: score.parentSpanId,
+    name: `feedback.${score.name.replaceAll("/", ".")}`,
+    kind: 1,
+    startTimeUnixNano: nanos(timestamp),
+    endTimeUnixNano: nanos(timestamp, 1),
+    attributes: [
+      ...attr("langfuse.observation.type", "evaluator"),
+      ...attr("langfuse.environment", environment),
+      ...attr("langfuse.observation.metadata.scoreName", score.name),
+      ...attr("langfuse.observation.metadata.scoreValue", score.value),
+      ...attr("langfuse.observation.metadata.scoreDataType", score.dataType),
+      ...attr("langfuse.observation.metadata.scoreProvenance", score.name.startsWith("user/") ? "user" : "runtime"),
+      ...attr("langfuse.observation.metadata.scorerVersion", TRAJECTORY_SCHEMA_VERSION),
+      ...attr("langfuse.observation.output", score.comment),
+    ],
+  }] }] }] };
 }
 
 export type TelemetryIdentity = { installId: string; appVersion: string; os: string };
@@ -319,16 +448,37 @@ export class LangfuseExporter {
   }
 
   get enabled(): boolean {
-    const current = this.settings();
-    return current.enabled && Boolean(current.publicKey && current.secretKey);
+    return Boolean(this.settings().endpoint);
   }
 
   userId(): string {
-    return this.settings().userId.trim() || `install:${this.identity.installId}`;
+    return `install:${hmac(this.identity.installId, "ketchupe-user")}`;
   }
 
   resource(): Record<string, string> {
-    return { "service.name": "ketchupe", "service.version": this.identity.appVersion, "os.type": this.identity.os, "ketchupe.install_id": this.identity.installId };
+    const memoryGiB = Math.max(1, Math.round(totalmem() / 1024 ** 3));
+    return {
+      "service.name": "ketchupe",
+      "service.version": this.identity.appVersion,
+      "os.type": this.identity.os,
+      "os.arch": arch(),
+      "host.cpu.count": String(cpus().length),
+      "host.memory.bucket_gib": String(2 ** Math.ceil(Math.log2(memoryGiB))),
+      "ketchupe.install_hmac": hmac(this.identity.installId, "ketchupe-install"),
+      "ketchupe.embedding_backend": process.env.TOMATO_EMBEDDING_BACKEND || "onnx-auto",
+    };
+  }
+
+  private traceOptions() {
+    const settings = this.settings();
+    return {
+      userId: this.userId(),
+      identityKey: this.identity.installId,
+      contentMode: settings.contentMode,
+      environment: settings.environment,
+      tenantId: settings.tenantId,
+      resource: this.resource(),
+    };
   }
 
   /** One trace per app launch so DAU/MAU can be read from Langfuse users even on days without runs. */
@@ -339,7 +489,7 @@ export class LangfuseExporter {
     this.enqueue(`trace:${id}`, "trace", null, {
       resourceSpans: [{ resource: { attributes: Object.entries(this.resource()).flatMap(([key, value]) => attr(key, value)) }, scopeSpans: [{ scope: { name: "ketchupe-agent" }, spans: [{
         traceId: traceIdFor(id), spanId: spanIdFor(id, 0), name: "app.session", kind: 1, startTimeUnixNano: nanos(now), endTimeUnixNano: nanos(now, 1),
-        attributes: [...attr("langfuse.trace.name", "app.session"), ...attr("langfuse.user.id", this.userId()), ...attr("langfuse.trace.tags", [variant, "app.session"]), ...attr("langfuse.release", this.identity.appVersion), ...attr("langfuse.trace.metadata.variant", variant)],
+        attributes: [...attr("langfuse.trace.name", "app.session"), ...attr("langfuse.user.id", this.userId()), ...attr("langfuse.trace.tags", [variant, "app.session"]), ...attr("langfuse.release", this.identity.appVersion), ...attr("langfuse.environment", this.settings().environment), ...attr("langfuse.trace.metadata.trajectorySchemaVersion", TRAJECTORY_SCHEMA_VERSION), ...attr("langfuse.trace.metadata.variant", variant)],
       }] }] }],
     });
     this.schedule();
@@ -347,10 +497,17 @@ export class LangfuseExporter {
 
   exportRun(db: DatabaseSync, runId: string): void {
     if (!this.enabled) return;
-    const built = buildRunTrace(db, runId, { userId: this.userId(), includeContent: this.settings().includeContent, resource: this.resource() });
+    const built = buildRunTrace(db, runId, this.traceOptions());
     if (!built) return;
     this.enqueue(`run:${runId}`, "run", runId);
     if (built.terminal) this.enqueueRunScores(runId, built.scores);
+    this.schedule();
+  }
+
+  indexSync(input: IndexSyncTelemetry): void {
+    if (!this.enabled) return;
+    const id = randomUUID();
+    this.enqueue(`trace:${id}`, "trace", null, buildIndexTrace(id, input, this.traceOptions()));
     this.schedule();
   }
 
@@ -390,9 +547,9 @@ export class LangfuseExporter {
   }
 
   private headers(): Record<string, string> {
-    const { publicKey, secretKey } = this.settings();
+    const token = this.settings().token;
     return {
-      Authorization: `Basic ${Buffer.from(`${publicKey}:${secretKey ?? ""}`).toString("base64")}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       "Content-Type": "application/json",
       "x-langfuse-ingestion-version": "4",
     };
@@ -414,12 +571,6 @@ export class LangfuseExporter {
     return this.flush();
   }
 
-  discardPending(): void {
-    clearTimeout(this.timer);
-    this.timer = undefined;
-    this.db.prepare("DELETE FROM telemetry_outbox WHERE sent_at IS NULL").run();
-  }
-
   private async flushOnce(): Promise<FlushResult> {
     clearTimeout(this.timer);
     this.timer = undefined;
@@ -434,25 +585,23 @@ export class LangfuseExporter {
       LIMIT ?
     `).all(OUTBOX_LIMIT) as OutboxRow[];
     if (!rows.length) return { traces: 0, scores: 0 };
-    const host = this.settings().host;
+    const endpoint = this.settings().endpoint;
     let traces = 0;
     let scores = 0;
     let error: string | undefined;
     for (const row of rows) {
       try {
-        let endpoint: string;
         let payload: unknown;
         if (row.kind === "run") {
-          const built = buildRunTrace(this.db, row.run_id ?? "", { userId: this.userId(), includeContent: this.settings().includeContent, resource: this.resource() });
+          const built = buildRunTrace(this.db, row.run_id ?? "", this.traceOptions());
           if (!built?.terminal) continue;
           this.enqueueRunScores(row.run_id ?? "", built.scores);
-          endpoint = "/api/public/otel/v1/traces";
           payload = built.payload;
         } else {
-          endpoint = row.kind === "trace" ? "/api/public/otel/v1/traces" : "/api/public/scores";
-          payload = JSON.parse(row.payload ?? "null");
+          const stored = JSON.parse(row.payload ?? "null") as Score;
+          payload = row.kind === "score" ? scoreTrace(stored, this.resource(), this.settings().environment) : stored;
         }
-        const response = await fetch(`${host}${endpoint}`, { method: "POST", headers: this.headers(), body: JSON.stringify(payload) });
+        const response = await fetch(endpoint, { method: "POST", headers: this.headers(), body: JSON.stringify(payload) });
         if (!response.ok) throw new Error(`${row.kind} ingest ${response.status}: ${(await response.text()).slice(0, 200)}`);
         if (row.kind === "run") this.db.prepare("UPDATE telemetry_outbox SET sent_at = ?, last_error = NULL WHERE id = ?").run(new Date().toISOString(), row.id);
         else this.db.prepare("DELETE FROM telemetry_outbox WHERE id = ?").run(row.id);
@@ -469,20 +618,5 @@ export class LangfuseExporter {
     }
     if (!error && this.hasReadyItems()) this.schedule();
     return { traces, scores, error };
-  }
-
-  /** Connectivity check used by the settings screen. */
-  async test(): Promise<{ ok: boolean; message: string }> {
-    const { host, publicKey, secretKey } = this.settings();
-    if (!publicKey || !secretKey) return { ok: false, message: "public/secret key가 필요합니다." };
-    try {
-      const response = await fetch(`${host}/api/public/projects`, { headers: this.headers() });
-      if (response.status === 401 || response.status === 403) return { ok: false, message: "Langfuse key가 거부되었습니다." };
-      if (!response.ok) return { ok: false, message: `Langfuse 응답 ${response.status}` };
-      const body = (await response.json()) as { data?: Array<{ name?: string }> };
-      return { ok: true, message: `연결됨: ${body.data?.map((project) => project.name).join(", ") || "project"}` };
-    } catch (cause) {
-      return { ok: false, message: cause instanceof Error ? cause.message : String(cause) };
-    }
   }
 }

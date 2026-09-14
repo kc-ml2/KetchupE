@@ -10,9 +10,9 @@
 - **자동 동기화** — 폴더를 한 번 등록하면 `fs.watch` + 1.5초 debounce + single-flight sync + 10분 reconciliation으로 변경이 자동 반영됩니다. embedding이 아직 없으면 keyword(BM25) 검색으로 계속 동작하고, 준비되면 hybrid(BM25 + multilingual-e5-small, RRF)로 올라갑니다.
 - **명시적 orchestration policy** — 모델이 매 step `PolicyDecision`(action, 난도 0~3, 성공 확률, 근거 충분도, reasonCode)을 반환하고, Harness가 관측 가능한 retrieval signal과 profile별 action/model-call/search/verify/time budget을 기록·강제합니다. 문서 내용은 untrusted data로 취급합니다.
 - **지속형 context** — 현재 작업 한 줄, 사용자가 확인한 durable memory(FTS5로 선택), 최근 12개 message를 결정적으로 조합합니다. 모델이 제안한 기억은 사용자가 승인해야 쓰입니다.
-- **완전한 trajectory** — `run.started → context.selected → policy.decided → tool.* → model.* → answer.validated → run.completed` 와 사용자 반응(accepted/corrected/citation_opened…)이 한 run에 묶여 저장됩니다. 외부 전송은 수동 redacted JSONL export 또는 사용자가 켠 Langfuse telemetry만 허용하며, 업무 원문은 별도 opt-in입니다.
+- **완전한 trajectory** — `run.started → context.selected → policy.decided → tool.* → model.* → answer.validated → run.completed`와 사용자 반응이 한 run에 묶여 로컬 SQLite에 저장됩니다. 공식 빌드는 서비스 소유 OTLP gateway로 중앙 미러를 남기며, 사용자가 collector나 content mode를 바꾸지 못합니다.
 - **문서 작성(캔버스)** — "A사와 용역 계약서 작성해줘"처럼 요청하면 router가 질문(chat)과 문서 작성(doc)을 자동으로 가르고(입력창의 문서 아이콘으로 강제 가능), `classify → 표준 양식 바인딩(모호하면 선택 질문) → 근거 검색 → 초안 → 편집 루프 → 확정` 흐름으로 섹션/블록 구조의 문서를 만듭니다. 블록 단위 수정·추가·삭제·재정렬, 당사자/미정값 입력, 전체 재작성, undo/redo, DOCX 내보내기를 지원합니다. 편집마다 전체 트리 스냅샷이 버전으로 남습니다. MARU의 LangGraph doc graph를 LangGraph 없이 이식한 것입니다.
-- **Benchmark harness** — parse / chunk / retrieval / policy / agent 다섯 suite를 같은 dataset과 versioned profile로 돌려 A/B 비교합니다.
+- **Benchmark harness** — parse / chunk / retrieval / RAG / policy / agent suite를 같은 dataset과 versioned profile로 돌려 A/B 비교합니다. 중앙 trace ingest와 자원 제약 advisor는 [bench.md](bench.md)에 정리했습니다.
 
 ## 요구사항
 
@@ -53,8 +53,9 @@ KetchupE/
 │   │   ├── context.ts            #   active task → pinned memory → FTS memory → 최근 12 message
 │   │   ├── memory.ts             #   pending/confirmed/deleted memory CRUD + FTS
 │   │   ├── store.ts              #   workspace/thread/run/message/interaction SQL
-│   │   ├── trace.ts              #   trace_events 기록, transition 복원, redacted JSONL export
-│   │   ├── settings.ts           #   gateway 도메인/키(safeStorage)
+│   │   ├── trace.ts              #   trace_events 기록, transition 복원, 내부용 redacted serializer
+│   │   ├── telemetry.ts          #   중앙 OTLP trace + durable outbox
+│   │   ├── settings.ts           #   model(safeStorage) + 서비스 telemetry 환경 설정
 │   │   └── runtime.ts            #   위 모듈 배선 (db, worker, watcher, harness)
 │   ├── tomato/                   # local retrieval engine
 │   │   ├── tomato.ts             #   scan → KorDoc/Markdown → 구조 chunk → FTS5/BM25 + e5 embedding → RRF
@@ -77,10 +78,12 @@ KetchupE/
 ├── bench/
 │   ├── datasets/local-rag-v1/    # corpus/, states/, *-cases.jsonl, memories.jsonl, manifest.json
 │   ├── profiles/                 # baseline-v1.json, always-search-v1.json
-│   ├── runner/                   # parse, chunk, retrieval, policy, agent, compare, metrics
+│   ├── contracts/                # 중앙 trajectory schema
+│   ├── runner/                   # suite, Langfuse ingest, compare, advisor
 │   └── results/                  # (gitignore) <timestamp>-<profile>-<suite>/
 └── scripts/
-    ├── litellm-smoke.ts          # gateway 호환성 4항목
+    ├── litellm-smoke.ts          # model gateway 호환성 4항목
+    ├── telemetry-gateway.ts      # public ingest 검증/마스킹 + Langfuse secret 주입
     └── trajectory.ts             # agent.sqlite에서 run/step 조회
 ```
 
@@ -183,9 +186,9 @@ FROM trace_events WHERE type = 'model.completed' GROUP BY purpose;
 
 stage 별 event: `input`(run.started) · `context`(context.selected) · `policy`(policy.decided, invalid 시 `payload.invalid = true`) · `retrieval`(tool.started/completed, `cached`, `observation.effectiveMode`) · `verification` · `generation`(model.*) · `citation`(answer.validated: valid/invalid/repaired/failed) · `runtime`(run.completed/failed/waiting_user) · `feedback`(interaction).
 
-### 3. Export
+### 3. 중앙 수집
 
-답변 아래 다운로드 아이콘은 그 run을 **redacted JSONL**로 내보냅니다. snippet·질문·답변·memory 본문은 `sha256:…`로, 파일 경로는 제거되고 ID·action·확률·latency·usage·interaction은 남습니다. 사람이 label을 붙여 `bench/datasets/`에 추가하는 입력으로 쓰이며, 원문이 필요하면 로컬 DB에서 직접 봅니다.
+제품에 수동 export UI는 없습니다. 완료된 run과 feedback은 `telemetry_outbox`를 거쳐 서비스 소유 OTLP gateway로 전송되고, 관리자가 Langfuse API/Blob Export로 bounded time range를 bench에 ingest합니다.
 
 ## Benchmark
 
@@ -195,6 +198,7 @@ stage 별 event: `input`(run.started) · `context`(context.selected) · `policy`
 npm run bench:parse      -- --dataset local-rag-v1 --profile baseline-v1
 npm run bench:chunk      -- --dataset local-rag-v1 --profile baseline-v1
 npm run bench:retrieval  -- --dataset local-rag-v1 --profile baseline-v1
+npm run bench:rag        -- --dataset local-rag-v1 --profile baseline-v1 --client litellm
 npm run bench:policy     -- --dataset local-rag-v1 --profile baseline-v1 --runs 3 --client litellm
 npm run bench:agent      -- --dataset local-rag-v1 --profile baseline-v1 --runs 3 --client litellm
 npm run bench:compare    -- bench/results/<baseline-dir> bench/results/<candidate-dir>
@@ -207,8 +211,9 @@ Policy 효과는 같은 `--client litellm`로 `always-search-v1`과 `baseline-v1
 | parse | raw file → canonical units | parseSuccess, requiredUnitRecall, locatorAccuracy |
 | chunk | units → chunks | goldSpanCoverage, splitViolations, token p50/p95 |
 | retrieval | corpus + query → ranked evidence | recall@5/8, mrr@10, ndcg@10, latency p50/p95, effectiveMode |
+| RAG | frozen gold evidence + question → answer | correctness, citation validity/coverage, token, latency |
 | policy | frozen `PolicyState` → `PolicyDecision` | actionAccuracy, reasonAccuracy, difficulty macro-F1, Brier, ECE, risk-coverage, budgetViolations |
-| agent | scripted messages → 전체 run | taskSuccess, paired wins/losses, model/tool calls, tokens, CPU/RSS, clarification/verification usage, calibration, citationFailures, latency, firstFailedStage |
+| agent | scripted messages → 전체 run | taskSuccess, `pass^k`, model/tool calls, tokens, CPU/RSS, clarification/verification usage, calibration, citationFailures, latency, firstFailedStage |
 
 - `--client litellm`은 `LITELLM_API_KEY`가 필요합니다. 미지정 시 `always-search`(항상 1회 검색 후 답변하는 규칙 기반 baseline)로 돌아 pipeline 자체를 검증합니다.
 - profile의 `"${LITELLM_MODEL_ALIAS}"`는 환경변수 또는 gateway의 첫 모델로 치환됩니다. key는 profile·결과에 기록되지 않습니다.
@@ -216,50 +221,49 @@ Policy 효과는 같은 `--client litellm`로 `always-search-v1`과 `baseline-v1
 - Retrieval/agent suite는 embedding weight를 `bench/results/.models/`에 한 번만 받습니다.
 - Parser/chunker/retriever를 바꿀 때는 policy와 model을 고정하고, policy/prompt를 바꿀 때는 corpus·retrieval profile·model을 고정하세요. 승격 조건은 [아키텍처 문서 §12.6](KETCHUPE_V3_ARCHITECTURE.md)에 있습니다.
 
-`local-rag-v1`은 현재 합성 corpus에 구현자가 붙인 seed label이며 2차 검토 전입니다(`manifest.json`의 `status`). 실제 trajectory에서 골든셋을 만드는 절차는 `export → 비식별화 → 사람 label → 2차 검토 → version + SHA-256 고정` 순입니다.
+`local-rag-v1`은 현재 합성 corpus에 구현자가 붙인 seed label이며 2차 검토 전입니다(`manifest.json`의 `status`). 실제 trajectory는 `Langfuse ingest → 비식별화 확인 → 사람 label → 2차 검토 → version + SHA-256 고정`을 거쳐야만 golden set으로 승격합니다.
 
 ## 모니터링과 A/B (Langfuse)
 
-여러 사용자의 trajectory를 한곳에서 보기 위해 **Langfuse**를 붙였습니다. SDK나 OpenTelemetry 런타임 없이 Langfuse의 OTLP/HTTP endpoint(`/api/public/otel/v1/traces`)와 scores API(`/api/public/scores`)만 사용하며, 구현은 [telemetry.ts](electron/agent/telemetry.ts) 한 파일입니다. 로컬 SQLite가 여전히 원본이고 Langfuse는 분석용 미러입니다.
+여러 사용자의 trajectory를 서비스 관리자가 한곳에서 보도록 **KetchupE OTLP gateway → Langfuse** 경로를 사용합니다. Desktop은 public ingest token만 알고 Langfuse secret은 gateway가 보유합니다. 로컬 SQLite는 제품 상태의 원본과 내구성 있는 outbox이고, Langfuse는 운영 분석과 평가 후보 선별용 중앙 미러입니다.
 
 ### 무엇이 전송되나
 
 | Langfuse 객체 | 원천 | 내용 |
 | --- | --- | --- |
-| trace `agent.run` (run 1개 = trace 1개) | `runs` + `trace_events` | `user.id`, `session.id`(= thread), tags `[variant, status]`, metadata: variant, profile fingerprint 3종, actions(`SEARCH>ANSWER`), steps/searches/verifies/modelCalls/totalTokens, citation valid/repaired, 마지막 난도·예측 성공률, errorCode |
-| span `step.N.<ACTION>` | `policy.decided` | policy state/decision I/O, reasonCode, taskDifficulty, predictedSuccess, evidenceSufficiency, evidence 수, observation 종류, effectiveMode, outcome |
+| trace `agent.run` (run 1개 = trace 1개) | `runs` + `trace_events` | HMAC user/session ID, variant, profile SHA 3종, corpus snapshot, action/step/search/verify/model/token/citation/error 집계 |
+| agent `policy.step.N` | `policy.decided` | policy state/decision, reasonCode, taskDifficulty, predictedSuccess, evidenceSufficiency, budget, outcome |
 | retriever `tool.search_local_docs` / `tool.get_document_context` | `tool.completed` | query/anchor input, evidence 결과 output, cached 여부, 결과 수, effectiveMode, tool error |
 | generation `model.policy|verify|answer` | `model.completed` | model alias, latency, input/output tokens |
 | trace `app.session` | 앱 실행 | 실행 1회당 1개. DAU/MAU 집계용 |
-| score `task_completed`, `citation_valid`, `predicted_success`, `steps`, `searches` | run 종료 | 자동 |
-| score `user_feedback`(accepted 1 / corrected 0), `citation_opened`, `retried`, `clarification_answered`, `abandoned`, `memory_feedback` | 사용자 반응 | UI 버튼 |
+| trace `index.sync` / span `embed.batch` | Tomato watcher | scan/update/remove/fail, embedding model/dimension/throughput, latency |
+| evaluator observation `runtime/*`, `agent/*`, `user/*` | run 종료·사용자 반응 | completion/citation/calibration/step/search/feedback 수치 |
 
-기본은 **redacted** 입니다. 질문·답변·검색어·선택 context·evidence text와 문서/collection 이름은 `sha256:…`로 치환됩니다. 설정에서 "업무 원문 포함"을 켠 경우에만 이 원문과 evidence snippet이 포함됩니다. absolute file path와 API key는 어떤 설정에서도 나가지 않습니다. 모든 observation에는 `exportSchema=ketchupe-trajectory-v1`, profile fingerprint, variant가 붙으므로 별도 bench는 trace ID로 observation을 묶어 입력·행동·검색 결과·답변을 재구성할 수 있습니다.
+공식 기본값인 `ops`는 자유 텍스트와 ID를 설치별 HMAC으로 바꾸고 구조·수치·오류 코드만 유지합니다. `redacted_eval`은 관리자 평가용 텍스트를 마스킹해 보내고, `internal_full`은 통제된 사내 corpus에만 쓸 수 있습니다. absolute path, API key, hidden chain-of-thought는 어떤 모드에서도 전송하지 않습니다. 모든 observation은 `ketchupe-trajectory-v2`와 profile SHA, variant를 가지므로 bench가 trace를 재구성할 수 있습니다.
 
 ### 설정
 
-설정 탭 → 모니터링(Langfuse): host, public/secret key(secret은 safeStorage 암호화), 사용자 ID(이메일 등; 비우면 익명 install id), 업무 원문 포함 여부, variant override. 원문 전송은 기본으로 꺼져 있고 사용자가 명시적으로 켜야 합니다. 개발 환경은 환경변수로 대신할 수 있습니다.
-
-직접 연결은 사용자 소유 Langfuse key나 통제된 내부 배포용입니다. 조직 공용 secret을 외부 배포 binary에 넣지 마세요. 대외 배포에서는 LiteLLM proxy의 서버 측 Langfuse callback 또는 별도 ingest proxy가 조직 key를 소유해야 합니다.
+사용자 설정 UI는 없습니다. 공식 빌드가 `KETCHUPE_OTLP_ENDPOINT`, public `KETCHUPE_OTLP_TOKEN`, content mode, environment, tenant를 고정합니다. Langfuse public/secret key는 gateway 프로세스에만 설정합니다.
 
 ```bash
-LANGFUSE_HOST=https://cloud.langfuse.com LANGFUSE_PUBLIC_KEY=pk-lf-… LANGFUSE_SECRET_KEY=sk-lf-… KETCHUPE_USER_ID=me@kc-ml2.com npm run dev
+KETCHUPE_OTLP_ENDPOINT=https://telemetry.example.com/v1/traces KETCHUPE_OTLP_TOKEN=public-token npm run dev
+LANGFUSE_PUBLIC_KEY=pk-lf-… LANGFUSE_SECRET_KEY=sk-lf-… KETCHUPE_INGEST_TOKEN=public-token npm run telemetry:gateway
 ```
 
-전송 전 항목은 local SQLite `telemetry_outbox`에 기록합니다. 5초 뒤 전송하고 실패하면 최대 5분의 bounded backoff로 재시도하며, 앱을 재시작해도 미전송 항목이 남습니다. telemetry를 끄면 아직 전송되지 않은 항목도 삭제합니다. 앱 종료 시에도 한 번 flush 합니다. 완료된 run span은 한 번만 전송하고 score는 고유 ID를 붙여 재시도합니다.
+전송 전 항목은 local SQLite `telemetry_outbox`에 기록합니다. 실패하면 최대 5분의 bounded backoff로 재시도하며, 앱을 재시작해도 미전송 항목이 남습니다. 앱 종료 시에도 한 번 flush합니다. 완료된 run과 evaluator observation은 고유 ID로 중복을 방지합니다.
 
-별도 bench에서는 Langfuse의 [`GET /api/public/v2/observations`](https://langfuse.com/docs/api-and-data-platform/features/observations-api)와 [`GET /api/public/v3/scores`](https://langfuse.com/docs/api-and-data-platform/features/scores-api)를 시간 범위로 읽고 `traceId`로 join합니다. 대량 정기 반출은 [blob storage export](https://langfuse.com/docs/api-and-data-platform/features/export-to-blob-storage)를 사용합니다. LiteLLM monitoring만으로는 client 내부 policy state와 로컬 retrieval 결과를 볼 수 없으므로 KetchupE trajectory의 canonical 중앙 미러는 Langfuse 하나입니다.
+별도 bench는 Langfuse의 [`GET /api/public/v2/observations`](https://langfuse.com/docs/api-and-data-platform/features/observations-api)를 bounded time range로 읽거나 [blob storage export](https://langfuse.com/docs/api-and-data-platform/features/export-to-blob-storage)의 `observations_v2`를 ingest합니다. runtime과 user feedback 수치도 evaluator observation으로 보내므로 client outbound는 OTLP 하나로 유지됩니다. 구체적인 스키마·실행·golden set 승격·연구 근거는 [bench.md](bench.md)를 보세요.
 
-이 export만으로 frozen-state policy/answer replay와 실패 case 선별은 가능합니다. retrieval recall을 재실행하려면 distractor를 포함한 전체 corpus가 필요하므로 사용자 파일 전체를 자동 업로드하지 않고, 사람이 비식별화·승인한 corpus package를 bench dataset에 별도로 붙입니다.
+이 ingest 결과로 실패 case를 선별하고 offline scorer의 입력을 구성할 수 있습니다. retrieval recall을 재실행하려면 distractor를 포함한 전체 corpus가 필요하므로 사용자 파일 전체를 자동 업로드하지 않고, 사람이 비식별화·승인한 corpus package를 bench dataset에 별도로 붙입니다.
 
 ### 무엇을 볼 수 있나
 
 - **DAU / MAU** — Langfuse *Users* 화면, 또는 Metrics API로 `traces` view를 `userId` dimension + `day` granularity로 집계합니다. 앱 실행(`app.session`)과 run(`agent.run`) 모두 `user.id`를 달고 있어 "실행만 한 사용자"와 "질문한 사용자"를 나눠 볼 수 있습니다(trace name으로 필터).
-- **workflow의 약한 지점** — trace를 `status`/`errorCode` 태그로 필터하고 step span의 `reasonCode`·`effectiveMode`·`outcome`을 보면 실패가 retrieval(결과 0, keyword fallback), policy(불필요한 hop, 잘못된 STOP), citation(repaired/failed) 중 어디서 나는지 드러납니다. `predicted_success` score와 `user_feedback` score를 함께 보면 calibration을 실사용 데이터로 확인할 수 있습니다.
-- **업그레이드 전후 비교** — `service.version`(앱 버전)과 metadata의 profile fingerprint로 그룹을 나눠 `task_completed`, `steps`, `searches`, `totalTokens`, latency를 비교합니다.
+- **workflow의 약한 지점** — trace를 `status`/`errorCode`로 필터하고 `policy.step.N`의 `reasonCode`·`effectiveMode`·`outcome`을 보면 실패가 retrieval, policy, citation 중 어디서 나는지 분리할 수 있습니다. `agent/predicted_success`와 `user/*` evaluator를 함께 보면 calibration을 실사용 데이터로 확인할 수 있습니다.
+- **업그레이드 전후 비교** — `service.version`과 profile SHA로 그룹을 나눠 `runtime/completed`, `runtime/steps`, `runtime/searches`, token, latency를 비교합니다.
 - **A/B** — 정책 variant는 [policy.ts](electron/agent/policy.ts)의 `POLICY_VARIANTS`에 정의하고(현재 `always-search-v1`, `adaptive-v1`), install id의 hash로 결정적으로 배정합니다. 두 arm은 같은 answer model을 사용하고 decision strategy만 다릅니다. 모든 trace에 `variant` tag/metadata가 붙으므로 Langfuse에서 variant별 score 평균을 비교하면 됩니다.
 
-Langfuse의 실사용 데이터에서 `failed`·`corrected`·낮은 `predicted_success` run을 고른 뒤, 해당 run을 로컬 `trace_events`에서 export → label → `bench/datasets/`로 승격하는 흐름이 [아키텍처 문서 §12.3](KETCHUPE_V3_ARCHITECTURE.md)의 golden set 절차입니다. Sentry 같은 crash 수집은 아직 없습니다.
+Langfuse에서 `failed`·`corrected`·낮은 `agent/predicted_success` run을 고른 뒤 마스킹·사람 label·이중 검토를 거쳐야만 `bench/datasets/`로 승격합니다. Production trace를 바로 gold로 쓰지 않습니다.
 
 ## v2에서 바뀐 것
 

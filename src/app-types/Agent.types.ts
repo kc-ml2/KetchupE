@@ -125,7 +125,6 @@ export interface KetchupEAgentAPI {
   setMemoryPinned(id: string, pinned: boolean): Promise<void>;
   confirmMemory(id: string): Promise<void>;
   deleteMemory(id: string): Promise<void>;
-  exportTrace(runId: string): Promise<void>;
 
   getModelSettings(): Promise<{ baseURL: string; modelAlias: string; hasApiKey: boolean }>;
   /** modelAlias may be empty: the gateway's first listed model is used. */
@@ -140,30 +139,4 @@ export interface KetchupEAgentAPI {
   loadCanvas(runId: string): Promise<{ canvas: ContractCanvas | null; interrupt: CanvasInterrupt | null }>;
   openCanvasSource(canvasId: string, documentId: string): Promise<void>;
 
-  getTelemetrySettings(): Promise<TelemetryView>;
-  /** secretKey undefined keeps the stored key; empty string clears it. */
-  setTelemetrySettings(settings: TelemetryInput): Promise<void>;
-  testTelemetry(): Promise<{ ok: boolean; message: string }>;
 }
-
-export type TelemetryView = {
-  enabled: boolean;
-  host: string;
-  publicKey: string;
-  hasSecretKey: boolean;
-  userId: string;
-  includeContent: boolean;
-  variant: string;
-  assignedVariant: string;
-  variants: string[];
-};
-
-export type TelemetryInput = {
-  enabled: boolean;
-  host: string;
-  publicKey: string;
-  secretKey?: string;
-  userId: string;
-  includeContent: boolean;
-  variant: string;
-};

@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { hostname, platform, release } from "node:os";
+import { arch, cpus, platform, release, totalmem } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { profileFingerprint } from "../../electron/agent/policy.ts";
@@ -71,8 +71,13 @@ export function writeResults(suite: string, args: BenchArgs, profile: BenchProfi
     suite,
     gitSha: gitSha(),
     os: `${platform()} ${release()}`,
-    host: hostname(),
     node: process.version,
+    hardware: {
+      arch: arch(),
+      cpuCount: cpus().length,
+      memoryGiB: Math.round(totalmem() / 1024 ** 3),
+      embeddingBackend: process.env.TOMATO_EMBEDDING_BACKEND ?? "onnx-auto",
+    },
     dataset: args.dataset,
     datasetHash: sha256File(join(args.datasetDir, "manifest.json")),
     profile: profile.name,

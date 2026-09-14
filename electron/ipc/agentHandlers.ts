@@ -1,11 +1,9 @@
-import { writeFile } from "node:fs/promises";
-import { BrowserWindow, dialog, ipcMain, shell } from "electron";
-import type { InteractionKind, MemoryInput, StartRunInput, TelemetryInput } from "../../src/app-types/Agent.types.ts";
+import { ipcMain, shell } from "electron";
+import type { InteractionKind, MemoryInput, StartRunInput } from "../../src/app-types/Agent.types.ts";
 import type { AnchorChoiceResumeContent, CanvasEditOp, StartCanvasInput } from "../../src/app-types/CanvasEdit.types.ts";
 import type { AgentRuntime } from "../agent/runtime.ts";
 import { addMemory, confirmMemory, deleteMemory, listMemories, setMemoryPinned, updateMemory } from "../agent/memory.ts";
 import { createThread, deleteThread, findOpenRun, getWorkspace, listThreads, loadThread, recordInteraction, renameThread, setActiveTask, setMemoryEnabled, DEFAULT_WORKSPACE_ID } from "../agent/store.ts";
-import { exportTraceJsonl } from "../agent/trace.ts";
 
 export function registerAgentHandlers(runtime: AgentRuntime): void {
   const { db } = runtime;
@@ -67,31 +65,6 @@ export function registerAgentHandlers(runtime: AgentRuntime): void {
   ipcMain.handle("agent:setMemoryPinned", (_event, id: string, pinned: boolean) => setMemoryPinned(db, id, pinned));
   ipcMain.handle("agent:confirmMemory", (_event, id: string) => confirmMemory(db, id));
   ipcMain.handle("agent:deleteMemory", (_event, id: string) => deleteMemory(db, id));
-
-  ipcMain.handle("agent:getTelemetrySettings", () => {
-    const settings = runtime.telemetrySettings();
-    return {
-      enabled: settings.enabled,
-      host: settings.host,
-      publicKey: settings.publicKey,
-      hasSecretKey: Boolean(settings.secretKey),
-      userId: settings.userId,
-      includeContent: settings.includeContent,
-      variant: settings.variant,
-      assignedVariant: runtime.variant,
-      variants: runtime.variants,
-    };
-  });
-  ipcMain.handle("agent:setTelemetrySettings", (_event, settings: TelemetryInput) => runtime.updateTelemetrySettings(settings));
-  ipcMain.handle("agent:testTelemetry", () => runtime.telemetry.test());
-
-  ipcMain.handle("agent:exportTrace", async (event, runId: string) => {
-    const window = BrowserWindow.fromWebContents(event.sender);
-    const options = { defaultPath: `trace-${runId.slice(0, 8)}.jsonl`, filters: [{ name: "JSONL", extensions: ["jsonl"] }] };
-    const result = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);
-    if (result.canceled || !result.filePath) return;
-    await writeFile(result.filePath, exportTraceJsonl(db, runId), "utf8");
-  });
 
   ipcMain.handle("agent:getModelSettings", () => {
     const settings = runtime.settings();

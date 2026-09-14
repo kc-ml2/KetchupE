@@ -2,7 +2,7 @@ import { watch, type FSWatcher } from "node:fs";
 import { basename } from "node:path";
 import type { TomatoClient } from "./tomato/tomatoClient.ts";
 import { TOMATO_LONG_CALL_TIMEOUT_MS } from "./tomato/tomatoClient.ts";
-import type { Collection, UpdateReport } from "./tomato/tomato.ts";
+import type { Collection, EmbeddingReport, UpdateReport } from "./tomato/tomato.ts";
 
 export const SYNC_DEBOUNCE_MS = 1500;
 export const RECONCILE_INTERVAL_MS = 10 * 60 * 1000;
@@ -27,17 +27,33 @@ type Entry = {
   state: CollectionSyncState;
 };
 
+export type CollectionSyncTelemetry = {
+  collection: string;
+  startedAt: string;
+  durationMs: number;
+  report?: UpdateReport;
+  embedding?: EmbeddingReport & { durationMs: number };
+  error?: string;
+};
+
 /** fs.watch per collection → 1.5s debounce → single-flight sync (+dirty rerun) → background embed; 10-minute reconciliation. */
 export class CollectionWatchers {
   private readonly entries = new Map<string, Entry>();
   private reconcileTimer?: ReturnType<typeof setInterval>;
   private readonly tomato: TomatoClient;
   private readonly onChange: (name: string, state: CollectionSyncState) => void;
+  private readonly onSyncSettled: (result: CollectionSyncTelemetry) => void;
   private readonly log: (message: string) => void;
 
-  constructor(tomato: TomatoClient, onChange: (name: string, state: CollectionSyncState) => void, log: (message: string) => void = console.warn) {
+  constructor(
+    tomato: TomatoClient,
+    onChange: (name: string, state: CollectionSyncState) => void,
+    onSyncSettled: (result: CollectionSyncTelemetry) => void = () => undefined,
+    log: (message: string) => void = console.warn,
+  ) {
     this.tomato = tomato;
     this.onChange = onChange;
+    this.onSyncSettled = onSyncSettled;
     this.log = log;
   }
 
@@ -127,6 +143,8 @@ export class CollectionWatchers {
   }
 
   private async runSync(entry: Entry): Promise<UpdateReport | undefined> {
+    const startedAt = new Date().toISOString();
+    const started = Date.now();
     entry.state.syncing = true;
     entry.state.lastError = undefined;
     this.emit(entry);
@@ -136,20 +154,23 @@ export class CollectionWatchers {
       if (report.failed.length) entry.state.lastError = `${report.failed.length}개 파일 처리 실패 (${basename(report.failed[0].path)}: ${report.failed[0].error})`;
       entry.state.syncing = false;
       this.emit(entry);
-      await this.embed(entry);
+      const embedding = await this.embed(entry);
+      this.emitSync({ collection: entry.collection.name, startedAt, durationMs: Date.now() - started, report, embedding, error: entry.state.lastError });
       return report;
     } catch (error) {
       entry.state.syncing = false;
       entry.state.lastError = error instanceof Error ? error.message : String(error);
       this.emit(entry);
       this.log(`[collections] sync failed for ${entry.collection.name}: ${entry.state.lastError}`);
+      this.emitSync({ collection: entry.collection.name, startedAt, durationMs: Date.now() - started, error: entry.state.lastError });
       return undefined;
     }
   }
 
-  private async embed(entry: Entry): Promise<void> {
+  private async embed(entry: Entry): Promise<(EmbeddingReport & { durationMs: number }) | undefined> {
+    const started = Date.now();
     try {
-      await this.tomato.call("embedMissing", [entry.collection.name], {
+      const report = await this.tomato.call("embedMissing", [entry.collection.name], {
         timeoutMs: TOMATO_LONG_CALL_TIMEOUT_MS,
         onProgress: (completed, total) => {
           entry.state.embedding = { completed, total };
@@ -157,14 +178,25 @@ export class CollectionWatchers {
         },
       });
       entry.state.embedding = undefined;
+      return { ...report, durationMs: Date.now() - started };
     } catch (error) {
       // Keyword search keeps working; hybrid becomes available after the next successful embed.
       entry.state.lastError = `embedding 실패: ${error instanceof Error ? error.message : String(error)}`;
+      return undefined;
+    } finally {
+      this.emit(entry);
     }
-    this.emit(entry);
   }
 
   private emit(entry: Entry): void {
     this.onChange(entry.collection.name, { ...entry.state });
+  }
+
+  private emitSync(result: CollectionSyncTelemetry): void {
+    try {
+      this.onSyncSettled(result);
+    } catch (error) {
+      this.log(`[collections] sync telemetry failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }

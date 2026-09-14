@@ -18,12 +18,17 @@
     "test:electron": "vitest run electron",
     "typecheck:electron": "tsc -p tsconfig.electron.json",
     "smoke:litellm": "vite-node scripts/litellm-smoke.ts",
+    "telemetry:gateway": "vite-node scripts/telemetry-gateway.ts",
     "bench:parse": "vite-node bench/runner/parse.ts",
     "bench:chunk": "vite-node bench/runner/chunk.ts",
     "bench:retrieval": "vite-node bench/runner/retrieval.ts",
+    "bench:rag": "vite-node bench/runner/rag.ts",
     "bench:policy": "vite-node bench/runner/policy.ts",
     "bench:agent": "vite-node bench/runner/agent.ts",
+    "bench:ingest": "vite-node bench/runner/ingest-langfuse.ts",
+    "bench:ingest:blob": "vite-node bench/runner/ingest-blob.ts",
     "bench:compare": "vite-node bench/runner/compare.ts",
+    "bench:advise": "vite-node bench/runner/advise.ts",
     "trajectory": "vite-node scripts/trajectory.ts"
   },
   "build": {

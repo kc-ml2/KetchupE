@@ -157,6 +157,7 @@ const clarificationCases = runs.filter((run) => cases.find((item) => item.caseId
 const nonClarificationCases = runs.filter((run) => !cases.find((item) => item.caseId === run.caseId)?.needsClarification);
 const verifiedRuns = runs.filter((run) => run.verified);
 const forecasts = runs.filter((run) => typeof run.predictedSuccess === "number").map((run) => ({ predicted: Number(run.predictedSuccess), outcome: Boolean(run.success) }));
+const passK = mean(cases.map((item) => runs.filter((run) => run.caseId === item.caseId).every((run) => run.success) ? 1 : 0));
 writeResults("agent", args, profile, {
   manifest: {},
   runs,
@@ -164,6 +165,7 @@ writeResults("agent", args, profile, {
     cases: cases.length,
     runs: args.runs,
     taskSuccess: mean(runs.map((run) => (run.success ? 1 : 0))),
+    [`pass^${args.runs}`]: passK,
     stepsMean: mean(runs.map((run) => Number(run.steps))),
     searchesMean: mean(runs.map((run) => Number(run.searches))),
     toolCallsMean: mean(runs.map((run) => Number(run.toolCalls))),

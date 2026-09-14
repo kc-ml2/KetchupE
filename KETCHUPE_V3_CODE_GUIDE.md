@@ -96,10 +96,10 @@ electron/
 │   ├── store.ts                workspace/thread/run/message/interaction SQL
 │   ├── tools.ts                Tomato 호출 표면, SearchResult→Evidence 변환, withTimeout
 │   ├── verify.ts               [[eN]] 인용 결정적 검증/복구
-│   ├── trace.ts                TraceWriter + redacted JSONL export
-│   ├── telemetry.ts            Langfuse OTLP + score + outbox
+│   ├── trace.ts                TraceWriter + 내부용 redacted serializer
+│   ├── telemetry.ts            서비스 소유 OTLP + evaluator span + outbox
 │   ├── router.ts               chat vs doc 라우팅
-│   ├── settings.ts             model/telemetry 설정 (safeStorage 암호화)
+│   ├── settings.ts             model(safeStorage) + 서비스 telemetry 환경 설정
 │   ├── runtime.ts              위 전부를 조립하는 곳
 │   └── canvas/                 문서 작성 플로우(flow/tree/store/prompts/presets)
 ├── db/{schema.ts, openAgentDb.ts}
@@ -118,7 +118,7 @@ src/
 └── app-types/                  Agent.types.ts, Canvas.types.ts, CanvasEdit.types.ts
 
 bench/
-├── datasets/local-rag-v1/      corpus + 5개 suite의 case JSONL (seed 상태)
+├── datasets/local-rag-v1/      corpus + 6개 suite의 case JSONL (seed 상태)
 ├── profiles/*.json             baseline-v1, always-search-v1, adaptive-no-ask/no-verify
 └── runner/                     parse, chunk, retrieval, policy, agent, compare, metrics
 ```
@@ -601,9 +601,10 @@ fs.watch(root, {recursive:true})
 
 ## 10. Trace · Telemetry · A/B
 
-- **원본은 로컬 SQLite**다. `trace_events` + `citations` + `interaction_events`.
-- **내보내기**: [trace.ts `exportTraceJsonl`](electron/agent/trace.ts). 자유 텍스트 키(`snippet, content, userGoal, query, question, …`)는 `sha256:앞16자`로 치환하고 `path`류는 아예 드롭한다. 기본이 redacted다.
-- **Langfuse**(opt-in): [telemetry.ts](electron/agent/telemetry.ts)가 run 하나를 OTLP trace로 만들어 보내고, interaction은 score API로 보낸다. 실패는 `telemetry_outbox`에 남아 백오프 재시도. `includeContent`가 꺼져 있으면 해시/메트릭만 나간다. 앱 실행마다 `app.session` trace를 남겨 DAU/MAU를 센다.
+- **제품 원본은 로컬 SQLite**다. `trace_events` + `citations` + `interaction_events`. `telemetry_outbox`는 중앙 전송 재시도만 담당한다.
+- **사용자 export는 없다.** `trace.ts`의 redacted JSONL 함수는 내부 디버그용이고 renderer/IPC에 노출하지 않는다.
+- **중앙 수집**: [telemetry.ts](electron/agent/telemetry.ts)가 `agent.run`, `index.sync`, `embed.batch`, feedback evaluator span을 서비스 소유 OTLP gateway 한 곳으로 보낸다. Langfuse secret은 [telemetry-gateway.ts](scripts/telemetry-gateway.ts)만 보유한다.
+- **Content mode**: `ops`는 텍스트/ID를 설치별 HMAC 처리, `redacted_eval`은 이메일·전화번호·secret을 마스킹, `internal_full`은 사내 승인 corpus용이다. 사용자가 변경하지 않는다.
 - **A/B**: `POLICY_VARIANTS`([policy.ts](electron/agent/policy.ts))에 `adaptive-v1`(기본)과 `always-search-v1`이 있고, install id의 sha256으로 **결정적으로** 배정된다. 한 설치는 한 arm에 고정되고 프로세스 수명 동안 바뀌지 않는다.
 - API key는 `safeStorage`로 암호화되어 userData에 저장되고 renderer·trace·profile 어디에도 나가지 않는다.
 
@@ -617,9 +618,12 @@ fs.watch(root, {recursive:true})
 npm run bench:parse     -- --dataset local-rag-v1 --profile baseline-v1
 npm run bench:chunk     -- --profile baseline-v1
 npm run bench:retrieval -- --profile baseline-v1
+npm run bench:rag       -- --profile baseline-v1
 npm run bench:policy    -- --profile baseline-v1 --runs 3
 npm run bench:agent     -- --profile baseline-v1 --runs 3 --client litellm
 npm run bench:compare   -- bench/results/<baseline> bench/results/<candidate>
+npm run bench:ingest    -- --from <ISO> --to <ISO>
+npm run bench:advise    -- --latency-budget 3000 bench/results/<dirs...>
 ```
 
 | suite | 입력 → 출력 | 지표 |
@@ -627,8 +631,9 @@ npm run bench:compare   -- bench/results/<baseline> bench/results/<candidate>
 | parse | raw 파일 → canonical unit | unit recall, locator 정확도 |
 | chunk | 고정 unit → chunk | gold-span coverage, split 위반, token p50/p95 |
 | retrieval | corpus + query → ranked evidence | Recall@5/8, MRR@10, nDCG@10, latency |
+| rag | frozen gold evidence → answer | answer correctness, citation validity/coverage, token, latency |
 | policy | **고정 PolicyState** → decision | action 정확도, difficulty macro-F1, Brier, ECE, 예산 위반 |
-| agent | scripted 메시지 → 전체 trajectory | task success, hop, evidence gain, 인용 유효성, token, CPU/RSS, latency, `first_failed_stage` |
+| agent | scripted 메시지 → 전체 trajectory | task success, `pass^k`, hop, evidence gain, 인용 유효성, token, CPU/RSS, latency, `first_failed_stage` |
 
 - `--client`: `litellm`(실제) 또는 `always-search`(모델 없는 규칙 baseline). `LITELLM_API_KEY`가 없으면 후자가 기본.
 - profile 4종으로 ablation이 된다: `baseline-v1`(전체) / `always-search-v1` / `adaptive-no-ask-v1` / `adaptive-no-verify-v1`. action을 빼는 건 `allowedActions` 한 줄이고, 나머지는 `validateDecision`이 알아서 막는다.
@@ -654,7 +659,7 @@ npm run typecheck:electron
 LITELLM_API_KEY=... npm run smoke:litellm   # SSE/tool call/abort/usage 4항목 확인
 ```
 
-현재 오른쪽 sidebar는 **컨텍스트 / 폴더** 두 패널이다. **폴더**에서 검색 폴더를 등록하고 질문한다. LiteLLM/Langfuse 설정 IPC와 form component는 남아 있지만 현재 패널에 mount되지 않으므로, 모델 연결은 `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL_ALIAS` 환경 변수 또는 기존 user-data 설정을 사용한다. 설치본의 설정 진입 UX는 별도로 다시 열어야 한다.
+현재 오른쪽 sidebar는 **컨텍스트 / 폴더** 두 패널이다. **폴더**에서 검색 폴더를 등록하고 질문한다. 모델 연결은 `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL_ALIAS` 환경 변수 또는 기존 user-data 설정을 사용한다. 중앙 telemetry endpoint/content mode는 공식 빌드 환경에서 고정되며 설정 IPC/form이 없다.
 
 ---
 
@@ -665,13 +670,13 @@ LITELLM_API_KEY=... npm run smoke:litellm   # SSE/tool call/abort/usage 4항목 
 | Phase | 상태 | 근거 / 남은 것 |
 | --- | --- | --- |
 | 0 계약·LiteLLM 호환 | 구현됨 / **실기 검증 대기** | `contracts.ts` + 테스트, AI SDK `ai@7` 채택. `npm run smoke:litellm`을 실제 alias로 통과시켜야 함 |
-| 1 세로 한 줄 | 완료 | Tomato 이식, SEARCH→ANSWER, 인용 불변식, SQLite trace, JSONL export, harness 테스트 |
+| 1 세로 한 줄 | 완료 | Tomato 이식, SEARCH→ANSWER, 인용 불변식, SQLite trace, 내부 redacted serializer, harness 테스트 |
 | 2 Local RAG 제품화 | 완료 (**OCR/HWP fixture 제외**) | utilityProcess, watcher, keyword 폴백, `/agent` 화면. 테스트 fixture는 MD/TXT/DOCX만 |
 | 3 Policy baseline | 완료 | 예산·dedupe·neighbors·coercion, profile fingerprint, frozen-state replay |
 | 4 지속형 context·ASK | 완료 | thread CRUD(삭제 포함), 50개 페이징, running/waiting_user run 재연결, memory CRUD·pin·on/off, 답변별 applied context, ASK→resume |
 | 5 VERIFY·calibration | 완료 | VERIFY 1회, Brier/ECE/risk-coverage, interaction 이벤트 |
-| 6 Golden data | **runner 완료 / 데이터는 seed** | corpus 5개 합성 문서, label은 구현자 1인 작성, **2차 검토 전**(`manifest.json`의 `status` 참고) |
-| 모니터링 (추가) | 완료 | Langfuse OTLP + score + outbox, variant A/B |
+| 6 Golden data | **runner·중앙 ingest 완료 / 데이터는 seed** | parse/chunk/retrieval/RAG/policy/agent, Langfuse API/Blob importer. corpus 5개 합성 문서 label은 구현자 1인 작성, **2차 검토 전** |
+| 모니터링 (추가) | 완료 / 운영 provision 대기 | 강제 OTLP gateway + HMAC/redaction + agent/index/feedback trace + outbox. 실제 gateway domain/TLS/Langfuse project는 운영 설정 필요 |
 | 캔버스 (추가) | 완료 | classify→anchor→ground→draft→edit→finalize, 버전 트리 undo/redo |
 | 7 설치본 | **설정만** | native 모듈 external/asarUnpack, mac arm64+x64 매트릭스. signing/notarization credential과 fresh-install smoke 미완 |
 

@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { LuDownload, LuThumbsDown, LuThumbsUp } from "react-icons/lu";
+import { LuThumbsDown, LuThumbsUp } from "react-icons/lu";
 import type { AppliedContext, CitationSummary, InteractionKind, MemoryKind, MessageRecord } from "@app-types/Agent.types";
 
 const CITATION = /\[\[(e\d+)\]\]/g;
@@ -79,10 +79,9 @@ type Props = {
   onLoadOlder: () => void;
   onOpenCitation: (runId: string, evidenceId: string) => void;
   onInteraction: (runId: string, kind: InteractionKind) => void;
-  onExportTrace: (runId: string) => void;
 };
 
-const AgentMessages = ({ messages, streamingText, streamingRunId, streamingCitations, streamingAppliedContext, progressText, hasMore, onLoadOlder, onOpenCitation, onInteraction, onExportTrace }: Props): React.JSX.Element => (
+const AgentMessages = ({ messages, streamingText, streamingRunId, streamingCitations, streamingAppliedContext, progressText, hasMore, onLoadOlder, onOpenCitation, onInteraction }: Props): React.JSX.Element => (
   <div className="flex flex-col gap-3">
     {hasMore && (
       <button type="button" onClick={onLoadOlder} className="self-center text-xs text-[#0066FF] hover:underline">
@@ -98,7 +97,6 @@ const AgentMessages = ({ messages, streamingText, streamingRunId, streamingCitat
             <div className="flex items-center gap-2 mt-2 text-[#71717A]">
               <button type="button" title="도움됨" onClick={() => onInteraction(message.runId as string, "accepted")} className="hover:text-[#0066FF]"><LuThumbsUp className="w-3.5 h-3.5" /></button>
               <button type="button" title="틀렸거나 수정 필요" onClick={() => onInteraction(message.runId as string, "corrected")} className="hover:text-[#DC2626]"><LuThumbsDown className="w-3.5 h-3.5" /></button>
-              <button type="button" title="trajectory 내보내기 (redacted JSONL)" onClick={() => onExportTrace(message.runId as string)} className="hover:text-[#0066FF]"><LuDownload className="w-3.5 h-3.5" /></button>
             </div>
           )}
         </div>

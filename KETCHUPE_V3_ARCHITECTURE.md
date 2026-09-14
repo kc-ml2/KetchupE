@@ -1,7 +1,7 @@
 # KetchupE v3.0 — Local RAG Agent Harness 구현 계획
 
 - 상태: 구현 기준 문서
-- 기준일: 2026-09-13
+- 기준일: 2026-09-14
 - 범위: KetchupE desktop client와 사용자의 local data. MARU는 범위 밖이다.
 
 ## 1. 궁극적인 목표
@@ -68,7 +68,7 @@ production trajectory
 2. **Model의 자신감 하나를 사실로 믿지 않는다.** self estimate, retrieval 품질, citation 검증, 실제 성공, 사용자 반응을 따로 기록하고 calibration을 측정한다.
 3. **Tomato는 retrieval만 한다.** 대화, 기억, policy, model 호출을 알지 못한다.
 4. **한 번의 제품 코드가 UI와 benchmark에서 같이 돈다.** benchmark용으로 retrieval이나 agent를 재구현하지 않는다.
-5. **로컬 데이터가 원본이다.** trace와 index는 local SQLite에 있고, 외부 전송은 명시적 export 또는 사용자가 켠 Langfuse telemetry를 통해서만 가능하다.
+5. **제품 상태는 로컬, 운영 관측은 중앙이다.** 대화와 index의 원본은 local SQLite에 두되, 서비스 소유 OTLP gateway로 trajectory를 중앙 수집한다. SQLite `telemetry_outbox`는 사용자의 benchmark export가 아니라 전송 내구성을 담당한다.
 6. **비용도 품질이다.** 정답률뿐 아니라 hop, latency, token, local CPU/RAM을 함께 비교한다.
 7. **처음에는 작게 시작한다.** Tomato, LiteLLM, SQLite, 명시적 loop만 구현하고 multi-agent/online training은 측정 결과가 요구할 때 추가한다.
 
@@ -88,7 +88,7 @@ production trajectory
 | retrieval          | 기존 Tomato의 KorDoc + FTS5/BM25 + multilingual E5 + RRF hybrid 재사용                                         |
 | 기본 검색          | 활성 collection 전체, hybrid, top 8; embedding 전에는 keyword fallback                                         |
 | secret             | Electron `safeStorage`로 암호화하고 renderer/trace에 노출하지 않음                                             |
-| trace              | local SQLite가 원본, redacted JSONL export 지원                                                                |
+| trace              | local SQLite가 제품 상태 원본, 서비스 소유 OTLP gateway가 Langfuse 중앙 미러를 생성                      |
 | benchmark          | 같은 repository의 headless runner가 실제 policy/Tomato/model adapter를 호출                                    |
 
 ### AI SDK 사용 경계
@@ -201,7 +201,7 @@ KetchupE/
 │   │   ├── harness.ts         # 유일한 bounded orchestration loop
 │   │   ├── tools.ts           # Tomato tool schema와 실행
 │   │   ├── verify.ts          # evidence/citation invariants
-│   │   └── trace.ts           # SQLite + redacted JSONL
+│   │   └── trace.ts           # SQLite + 내부용 redacted serializer
 │   ├── db/
 │   │   ├── openAgentDb.ts
 │   │   └── 001_agent.sql
@@ -716,7 +716,7 @@ type TraceEvent = {
 };
 ```
 
-`policy.decided` payload는 실제 policy가 본 state snapshot, decision, profile hash를 포함한다. Local DB에는 user goal, 선택된 memory text, 최대 400자 evidence snippet을 저장해 replay 가능성을 보존하되 full chunk와 absolute path는 복제하지 않는다. 외부 export는 별도 동의가 없으면 text를 hash/placeholder로 치환한다.
+`policy.decided` payload는 실제 policy가 본 state snapshot, decision, profile hash를 포함한다. Local DB에는 user goal, 선택된 memory text, 최대 400자 evidence snippet을 저장해 replay 가능성을 보존하되 full chunk와 absolute path는 복제하지 않는다. 중앙 전송은 서비스가 고정한 content mode를 따르며 기본 `ops`에서 text와 ID를 HMAC으로 치환한다.
 
 ### 11.2 사용자 반응
 
@@ -756,8 +756,9 @@ timeout/protocol/budget 오류                    → runtime
 | parse     | raw file → canonical units                  | required-unit recall, locator accuracy, success rate                                                         |
 | chunk     | frozen canonical units → chunks             | gold-span coverage, split violation, token p50/p95                                                           |
 | retrieval | raw corpus + query → ranked evidence        | Recall@5/8, MRR@10, nDCG@10, locator accuracy, latency                                                       |
+| rag       | frozen gold evidence → answer              | answer correctness, citation validity/coverage, tokens, latency                                             |
 | policy    | frozen `PolicyState` → `PolicyDecision`     | action/tool accuracy, difficulty macro-F1, Brier, ECE, budget violation                                      |
-| agent     | scripted messages → complete run trajectory | task success, paired wins/losses, evidence gain/hop, action usage, calibration, citation validity, model/tool calls, tokens, CPU/RSS, latency |
+| agent     | scripted messages → complete run trajectory | task success, `pass^k`, paired wins/losses, evidence gain/hop, action usage, calibration, citation validity, model/tool calls, tokens, CPU/RSS, latency |
 
 Parsing, chunking, retrieval을 따로 측정해야 원인을 알 수 있고, end-to-end agent suite를 함께 돌려야 component 점수 개선이 실제 task success로 이어졌는지 알 수 있다.
 
@@ -771,6 +772,7 @@ bench/datasets/local-rag-v1/
 ├── parse-cases.jsonl
 ├── chunk-cases.jsonl
 ├── retrieval-cases.jsonl
+├── rag-cases.jsonl          # frozen evidence → answer
 ├── policy-cases.jsonl       # frozen state + allowed action + difficulty/outcome label
 ├── agent-cases.jsonl        # multi-turn script + deterministic user reply
 └── memories.jsonl
@@ -818,13 +820,13 @@ Agent case의 user simulator는 LLM이 아니라 고정 script다. `ASK` 문구�
 
 ### 12.3 실제 trajectory에서 golden set 만들기
 
-1. Local trace에서 `failed`, `retried`, `corrected`, 낮은 predicted success, 과도한 hop case를 사용자가 명시적으로 export한다.
-2. Export 도구가 path, 이름, 원문, secret을 제거하거나 placeholder로 치환한다.
+1. 서비스 소유 OTLP gateway가 `failed`, `retried`, `corrected`, 낮은 predicted success, 과도한 hop case를 Langfuse에 중앙 수집한다.
+2. 관리자가 Observations API v2 또는 Blob Export로 후보 trajectory를 `bench/imports/`에 가져온다.
 3. 사람이 원본 또는 공개 가능한 재현 corpus를 준비하고 relevant locator, expected claim, allowed action, difficulty, outcome을 붙인다.
 4. 두 번째 검토자가 label과 개인정보 제거를 확인한다.
 5. Dataset version과 SHA-256을 고정한 뒤에만 golden set에 합친다.
 
-실제 trajectory는 좋은 **후보 source**지만 그 자체가 gold는 아니다. Langfuse dataset을 나중에 쓰더라도 같은 human-label/review/version 절차를 거치며, canonical dataset과 scorer는 repository의 JSONL이다.
+실제 trajectory는 좋은 **후보 source**지만 그 자체가 gold는 아니다. Langfuse dataset/annotation queue로 선별·검토하고, canonical dataset은 private object storage의 immutable snapshot과 repository manifest SHA로 고정한다. 상세 계약과 명령은 [`bench.md`](bench.md)를 따른다.
 
 ### 12.4 profile
 
@@ -874,6 +876,7 @@ Retrieval과 policy를 따로 versioning한다.
 npm run bench:parse -- --dataset local-rag-v1 --profile baseline-v1
 npm run bench:chunk -- --dataset local-rag-v1 --profile baseline-v1
 npm run bench:retrieval -- --dataset local-rag-v1 --profile baseline-v1
+npm run bench:rag -- --dataset local-rag-v1 --profile baseline-v1
 npm run bench:policy -- --dataset local-rag-v1 --profile baseline-v1 --runs 3
 npm run bench:agent -- --dataset local-rag-v1 --profile baseline-v1 --runs 3
 npm run bench:compare -- bench/results/<baseline> bench/results/<candidate>
@@ -944,7 +947,7 @@ WHERE status IN ('running', 'waiting_user');
 
 별도 `policy_transitions` table은 만들지 않는다. `trace_events.type = policy.decided`의 payload가 `PolicyTransition` 계약을 갖는다. 앱 시작 시 `running` run은 `cancelled`로 정리하고 `waiting_user`만 resume 가능하게 둔다.
 
-Preload는 좁은 API만 노출한다. 아래는 현재 핵심 표면이며 canvas/model/telemetry 설정 계약까지 포함한 정본은 [`src/app-types/Agent.types.ts`](src/app-types/Agent.types.ts)다.
+Preload는 좁은 API만 노출한다. 아래는 현재 핵심 표면이며 canvas/model 설정 계약까지 포함한 정본은 [`src/app-types/Agent.types.ts`](src/app-types/Agent.types.ts)다. Telemetry 설정은 renderer/IPC에 노출하지 않는다.
 
 ```ts
 type StartRunInput = {
@@ -1008,7 +1011,6 @@ type KetchupEAgentAPI = {
   setMemoryPinned(id: string, pinned: boolean): Promise<void>;
   confirmMemory(id: string): Promise<void>;
   deleteMemory(id: string): Promise<void>;
-  exportTrace(runId: string): Promise<void>;
 };
 ```
 
@@ -1020,18 +1022,18 @@ Renderer가 넘긴 path는 신뢰하지 않는다. `addCollection`은 main proce
 
 1. 원본 파일은 수정하거나 app-data로 복사하지 않는다. parse artifact와 index만 저장한다.
 2. 선택된 evidence text는 답변/검증을 위해 운영 중인 LiteLLM/on-prem model로 전송된다는 점을 collection 등록 시 알린다.
-3. absolute path, API key, chain-of-thought는 외부 telemetry에 보내지 않는다. 업무 원문과 evidence snippet은 별도 opt-in일 때만 보낸다.
+3. absolute path, API key, chain-of-thought는 외부 telemetry에 보내지 않는다. 업무 원문과 evidence snippet은 서비스가 정한 `redacted_eval`/`internal_full` 채널에서만 보낸다.
 4. Renderer는 `contextIsolation: true`, `nodeIntegration: false`를 유지한다.
 5. Model content와 문서는 untrusted input이며 filesystem scope와 memory 확정 권한을 가질 수 없다.
-6. Trace export와 Langfuse telemetry는 기본적으로 ID/hash/metric 중심으로 redaction하며 원문 전송은 명시적 opt-in이다.
+6. 기본 `ops` telemetry는 ID를 설치별 HMAC으로 처리하고 metric 중심으로 수집한다. 사용자가 collector나 content mode를 변경하지 않는다.
 7. Embedding/OCR/search는 utility process에서 실행해 Electron main event loop를 막지 않는다.
 8. CPU/RAM peak, index size, embedding throughput, search p95를 packaged benchmark manifest에 기록한다.
 9. Model이 offline이면 local search UI는 계속 동작하고 generation만 명확히 실패한다.
-10. Desktop binary에 조직 공용 Langfuse secret을 포함하지 않는다. 직접 Langfuse 연결은 사용자 소유 key/내부 배포에만 쓰고, 대외 배포는 LiteLLM server-side callback 또는 ingest proxy가 key를 소유한다.
+10. Desktop binary에 Langfuse secret을 포함하지 않는다. 대외 배포는 OTLP gateway가 Langfuse key를 소유하며 client에는 교체 가능한 public ingest token만 포함한다.
 
 Baseline은 CPU-only, RAM 4GB 최소/8GB 권장 환경이다. 약 145MB의 multilingual-e5-small weight는 최초 사용 시 내려받아 app user-data에 캐시하고, GPU·local generation model·reranker·별도 vector DB는 요구하지 않는다. SQLite BLOB의 linear cosine search로 시작하고 실제 corpus에서 search p95가 목표를 넘을 때만 ANN을 검토한다.
 
-Langfuse는 opt-in 중앙 분석 미러이며 SQLite outbox로 실패를 재시도한다. Sentry는 crash/error monitoring이 실제로 필요할 때 추가한다. 둘 다 local SQLite trajectory의 대체물이 아니다.
+Langfuse는 강제 중앙 분석·annotation control plane이며 SQLite outbox로 실패를 재시도한다. client outbound는 OTLP gateway 하나이고, benchmark 서비스는 Langfuse API/Blob Export를 읽는다. Sentry는 crash/error monitoring이 실제로 필요할 때 추가한다.
 
 ## 15. 구현 roadmap
 
@@ -1049,7 +1051,7 @@ Langfuse는 opt-in 중앙 분석 미러이며 SQLite outbox로 실패를 재시�
 - Tomato core와 smoke test를 `electron/tomato`로 이동
 - `Harness Runtime`의 `SEARCH → ANSWER` path
 - citation validation
-- thread/run/message/trace SQLite와 JSONL export
+- thread/run/message/trace SQLite와 내부 검증용 redacted serializer
 - 문서 1개/query 1개의 headless agent test
 
 완료:
@@ -1105,11 +1107,11 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 
 ### Phase 6 — Golden data와 profile promotion
 
-- parse/chunk/retrieval/policy/agent runner
+- parse/chunk/retrieval/RAG/policy/agent runner
 - `local-rag-v1` human-labeled dataset
 - baseline/candidate compare
 - first failure stage와 원 trace 연결
-- export → label → dataset versioning 절차
+- Langfuse ingest → 비식별화 검토 → label → dataset versioning 절차
 
 완료: retrieval 또는 policy profile을 바꾸고 같은 명령으로 A/B 결과와 quality-cost delta를 얻는다.
 
@@ -1172,7 +1174,7 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 | 지속형 agent                     | workspace + recent messages + confirmed memory | multi-turn memory suite     |
 | 채팅방 생성·복원·재개            | Thread → Run → Message lifecycle               | thread persistence suite    |
 | 모든 hop 추적                    | `PolicyTransition` + trace events              | trajectory schema test      |
-| trajectory 기반 개선             | export → human label → golden dataset → A/B    | profile promotion report    |
+| trajectory 기반 개선             | OTLP → Langfuse → human label → frozen dataset → A/B | profile promotion report    |
 | 제한된 local resource            | utility process + keyword fallback + budgets   | packaged resource metrics   |
 | macOS/Windows 배포               | electron-builder + signing                     | fresh-install smoke         |
 
@@ -1184,7 +1186,7 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 2. 기본 hardware tier에서 허용할 p95 latency, RAM, index size 목표
 3. KorDoc/OCR model의 macOS/Windows 배포 방식과 license
 4. macOS/Windows signing credential과 CI secret 위치
-5. 실제 trajectory export의 사내 privacy/retention 규칙
+5. 중앙 trajectory의 사내 privacy/retention과 `ops`/`redacted_eval` content mode 규칙
 
 ## 19. 참고 구현과 연구
 
@@ -1212,18 +1214,18 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 
 이 문서의 구현 우선순위는 `Tomato → LiteLLM answer → explicit trajectory → policy A/B`다. 참고 framework를 도입하는 것 자체는 목표가 아니다.
 
-## 20. 구현 상태 (2026-09-13, branch v3.0)
+## 20. 구현 상태 (2026-09-14, branch v3.0)
 
 | Phase | 상태 | 비고 |
 | --- | --- | --- |
 | 0 계약·LiteLLM 호환 | 구현 / 실기 검증 대기 | `electron/agent/contracts.ts` validator + 테스트, AI SDK `ai@7` + `@ai-sdk/openai-compatible` 채택. model alias는 비우면 `GET /models`의 첫 모델로 자동 결정한다. 현재 설정 form은 화면에 mount되지 않아 환경 변수/기존 user-data 설정을 사용한다. `LITELLM_API_KEY=... npm run smoke:litellm`으로 4항목 확인 필요 |
-| 1 세로 한 줄 | 완료 | Tomato core 이식(`electron/tomato`), Harness `SEARCH → ANSWER`, citation invariant, SQLite thread/run/message/trace, redacted JSONL export, headless harness 테스트 9개 |
+| 1 세로 한 줄 | 완료 | Tomato core 이식(`electron/tomato`), Harness `SEARCH → ANSWER`, citation invariant, SQLite thread/run/message/trace, 내부 redacted serializer, headless harness 테스트 9개 |
 | 2 Local RAG 제품화 | 완료 (OCR/HWP fixture 제외) | utilityProcess worker, watcher(1.5s debounce·single-flight·10분 reconcile·1분 재연결), keyword fallback, `/agent` 화면(컨텍스트/폴더 분리·진행/오류·citation 원본 열기). fixture는 MD/TXT/DOCX만 포함 |
 | 3 Policy baseline | 완료 | budget·dedupe·neighbors·coercion, profile fingerprint, `bench/runner/policy.ts` frozen-state replay, always-search 규칙 baseline |
 | 4 지속형 context·ASK | 완료 | sidebar thread 생성/이름 변경/삭제, 50개 page load, 과거 thread 새 run, running/waiting_user run UI 재연결, 12개 message·workspace 지침·pinned/FTS memory 선택, memory CRUD·pin·on/off, 답변별 applied context, `ASK → waiting_user → resume`, scripted user agent bench |
 | 5 VERIFY·calibration | 완료 | `VERIFY` 1회, Brier/ECE/risk-coverage/verification gain, interaction event IPC |
-| 6 Golden data·promotion | runner 완료 / 데이터는 seed | parse/chunk/retrieval/policy/agent runner + `bench:compare`. `local-rag-v1`은 합성 corpus·구현자 label이며 2차 검토 전(manifest.json `status` 참고) |
-| 모니터링 (추가) | 완료 | Langfuse OTLP/HTTP + scores API 직접 호출(`electron/agent/telemetry.ts`), run→trace 매핑, opt-in policy state/evidence I/O, durable SQLite outbox/retry, interaction→score, `app.session`으로 DAU/MAU, install id 기반 policy variant A/B(`POLICY_VARIANTS`). 기본 redacted |
+| 6 Golden data·promotion | runner 완료 / 데이터는 seed | parse/chunk/retrieval/RAG/policy/agent runner + compare/advisor + Langfuse API/Blob ingest. `local-rag-v1`은 합성 corpus·구현자 label이며 2차 검토 전(manifest.json `status` 참고) |
+| 모니터링 (추가) | 완료 / 운영 provision 대기 | 서비스 소유 OTLP gateway(`scripts/telemetry-gateway.ts`), `ketchupe-trajectory-v2`, HMAC ID, `ops`/`redacted_eval`/`internal_full`, `agent.run` + `index.sync`/`embed.batch`, durable SQLite outbox/retry, feedback evaluator span, Langfuse API/Blob importer. 실제 domain/TLS/Langfuse project는 운영 환경에서 provision |
 | 캔버스 (추가) | 완료 | MARU doc graph를 LangGraph 없이 이식(`electron/agent/canvas/`). run kind=canvas, `run.waiting_user`로 anchor 선택/편집 대기, 전체 트리 스냅샷 버전 + head pointer undo/redo, Tomato 기반 ground/anchor. MARU 챗봇·로그인·팀 코드는 제거 |
 | 7 설치본 | 설정만 | `node:sqlite`/native 모듈 external·asarUnpack, mac arm64+x64, CI에 electron 테스트 단계. signing/fresh-install smoke는 credential 필요 |
 

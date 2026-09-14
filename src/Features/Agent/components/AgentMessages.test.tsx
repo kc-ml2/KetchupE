@@ -13,7 +13,6 @@ const defaults = {
   onLoadOlder: vi.fn(),
   onOpenCitation: vi.fn(),
   onInteraction: vi.fn(),
-  onExportTrace: vi.fn(),
 };
 
 describe("AgentMessages", () => {

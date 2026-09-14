@@ -239,7 +239,6 @@ const AgentPage = (): React.JSX.Element => {
                 onInteraction={(runId, kind) =>
                   void api.recordInteraction(runId, kind)
                 }
-                onExportTrace={(runId) => void api.exportTrace(runId)}
               />
               {canvas.interrupt?.type === "awaiting_anchor_choice" && (
                 <AnchorChoicePrompt

@@ -23,13 +23,13 @@ for (const component of ["retrieval", "answer"] as const) {
   if (before !== after) console.warn(`${component} profile differs; policy effects are not isolated`);
 }
 
-const HIGHER_IS_BETTER = new Set(["actionAccuracy", "reasonAccuracy", "difficultyMacroF1", "validRate", "taskSuccess", "citationF1", "recall@5", "recall@8", "mrr@10", "ndcg@10", "locatorAccuracy", "parseSuccess", "requiredUnitRecall", "goldSpanCoverage", "verificationSuccessWhenUsed", "clarificationRecall", "clarificationSuccessWhenAsked"]);
+const HIGHER_IS_BETTER = new Set(["actionAccuracy", "reasonAccuracy", "difficultyMacroF1", "validRate", "taskSuccess", "answerCorrectness", "citationValidity", "citationCoverage", "citationF1", "recall@5", "recall@8", "mrr@10", "ndcg@10", "locatorAccuracy", "parseSuccess", "requiredUnitRecall", "goldSpanCoverage", "verificationSuccessWhenUsed", "clarificationRecall", "clarificationSuccessWhenAsked"]);
 const rows: string[] = [`metric | ${baseline.manifest.profile} | ${candidate.manifest.profile} | delta`];
 for (const [key, value] of Object.entries(candidate.summary)) {
   const before = baseline.summary[key];
   if (typeof value !== "number" || typeof before !== "number") continue;
   const delta = value - before;
-  const direction = delta === 0 ? "=" : (HIGHER_IS_BETTER.has(key) ? delta > 0 : delta < 0) ? "better" : "worse";
+  const direction = delta === 0 ? "=" : (HIGHER_IS_BETTER.has(key) || key.startsWith("pass^") ? delta > 0 : delta < 0) ? "better" : "worse";
   rows.push(`${key} | ${before.toFixed(4)} | ${value.toFixed(4)} | ${delta >= 0 ? "+" : ""}${delta.toFixed(4)} ${direction}`);
 }
 if (baseline.manifest.suite === "agent") {

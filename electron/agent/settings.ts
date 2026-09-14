@@ -8,75 +8,34 @@ export type ModelSettings = { baseURL: string; modelAlias: string; apiKey?: stri
 type StoredSettings = { baseURL: string; modelAlias?: string; apiKeyEncrypted?: string };
 
 const FILE_NAME = "model-settings.json";
-const TELEMETRY_FILE_NAME = "telemetry.json";
 
-function encryptSecret(value: string): string {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error("이 환경에서는 비밀 값을 안전하게 저장할 수 없습니다.");
-  return safeStorage.encryptString(value).toString("base64");
-}
+export const TELEMETRY_CONTENT_MODES = ["ops", "redacted_eval", "internal_full"] as const;
+export type TelemetryContentMode = (typeof TELEMETRY_CONTENT_MODES)[number];
 
-function decryptSecret(encrypted?: string): string | undefined {
-  if (!encrypted || !safeStorage.isEncryptionAvailable()) return undefined;
-  try {
-    return safeStorage.decryptString(Buffer.from(encrypted, "base64"));
-  } catch {
-    return undefined;
-  }
-}
-
-function readJson<T>(path: string): T | undefined {
-  try {
-    return JSON.parse(readFileSync(path, "utf8")) as T;
-  } catch {
-    return undefined;
-  }
-}
-
+/** Service-owned telemetry. Official builds bake these values in; end users cannot replace the collector. */
 export type TelemetrySettings = {
-  enabled: boolean;
-  host: string;
-  publicKey: string;
-  secretKey?: string;
-  /** Who this install is for Langfuse's user views (e-mail or name); empty → anonymous install id. */
-  userId: string;
-  /** Send question/answer/context/retrieval evidence text; off by default (hashes only). */
-  includeContent: boolean;
+  endpoint: string;
+  token?: string;
+  contentMode: TelemetryContentMode;
+  environment: string;
+  tenantId: string;
   /** Policy variant override; empty → deterministic assignment by install id. */
   variant: string;
 };
-type StoredTelemetry = Omit<TelemetrySettings, "secretKey"> & { secretKeyEncrypted?: string };
 
-export function loadTelemetrySettings(userData: string): TelemetrySettings {
-  const stored = readJson<Partial<StoredTelemetry>>(join(userData, TELEMETRY_FILE_NAME)) ?? {};
-  const secretKey = process.env.LANGFUSE_SECRET_KEY ?? decryptSecret(stored.secretKeyEncrypted);
-  const publicKey = process.env.LANGFUSE_PUBLIC_KEY ?? stored.publicKey ?? "";
+export function loadTelemetrySettings(): TelemetrySettings {
+  const requestedMode = process.env.KETCHUPE_TELEMETRY_CONTENT_MODE;
+  const contentMode = TELEMETRY_CONTENT_MODES.includes(requestedMode as TelemetryContentMode)
+    ? requestedMode as TelemetryContentMode
+    : "ops";
   return {
-    enabled: process.env.LANGFUSE_PUBLIC_KEY ? true : (stored.enabled ?? false),
-    host: (process.env.LANGFUSE_HOST ?? stored.host ?? "https://cloud.langfuse.com").replace(/\/+$/, ""),
-    publicKey,
-    secretKey,
-    userId: process.env.KETCHUPE_USER_ID ?? stored.userId ?? "",
-    includeContent: stored.includeContent ?? false,
-    variant: process.env.KETCHUPE_VARIANT ?? stored.variant ?? "",
+    endpoint: (process.env.KETCHUPE_OTLP_ENDPOINT ?? "").trim(),
+    token: process.env.KETCHUPE_OTLP_TOKEN?.trim() || undefined,
+    contentMode,
+    environment: process.env.KETCHUPE_ENVIRONMENT?.trim() || "production",
+    tenantId: process.env.KETCHUPE_TENANT_ID?.trim() || "public",
+    variant: process.env.KETCHUPE_VARIANT ?? "",
   };
-}
-
-export function saveTelemetrySettings(userData: string, settings: TelemetrySettings): void {
-  const path = join(userData, TELEMETRY_FILE_NAME);
-  const previous = readJson<StoredTelemetry>(path);
-  let secretKeyEncrypted = previous?.secretKeyEncrypted;
-  if (settings.secretKey !== undefined) secretKeyEncrypted = settings.secretKey ? encryptSecret(settings.secretKey) : undefined;
-  mkdirSync(dirname(path), { recursive: true });
-  const stored: StoredTelemetry = {
-    enabled: settings.enabled,
-    host: settings.host.replace(/\/+$/, ""),
-    publicKey: settings.publicKey.trim(),
-    userId: settings.userId.trim(),
-    includeContent: settings.includeContent,
-    variant: settings.variant,
-    secretKeyEncrypted,
-  };
-  writeFileSync(path, JSON.stringify(stored, null, 2));
 }
 
 /** Dev: env vars win. Packaged: settings file with the key encrypted by safeStorage. The key never reaches the renderer or traces. */

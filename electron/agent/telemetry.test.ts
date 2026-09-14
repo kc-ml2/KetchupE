@@ -53,34 +53,34 @@ afterAll(async () => {
 
 describe("telemetry", () => {
   it("maps a run to one OTLP trace with step, tool, and generation spans, redacted by default", () => {
-    const built = buildRunTrace(db, runId, { userId: "u@example.com", includeContent: false, resource: { "service.name": "ketchupe" } });
+    const built = buildRunTrace(db, runId, { userId: "install:test", identityKey: "local-secret", contentMode: "ops", environment: "test", tenantId: "test", resource: { "service.name": "ketchupe" } });
     expect(built).toBeDefined();
     const spans = (built!.payload as { resourceSpans: Array<{ scopeSpans: Array<{ spans: Array<{ name: string; traceId: string; spanId: string; parentSpanId?: string; attributes: Array<{ key: string; value: Record<string, unknown> }> }> }> }> }).resourceSpans[0].scopeSpans[0].spans;
     expect(built!.traceId).toMatch(/^[0-9a-f]{32}$/);
     expect(spans.every((span) => span.traceId === built!.traceId && /^[0-9a-f]{16}$/.test(span.spanId))).toBe(true);
-    expect(spans.map((span) => span.name)).toEqual(["agent.run", "step.1.SEARCH", "step.2.ANSWER", "model.policy", "tool.search_local_docs", "model.policy", "model.answer"]);
+    expect(spans.map((span) => span.name)).toEqual(["agent.run", "policy.step.1", "policy.step.2", "model.policy", "tool.search_local_docs", "model.policy", "model.answer"]);
     const root = spans[0];
     const value = (key: string) => root.attributes.find((item) => item.key === key)?.value;
-    expect(value("langfuse.user.id")).toEqual({ stringValue: "u@example.com" });
+    expect(value("langfuse.user.id")).toEqual({ stringValue: "install:test" });
     expect(value("langfuse.trace.tags")).toEqual({ arrayValue: { values: [{ stringValue: "baseline-v1" }, { stringValue: "completed" }] } });
     expect(value("langfuse.trace.metadata.variant")).toEqual({ stringValue: "baseline-v1" });
     expect(value("langfuse.trace.metadata.actions")).toEqual({ stringValue: "SEARCH>ANSWER" });
-    expect((value("langfuse.observation.input") as { stringValue: string }).stringValue).toMatch(/^sha256:/);
+    expect((value("langfuse.observation.input") as { stringValue: string }).stringValue).toMatch(/^hmac-sha256:/);
     expect(JSON.stringify(built!.payload)).not.toContain("연차");
-    expect(spans.every((span) => span.attributes.some((item) => item.key === "langfuse.trace.metadata.exportSchema"))).toBe(true);
+    expect(spans.every((span) => span.attributes.some((item) => item.key === "langfuse.trace.metadata.trajectorySchemaVersion"))).toBe(true);
     expect(spans.find((span) => span.name === "tool.search_local_docs")?.parentSpanId).toBe(spans[1].spanId);
-    expect(built!.scores.map((score) => score.name)).toEqual(["task_completed", "citation_valid", "predicted_success", "steps", "searches"]);
+    expect(built!.scores.map((score) => score.name)).toEqual(["runtime/completed", "runtime/citation_valid", "agent/predicted_success", "runtime/steps", "runtime/searches"]);
   });
 
-  it("includes content only when opted in", () => {
-    const built = buildRunTrace(db, runId, { userId: "u", includeContent: true, resource: {} });
+  it("includes content only for the service-selected internal mode", () => {
+    const built = buildRunTrace(db, runId, { userId: "u", identityKey: "key", contentMode: "internal_full", environment: "test", tenantId: "test", resource: {} });
     expect(JSON.stringify(built!.payload)).toContain("연차 정산?");
     expect(JSON.stringify(built!.payload)).toContain("미사용 연차는 수당으로 정산한다.");
     expect(JSON.stringify(built!.payload)).not.toContain(temporary);
   });
 
   it("turns interactions into scores on the same trace id", () => {
-    expect(interactionScore(runId, "accepted")).toMatchObject({ traceId: traceIdFor(runId), name: "user_feedback", value: 1, dataType: "BOOLEAN" });
+    expect(interactionScore(runId, "accepted")).toMatchObject({ traceId: traceIdFor(runId), name: "user/user_feedback", value: 1, dataType: "BOOLEAN" });
     expect(interactionScore(runId, "corrected").value).toBe(0);
   });
 
@@ -92,7 +92,7 @@ describe("telemetry", () => {
     expect(assignVariant("install-a", "nope")).toBe(assignVariant("install-a"));
   });
 
-  it("posts OTLP traces and scores with Basic auth and the v4 ingestion header", async () => {
+  it("posts traces and evaluator spans to the single OTLP gateway", async () => {
     const calls: Array<{ url: string; headers: Record<string, string>; body: string }> = [];
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
@@ -100,16 +100,17 @@ describe("telemetry", () => {
       return new Response("{}", { status: 200 });
     }) as typeof fetch;
     try {
-      const exporter = new LangfuseExporter(db, () => ({ enabled: true, host: "https://lf.test", publicKey: "pk", secretKey: "sk", userId: "", includeContent: false, variant: "" }), { installId: "inst", appVersion: "3.0.0", os: "darwin" });
+      const exporter = new LangfuseExporter(db, () => ({ endpoint: "https://collector.test/v1/traces", token: "public-ingest", contentMode: "ops", environment: "test", tenantId: "test", variant: "" }), { installId: "inst", appVersion: "3.0.0", os: "darwin" });
       exporter.exportRun(db, runId);
       exporter.score(interactionScore(runId, "accepted"));
       const result = await exporter.flush();
       expect(result).toEqual({ traces: 1, scores: 6 });
-      expect(calls[0].url).toBe("https://lf.test/api/public/otel/v1/traces");
-      expect(calls[0].headers.Authorization).toBe(`Basic ${Buffer.from("pk:sk").toString("base64")}`);
+      expect(calls.every((call) => call.url === "https://collector.test/v1/traces")).toBe(true);
+      expect(calls[0].headers.Authorization).toBe("Bearer public-ingest");
       expect(calls[0].headers["x-langfuse-ingestion-version"]).toBe("4");
-      expect(calls.filter((call) => call.url.endsWith("/api/public/scores"))).toHaveLength(6);
-      expect(exporter.userId()).toBe("install:inst");
+      expect(calls).toHaveLength(7);
+      expect(exporter.userId()).toMatch(/^install:hmac-sha256:/);
+      expect(exporter.userId()).not.toBe("install:inst");
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -122,7 +123,7 @@ describe("telemetry", () => {
     try {
       const exporter = new LangfuseExporter(
         db,
-        () => ({ enabled: true, host: "https://lf.test", publicKey: "pk", secretKey: "sk", userId: "", includeContent: false, variant: "" }),
+        () => ({ endpoint: "https://collector.test/v1/traces", contentMode: "ops", environment: "test", tenantId: "test", variant: "" }),
         { installId: "inst", appVersion: "3.0.0", os: "darwin" },
         () => undefined,
       );
@@ -133,7 +134,7 @@ describe("telemetry", () => {
       unavailable = false;
       const restarted = new LangfuseExporter(
         db,
-        () => ({ enabled: true, host: "https://lf.test", publicKey: "pk", secretKey: "sk", userId: "", includeContent: false, variant: "" }),
+        () => ({ endpoint: "https://collector.test/v1/traces", contentMode: "ops", environment: "test", tenantId: "test", variant: "" }),
         { installId: "inst", appVersion: "3.0.0", os: "darwin" },
         () => undefined,
       );
@@ -145,8 +146,33 @@ describe("telemetry", () => {
     }
   });
 
+  it("emits collection indexing and embedding as an OTLP trace", async () => {
+    const bodies: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch;
+    try {
+      const exporter = new LangfuseExporter(db, () => ({ endpoint: "https://collector.test/v1/traces", contentMode: "ops", environment: "test", tenantId: "test", variant: "" }), { installId: "inst", appVersion: "3.0.0", os: "darwin" });
+      exporter.indexSync({
+        collection: "work",
+        startedAt: new Date().toISOString(),
+        durationMs: 20,
+        report: { collection: "work", scanned: 2, updated: 1, unchanged: 1, removed: 0, failed: [], pipelineFingerprint: "pipeline-sha" },
+        embedding: { collection: "work", total: 4, embedded: 2, skipped: 2, model: "e5", dimensions: 384, durationMs: 10 },
+      });
+      expect(await exporter.flush()).toEqual({ traces: 1, scores: 0, error: undefined });
+      expect(bodies[0]).toContain("index.sync");
+      expect(bodies[0]).toContain("embed.batch");
+      expect(bodies[0]).not.toContain("\"work\"");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("does nothing when disabled", async () => {
-    const exporter = new LangfuseExporter(db, () => ({ enabled: false, host: "", publicKey: "", userId: "", includeContent: false, variant: "" }), { installId: "i", appVersion: "0", os: "darwin" });
+    const exporter = new LangfuseExporter(db, () => ({ endpoint: "", contentMode: "ops", environment: "test", tenantId: "test", variant: "" }), { installId: "i", appVersion: "0", os: "darwin" });
     exporter.exportRun(db, runId);
     expect(await exporter.flush()).toEqual({ traces: 0, scores: 0 });
   });

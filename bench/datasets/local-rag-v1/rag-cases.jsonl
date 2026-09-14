@@ -1,0 +1,5 @@
+{"caseId":"rag-001","question":"퇴직할 때 안 쓴 연차는 어떻게 되나요?","evidence":[{"sourceKey":"handbook.md","mustContain":["미사용 연차","수당"]}],"expect":{"mustContain":["수당"]}}
+{"caseId":"rag-002","question":"배우자 출산휴가는 며칠인가요?","evidence":[{"sourceKey":"handbook.md","mustContain":["배우자 출산","10일"]}],"expect":{"mustContain":["10일"]}}
+{"caseId":"rag-003","question":"서울 출장 숙박비 한도와 정산 기한을 알려주세요.","evidence":[{"sourceKey":"travel.md","mustContain":["서울","120,000"]},{"sourceKey":"travel.md","mustContain":["7일","정산"]}],"expect":{"mustContain":["120,000","7일"]}}
+{"caseId":"rag-004","question":"비밀번호 규칙을 알려주세요.","evidence":[{"sourceKey":"security.md","mustContain":["12자","90일"]}],"expect":{"mustContain":["12자","90일"]}}
+{"caseId":"rag-005","question":"노트북 고장 시 어디로 연락하나요?","evidence":[{"sourceKey":"it-guide.txt","mustContain":["7700"]}],"expect":{"mustContain":["7700"]}}

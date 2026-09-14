@@ -13,7 +13,7 @@ import type { StartRunInput, StartRunResult } from "../../src/app-types/Agent.ty
 import { findOpenRun } from "./store.ts";
 import { createLiteLLMClient, listModels, resolveModelAlias, type ModelClient } from "./modelClient.ts";
 import { ANSWER_PROMPT_VERSION, assignVariant, POLICY_VARIANTS } from "./policy.ts";
-import { loadModelSettings, loadTelemetrySettings, saveModelSettings, saveTelemetrySettings, type ModelSettings, type TelemetrySettings } from "./settings.ts";
+import { loadModelSettings, loadTelemetrySettings, saveModelSettings, type ModelSettings } from "./settings.ts";
 import { interactionScore, LangfuseExporter, loadInstallId } from "./telemetry.ts";
 import type { InteractionKind } from "../../src/app-types/Agent.types.ts";
 import { ensureWorkspace, inactiveCollections } from "./store.ts";
@@ -36,8 +36,6 @@ export type AgentRuntime = {
   listModels: () => Promise<string[]>;
   resolvedModelAlias: () => Promise<string>;
   telemetry: LangfuseExporter;
-  telemetrySettings: () => TelemetrySettings;
-  updateTelemetrySettings: (settings: TelemetrySettings) => void;
   variant: string;
   variants: string[];
   recordInteractionScore: (runId: string, kind: InteractionKind) => void;
@@ -93,7 +91,7 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
   ensureWorkspace(db);
   const tomato = new TomatoClient(options.workerPath, join(options.userData, "tomato"));
   let current = loadModelSettings(options.userData);
-  let telemetrySettings = loadTelemetrySettings(options.userData);
+  const telemetrySettings = loadTelemetrySettings();
   const installId = loadInstallId(options.userData);
   // Variant is fixed for the process lifetime so every run in a session lands in one arm.
   const variant = assignVariant(installId, telemetrySettings.variant);
@@ -107,7 +105,7 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
     return aliasCache.alias;
   };
 
-  const watchers = new CollectionWatchers(tomato, () => options.emitCollectionsChanged());
+  const watchers = new CollectionWatchers(tomato, () => options.emitCollectionsChanged(), (result) => telemetry.indexSync(result));
   const harnessModel = settingsBackedModelClient(() => current, resolvedModelAlias);
   const harness = new Harness({
     db,
@@ -188,13 +186,6 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
     listModels: () => (current.apiKey ? listModels(current.baseURL, current.apiKey) : Promise.resolve([])),
     resolvedModelAlias,
     telemetry,
-    telemetrySettings: () => telemetrySettings,
-    updateTelemetrySettings: (settings) => {
-      saveTelemetrySettings(options.userData, settings);
-      telemetrySettings = loadTelemetrySettings(options.userData);
-      if (telemetry.enabled) void telemetry.flush();
-      else telemetry.discardPending();
-    },
     variant,
     variants: Object.keys(POLICY_VARIANTS),
     recordInteractionScore: (runId, kind) => telemetry.score(interactionScore(runId, kind)),
