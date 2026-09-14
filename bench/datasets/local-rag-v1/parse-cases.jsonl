@@ -1,5 +1,0 @@
-{"caseId":"parse-001","sourceKey":"handbook.md","requiredUnits":[{"kind":"table","mustContain":["배우자 출산","10일"],"breadcrumbEndsWith":"경조사 휴가"},{"kind":"text","mustContain":["통상임금"],"breadcrumbEndsWith":"미사용 연차 정산"}]}
-{"caseId":"parse-002","sourceKey":"travel.md","requiredUnits":[{"kind":"table","mustContain":["서울","120,000원"],"breadcrumbEndsWith":"숙박비 한도"},{"kind":"text","mustContain":["7일 이내"],"breadcrumbEndsWith":"정산"}]}
-{"caseId":"parse-003","sourceKey":"security.md","requiredUnits":[{"kind":"text","mustContain":["12자 이상","90일"],"breadcrumbEndsWith":"비밀번호"}]}
-{"caseId":"parse-004","sourceKey":"meeting-2026-08.md","requiredUnits":[{"kind":"text","mustContain":["강릉"],"breadcrumbEndsWith":"결정 사항"},{"kind":"text","mustContain":["9월 5일"],"breadcrumbEndsWith":"후속 조치"}]}
-{"caseId":"parse-005","sourceKey":"it-guide.txt","requiredUnits":[{"kind":"text","mustContain":["7700"]},{"kind":"text","mustContain":["OTP"]}]}

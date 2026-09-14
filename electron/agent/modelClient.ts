@@ -218,7 +218,7 @@ export type FixtureScript = {
   onCall?: (info: ModelCallInfo) => void;
 };
 
-/** Deterministic client for harness tests and benchmark replay. */
+/** Deterministic client for harness tests. */
 export function createFixtureClient(script: FixtureScript): ModelClient {
   const queue = Array.isArray(script.decide) ? [...script.decide] : undefined;
   const completions = Array.isArray(script.complete) ? [...script.complete] : undefined;

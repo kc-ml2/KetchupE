@@ -13,7 +13,7 @@ import { createFixtureClient, type FixtureScript } from "./modelClient.ts";
 import { ANSWER_PROMPT_VERSION, DEFAULT_POLICY_PROFILE } from "./policy.ts";
 import { createThread, deleteThread, ensureWorkspace, getRun, listThreads, loadThread, setActiveTask } from "./store.ts";
 import { tomatoTools } from "./tools.ts";
-import { exportTraceJsonl, readTrace, transitions } from "./trace.ts";
+import { readTrace, transitions } from "./trace.ts";
 
 const base = { taskDifficulty: 1, predictedSuccess: 0.8, evidenceSufficiency: 0.5, policyVersion: "orchestration-1" } as const;
 const search = (query: string): PolicyDecision => ({ ...base, action: "SEARCH", reasonCode: "MISSING_EVIDENCE", search: { tool: "search_local_docs", query } });
@@ -70,10 +70,7 @@ describe("harness", () => {
     expect(events.some((event) => event.type === "text_delta")).toBe(true);
     expect(events.filter((event) => event.type === "citation")).toHaveLength(1);
 
-    const jsonl = exportTraceJsonl(db, handle.runId);
-    expect(jsonl).not.toContain("미사용 연차");
-    expect(jsonl).not.toContain(temporary);
-    expect(jsonl).toContain("policy.decided");
+    expect(readTrace(db, handle.runId).map((event) => event.type)).toContain("policy.decided");
   });
 
   it("ASK → waiting_user → resume → ANSWER keeps one run trajectory", async () => {

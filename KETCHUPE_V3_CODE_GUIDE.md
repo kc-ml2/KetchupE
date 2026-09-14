@@ -6,23 +6,9 @@
 
 ---
 
-## 0. 먼저 알아야 할 것 — 저장소 상태
+## 0. Repository 경계
 
-```bash
-git log --oneline -1   # c4ca782 2.1.1   ← v2 시절 커밋
-git status --short     # D  src/Pages/ChatbotPage.tsx …  ?? electron/agent/  ?? bench/
-```
-
-**v3 코드는 아직 커밋되지 않은 작업 트리 상태다.** `git status`에 MARU 기반 v2 파일(챗봇/로그인/팀/AuthContext)이 대량 `D`로 잡히고, v3 핵심(`electron/agent/`, `electron/tomato/`, `electron/db/`, `bench/`, `src/Features/Agent/`)이 `??`로 잡히는 게 정상이다. 놀라지 말 것.
-
-v2와 v3의 차이를 한 줄로:
-
-| | v2 (MARU 클라이언트) | v3 (local RAG agent) |
-| --- | --- | --- |
-| 데이터 | 원격 서버 + 팀/인증 | 100% 로컬 (SQLite + 로컬 폴더) |
-| 검색 | 서버 RAG | Electron 안의 Tomato (FTS5 + e5 embedding) |
-| 생성 | 서버 API | LiteLLM(OpenAI 호환) → 온프렘 LLM |
-| 흐름 제어 | 서버가 소유 | **Harness Runtime** (명시적 policy loop) |
+이 저장소는 Electron client와 중앙 OTLP 수집 계약만 소유한다. Benchmark runner, dataset, profile, Langfuse importer, 평가 결과는 별도 benchmark repository의 책임이다. Client에 `bench/` 폴더나 `bench:*` npm script를 만들지 않는다.
 
 ---
 
@@ -37,7 +23,7 @@ KetchupE는 **문서 챗봇이 아니라, agent의 orchestration policy를 측�
           → [[e1]] 인용이 달린 답변 + 전체 trajectory(SQLite)
 ```
 
-핵심은 매 step마다 모델이 `SEARCH / ASK / VERIFY / ANSWER / STOP` 중 하나를 **명시적으로** 고르고, 그 결정·근거·예산·결과가 전부 `trace_events` 한 줄씩 남는다는 것. 그 기록을 그대로 benchmark로 재생해서 policy A/B를 한다.
+핵심은 매 step마다 모델이 `SEARCH / ASK / VERIFY / ANSWER / STOP` 중 하나를 **명시적으로** 고르고, 그 결정·근거·예산·결과가 `trace_events`와 OTLP observation에 남는다는 것이다. 별도 benchmark repository는 Langfuse에서 이 계약을 읽는다.
 
 ---
 
@@ -96,7 +82,7 @@ electron/
 │   ├── store.ts                workspace/thread/run/message/interaction SQL
 │   ├── tools.ts                Tomato 호출 표면, SearchResult→Evidence 변환, withTimeout
 │   ├── verify.ts               [[eN]] 인용 결정적 검증/복구
-│   ├── trace.ts                TraceWriter + 내부용 redacted serializer
+│   ├── trace.ts                TraceWriter + transition 복원
 │   ├── telemetry.ts            서비스 소유 OTLP + evaluator span + outbox
 │   ├── router.ts               chat vs doc 라우팅
 │   ├── settings.ts             model(safeStorage) + 서비스 telemetry 환경 설정
@@ -116,11 +102,6 @@ src/
 ├── Features/Sidebar/           thread 목록
 ├── Contexts/ThreadsProvider    sidebar ↔ page가 공유하는 thread 목록
 └── app-types/                  Agent.types.ts, Canvas.types.ts, CanvasEdit.types.ts
-
-bench/
-├── datasets/local-rag-v1/      corpus + 6개 suite의 case JSONL (seed 상태)
-├── profiles/*.json             baseline-v1, always-search-v1, adaptive-no-ask/no-verify
-└── runner/                     parse, chunk, retrieval, policy, agent, compare, metrics
 ```
 
 **읽는 순서 추천**: `contracts.ts` → `harness.ts` → `policy.ts` → `tools.ts` + `tomato.ts`(search 부분만) → `store.ts` → `runtime.ts`. 이 6개면 제품의 90%다.
@@ -252,7 +233,7 @@ evidence:
 | `predictedSuccess` 0~1 | 남은 예산 안에 성공할 것 같은 정도 |
 | `evidenceSufficiency` 0~1 | 지금 근거로 핵심 주장을 뒷받침할 수 있는 정도 |
 
-**이 숫자들은 화면에 사실처럼 보여주지 않는다.** 저장만 해뒀다가 나중에 "이 추측이 실제로 맞았나"를 채점(Brier/ECE)하는 데 쓴다(§11).
+**이 숫자들은 화면에 사실처럼 보여주지 않는다.** OTLP로 수집한 뒤 외부 benchmark에서 실제 outcome과 비교해 Brier/ECE를 계산한다.
 
 `reasonCode`는 왜 그 행동을 골랐는지를 9개 중 하나로 고정한다: `NO_RETRIEVAL_NEEDED`, `MISSING_EVIDENCE`, `QUERY_REWRITE`, `NEED_NEIGHBORS`, `MISSING_USER_INPUT`, `CONFLICTING_EVIDENCE`, `ENOUGH_EVIDENCE`, `UNSUPPORTED`, `BUDGET_LIMIT`. 자유 서술 대신 고정 코드를 쓰는 이유는 나중에 집계·비교가 가능해야 하기 때문이고, chain-of-thought를 저장하지 않기 위해서이기도 하다.
 
@@ -265,7 +246,7 @@ evidence:
 
 두 번째는 비교용 기준선이다. "머리를 쓰는 게 정말 이득인가"를 재려면 머리를 안 쓰는 버전과 비교해야 한다.
 
-profile의 `allowedActions`에서 `ASK`를 빼면, policy가 `ASK`를 골라도 harness가 거부한다. 코드를 안 고치고 "질문 기능 없는 버전"을 만들 수 있어서 ablation 실험(§11의 `adaptive-no-ask-v1`)이 가능하다.
+profile의 `allowedActions`에서 `ASK`를 빼면 policy가 `ASK`를 골라도 harness가 거부한다. 외부 benchmark가 이 계약을 이용해 action ablation을 구성한다.
 
 ### 5.4 Harness 루프
 
@@ -388,7 +369,7 @@ stage는 `input → context → policy → retrieval → verification → genera
 
 | 이유 | 설명 |
 | --- | --- |
-| **비교하려고** | policy를 떼어놓으면 **똑같은 상황표**를 여러 policy에 주고 누가 더 잘 고르는지 볼 수 있다. `bench/datasets/local-rag-v1/states/*.json`이 얼려둔 상황표다(§11의 frozen-state replay) |
+| **비교하려고** | policy를 떼어놓으면 외부 benchmark가 똑같은 고정 `PolicyState`를 여러 policy에 주고 비교할 수 있다 |
 | **안전하려고** | 모델이 규칙을 어겨도 harness가 막는다. 예산·시간·권한은 모델이 못 넘는다 |
 | **원인을 찾으려고** | 전부 기록하니 "검색이 문제였나, 판단이 문제였나, 생성이 문제였나"를 단계별로 볼 수 있다(`first_failed_stage`) |
 | **이어가려고** | 상태를 기록에만 두니 앱을 껐다 켜도 재개된다(§7.2) |
@@ -602,7 +583,7 @@ fs.watch(root, {recursive:true})
 ## 10. Trace · Telemetry · A/B
 
 - **제품 원본은 로컬 SQLite**다. `trace_events` + `citations` + `interaction_events`. `telemetry_outbox`는 중앙 전송 재시도만 담당한다.
-- **사용자 export는 없다.** `trace.ts`의 redacted JSONL 함수는 내부 디버그용이고 renderer/IPC에 노출하지 않는다.
+- **사용자/CLI export는 없다.** 평가 데이터는 관리자가 Langfuse에서 받는다.
 - **중앙 수집**: [telemetry.ts](electron/agent/telemetry.ts)가 `agent.run`, `index.sync`, `embed.batch`, feedback evaluator span을 서비스 소유 OTLP gateway 한 곳으로 보낸다. Langfuse secret은 [telemetry-gateway.ts](scripts/telemetry-gateway.ts)만 보유한다.
 - **Content mode**: `ops`는 텍스트/ID를 설치별 HMAC 처리, `redacted_eval`은 이메일·전화번호·secret을 마스킹, `internal_full`은 사내 승인 corpus용이다. 사용자가 변경하지 않는다.
 - **A/B**: `POLICY_VARIANTS`([policy.ts](electron/agent/policy.ts))에 `adaptive-v1`(기본)과 `always-search-v1`이 있고, install id의 sha256으로 **결정적으로** 배정된다. 한 설치는 한 arm에 고정되고 프로세스 수명 동안 바뀌지 않는다.
@@ -610,35 +591,17 @@ fs.watch(root, {recursive:true})
 
 ---
 
-## 11. Benchmark
+## 11. 외부 Benchmark 연동
 
-제품 코드를 그대로 호출한다. benchmark용 retrieval/agent 재구현이 없다는 게 설계 원칙이다.
+이 client에는 benchmark runner, dataset, profile, importer가 없다. 별도 repository가 Langfuse Observations API v2 또는 Blob Export에서 `ketchupe-trajectory-v2`를 읽는다.
 
-```bash
-npm run bench:parse     -- --dataset local-rag-v1 --profile baseline-v1
-npm run bench:chunk     -- --profile baseline-v1
-npm run bench:retrieval -- --profile baseline-v1
-npm run bench:rag       -- --profile baseline-v1
-npm run bench:policy    -- --profile baseline-v1 --runs 3
-npm run bench:agent     -- --profile baseline-v1 --runs 3 --client litellm
-npm run bench:compare   -- bench/results/<baseline> bench/results/<candidate>
-npm run bench:ingest    -- --from <ISO> --to <ISO>
-npm run bench:advise    -- --latency-budget 3000 bench/results/<dirs...>
-```
+Client가 보장하는 연동 계약:
 
-| suite | 입력 → 출력 | 지표 |
-| --- | --- | --- |
-| parse | raw 파일 → canonical unit | unit recall, locator 정확도 |
-| chunk | 고정 unit → chunk | gold-span coverage, split 위반, token p50/p95 |
-| retrieval | corpus + query → ranked evidence | Recall@5/8, MRR@10, nDCG@10, latency |
-| rag | frozen gold evidence → answer | answer correctness, citation validity/coverage, token, latency |
-| policy | **고정 PolicyState** → decision | action 정확도, difficulty macro-F1, Brier, ECE, 예산 위반 |
-| agent | scripted 메시지 → 전체 trajectory | task success, `pass^k`, hop, evidence gain, 인용 유효성, token, CPU/RSS, latency, `first_failed_stage` |
-
-- `--client`: `litellm`(실제) 또는 `always-search`(모델 없는 규칙 baseline). `LITELLM_API_KEY`가 없으면 후자가 기본.
-- profile 4종으로 ablation이 된다: `baseline-v1`(전체) / `always-search-v1` / `adaptive-no-ask-v1` / `adaptive-no-verify-v1`. action을 빼는 건 `allowedActions` 한 줄이고, 나머지는 `validateDecision`이 알아서 막는다.
-- gold는 **chunk id가 아니라** `sourceKey + locator overlap + mustContain`으로 정의한다. chunker를 바꿔도 label을 재사용하기 위해서.
-- 칼리브레이션: `predictedSuccess` vs 실제 성공으로 Brier/ECE/risk-coverage를 낸다([metrics.ts](bench/runner/metrics.ts)).
+- 모든 observation에 release, environment, variant와 profile SHA를 기록한다.
+- `agent.run`, `policy.step.N`, `tool.*`, `model.*`, `index.sync`, `embed.batch`, `feedback.*` 이름을 유지한다.
+- ID와 자유 텍스트는 배포 content mode에 맞게 HMAC 또는 마스킹한다.
+- 외부 benchmark는 평가 대상 KetchupE commit SHA를 고정하고 Harness/Tomato adapter를 사용한다.
+- dataset, annotation, scorer version, 결과와 promotion 판단은 외부 repository가 소유한다.
 
 ---
 
@@ -670,19 +633,19 @@ LITELLM_API_KEY=... npm run smoke:litellm   # SSE/tool call/abort/usage 4항목 
 | Phase | 상태 | 근거 / 남은 것 |
 | --- | --- | --- |
 | 0 계약·LiteLLM 호환 | 구현됨 / **실기 검증 대기** | `contracts.ts` + 테스트, AI SDK `ai@7` 채택. `npm run smoke:litellm`을 실제 alias로 통과시켜야 함 |
-| 1 세로 한 줄 | 완료 | Tomato 이식, SEARCH→ANSWER, 인용 불변식, SQLite trace, 내부 redacted serializer, harness 테스트 |
+| 1 세로 한 줄 | 완료 | Tomato 이식, SEARCH→ANSWER, 인용 불변식, SQLite trace, harness 테스트 |
 | 2 Local RAG 제품화 | 완료 (**OCR/HWP fixture 제외**) | utilityProcess, watcher, keyword 폴백, `/agent` 화면. 테스트 fixture는 MD/TXT/DOCX만 |
-| 3 Policy baseline | 완료 | 예산·dedupe·neighbors·coercion, profile fingerprint, frozen-state replay |
+| 3 Policy baseline | 완료 | 예산·dedupe·neighbors·coercion, profile fingerprint와 중앙 trajectory |
 | 4 지속형 context·ASK | 완료 | thread CRUD(삭제 포함), 50개 페이징, running/waiting_user run 재연결, memory CRUD·pin·on/off, 답변별 applied context, ASK→resume |
-| 5 VERIFY·calibration | 완료 | VERIFY 1회, Brier/ECE/risk-coverage, interaction 이벤트 |
-| 6 Golden data | **runner·중앙 ingest 완료 / 데이터는 seed** | parse/chunk/retrieval/RAG/policy/agent, Langfuse API/Blob importer. corpus 5개 합성 문서 label은 구현자 1인 작성, **2차 검토 전** |
+| 5 VERIFY·calibration | client 수집 완료 | VERIFY 1회와 예측·outcome·interaction 기록. Brier/ECE/risk-coverage scorer는 외부 benchmark 책임 |
+| 6 Golden data | **외부 benchmark repository로 분리** | 이 저장소는 OTLP 수집 계약만 제공한다. runner·dataset·importer·promotion은 외부 저장소에서 구현·운영 |
 | 모니터링 (추가) | 완료 / 운영 provision 대기 | 강제 OTLP gateway + HMAC/redaction + agent/index/feedback trace + outbox. 실제 gateway domain/TLS/Langfuse project는 운영 설정 필요 |
 | 캔버스 (추가) | 완료 | classify→anchor→ground→draft→edit→finalize, 버전 트리 undo/redo |
 | 7 설치본 | **설정만** | native 모듈 external/asarUnpack, mac arm64+x64 매트릭스. signing/notarization credential과 fresh-install smoke 미완 |
 
 의도적으로 **하지 않은** 것들(스펙상 범위 밖):
 
-- `DELEGATE` action, multi-agent, MCP — 단일 agent benchmark에서 병목이 확인된 뒤에 추가
+- `DELEGATE` action, multi-agent, MCP — 외부 benchmark에서 병목이 확인된 뒤에 추가
 - 파일 수정·shell·browser 같은 부작용 있는 tool
 - 자동 대화 요약, semantic memory 인덱스, 사용자 미승인 memory 자동 확정
 - 온라인 학습 / 자동 프롬프트 배포
@@ -711,14 +674,14 @@ LITELLM_API_KEY=... npm run smoke:litellm   # SSE/tool call/abort/usage 4항목 
 | 기억 CRUD·선택 | [MemoryPanel.tsx](src/Features/Agent/components/MemoryPanel.tsx) + [memory.ts](electron/agent/memory.ts) + [context.ts](electron/agent/context.ts) |
 | 답변 아래 인용·적용 컨텍스트 | [AgentMessages.tsx](src/Features/Agent/components/AgentMessages.tsx) + [store.ts](electron/agent/store.ts) |
 | 새 문서 종류(canvas preset) | [canvas/presets.ts](electron/agent/canvas/presets.ts) |
-| 새 A/B arm | [policy.ts `POLICY_VARIANTS`](electron/agent/policy.ts) + `bench/profiles/*.json` |
+| 새 A/B arm | [policy.ts `POLICY_VARIANTS`](electron/agent/policy.ts); 평가 profile은 외부 benchmark repository |
 
 ---
 
 ## 15. 자주 헷갈리는 점 5가지
 
 1. **`session`이라는 단위는 없다.** Thread(대화방)와 Run(목표)을 구분해서 말할 것. `app.session`은 텔레메트리의 DAU 계산용 trace일 뿐 제품 데이터가 아니다.
-2. **policy 호출과 answer 호출은 별개의 모델 호출이다.** policy는 `toolChoice: required`인 non-streaming structured call, answer만 SSE. 이 추가 호출 비용은 benchmark에 포함되어 있다.
+2. **policy 호출과 answer 호출은 별개의 모델 호출이다.** policy는 `toolChoice: required`인 non-streaming structured call, answer만 SSE. token과 latency는 OTLP로 남아 외부 benchmark가 비용을 계산한다.
 3. **`VERIFY`(선택적 의미 검증)와 인용 검증(항상 실행되는 결정적 검사)은 다른 것이다.**
 4. **evidence id는 run 스코프**다. `e1`은 그 run 안에서만 의미가 있고, 다른 run의 `e1`과 무관하다.
 5. **resume의 원본은 메모리가 아니라 trace다.** 그래서 harness가 상태를 들고 있지 않아도 앱 재시작 후 재개가 된다. trace payload 구조를 바꾸면 resume이 깨진다.

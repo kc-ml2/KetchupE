@@ -32,7 +32,3 @@ release
 .cursor/*
 .claude/*
 .duo/
-
-# benchmark outputs
-bench/results/
-bench/imports/

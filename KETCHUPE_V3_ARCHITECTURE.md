@@ -2,7 +2,7 @@
 
 - 상태: 구현 기준 문서
 - 기준일: 2026-09-14
-- 범위: KetchupE desktop client와 사용자의 local data. MARU는 범위 밖이다.
+- 범위: KetchupE desktop client, local data, 중앙 OTLP 수집 계약. MARU와 benchmark 구현은 범위 밖이다.
 
 ## 1. 궁극적인 목표
 
@@ -21,7 +21,7 @@ KetchupE는 단순한 문서 챗봇이 아니다. **제한된 로컬 연산 자�
 
 1. 사용자의 문서를 구조와 출처를 보존해 찾는 Tomato
 2. 다음 행동을 명시적으로 결정하고 제한하는 versioned policy
-3. 실제 interaction trajectory를 고정 benchmark로 승격해 개선을 수치로 확인하는 harness
+3. 외부 benchmark가 재구성할 수 있는 versioned trajectory 계약
 
 ### 제품 가설
 
@@ -47,7 +47,7 @@ production trajectory
 4. agent가 `SEARCH`, `ASK`, `VERIFY`, `ANSWER`, `STOP` 중 다음 행동을 고르고 그 이유·난도·성공 확률을 기록한다.
 5. 최근 대화, workspace 지침, 활성 collection, 사용자가 확인한 장기 기억을 다음 run에 사용한다.
 6. 모든 policy decision, model call, retrieval, verification, answer와 사용자 반응을 한 trajectory로 연결한다.
-7. retrieval profile과 policy profile을 고정해 같은 dataset에서 A/B 비교한다.
+7. release와 retrieval/policy/answer profile SHA를 중앙 trajectory에 남긴다.
 8. macOS와 Windows의 서명된 설치본에서 같은 기능이 동작한다.
 
 ### 이번 범위에서 하지 않는 것
@@ -60,14 +60,14 @@ production trajectory
 - 외부 trace SaaS를 local trace의 원본으로 사용하는 것
 - multi-agent와 `DELEGATE` 구현
 
-`DELEGATE`는 궁극 action set에 포함하지만, 단일 agent의 policy benchmark에서 병목과 이득이 확인된 뒤 추가한다. 현재는 미래용 registry나 handoff framework를 만들지 않는다.
+`DELEGATE`는 궁극 action set에 포함하지만, 외부 benchmark에서 병목과 이득이 확인된 뒤 추가한다. 현재는 미래용 registry나 handoff framework를 만들지 않는다.
 
 ## 2. 핵심 설계 원칙
 
 1. **Policy를 framework 안에 숨기지 않는다.** 매 step의 입력 상태, 선택 행동, 관측 결과를 KetchupE 타입으로 남긴다.
 2. **Model의 자신감 하나를 사실로 믿지 않는다.** self estimate, retrieval 품질, citation 검증, 실제 성공, 사용자 반응을 따로 기록하고 calibration을 측정한다.
 3. **Tomato는 retrieval만 한다.** 대화, 기억, policy, model 호출을 알지 못한다.
-4. **한 번의 제품 코드가 UI와 benchmark에서 같이 돈다.** benchmark용으로 retrieval이나 agent를 재구현하지 않는다.
+4. **평가용 제품 로직을 복제하지 않는다.** 외부 benchmark는 평가 대상 KetchupE commit SHA를 고정하고 Harness/Tomato adapter를 호출한다.
 5. **제품 상태는 로컬, 운영 관측은 중앙이다.** 대화와 index의 원본은 local SQLite에 두되, 서비스 소유 OTLP gateway로 trajectory를 중앙 수집한다. SQLite `telemetry_outbox`는 사용자의 benchmark export가 아니라 전송 내구성을 담당한다.
 6. **비용도 품질이다.** 정답률뿐 아니라 hop, latency, token, local CPU/RAM을 함께 비교한다.
 7. **처음에는 작게 시작한다.** Tomato, LiteLLM, SQLite, 명시적 loop만 구현하고 multi-agent/online training은 측정 결과가 요구할 때 추가한다.
@@ -89,7 +89,7 @@ production trajectory
 | 기본 검색          | 활성 collection 전체, hybrid, top 8; embedding 전에는 keyword fallback                                         |
 | secret             | Electron `safeStorage`로 암호화하고 renderer/trace에 노출하지 않음                                             |
 | trace              | local SQLite가 제품 상태 원본, 서비스 소유 OTLP gateway가 Langfuse 중앙 미러를 생성                      |
-| benchmark          | 같은 repository의 headless runner가 실제 policy/Tomato/model adapter를 호출                                    |
+| benchmark          | 별도 repository가 dataset/runner/importer/result를 소유하고 고정된 KetchupE commit의 adapter를 호출             |
 
 ### AI SDK 사용 경계
 
@@ -171,13 +171,15 @@ flowchart LR
 
     HR <-->|policy / verify / answer| LITELLM[LiteLLM OpenAI-compatible API]
     LITELLM --> LLM[on-prem LLM]
+    TRACE -->|durable OTLP outbox| GATEWAY[KetchupE Telemetry Gateway]
+    GATEWAY --> LANGFUSE[Langfuse]
 ```
 
 ### 책임 경계
 
 | 영역            | 책임                                                   | 하지 않는 것                      |
 | --------------- | ------------------------------------------------------ | --------------------------------- |
-| React renderer  | 질문, stream, 컨텍스트·폴더, memory, trajectory/feedback UI | filesystem, DB, API key 직접 접근 |
+| React renderer  | 질문, stream, 컨텍스트·폴더, memory, feedback UI | filesystem, DB, API key 직접 접근 |
 | Harness Runtime | context, policy step, budget, tool 실행, answer, trace | parsing/OCR/embedding 직접 실행   |
 | Policy          | 상태를 보고 다음 action과 estimate를 반환              | tool 실행, DB 쓰기, 무제한 반복   |
 | Tomato worker   | scan, parse, chunk, embed, index, search, locator      | 대화, 기억, policy, LLM 호출      |
@@ -201,7 +203,7 @@ KetchupE/
 │   │   ├── harness.ts         # 유일한 bounded orchestration loop
 │   │   ├── tools.ts           # Tomato tool schema와 실행
 │   │   ├── verify.ts          # evidence/citation invariants
-│   │   └── trace.ts           # SQLite + 내부용 redacted serializer
+│   │   └── trace.ts           # SQLite trace + transition 복원
 │   ├── db/
 │   │   ├── openAgentDb.ts
 │   │   └── 001_agent.sql
@@ -217,11 +219,7 @@ KetchupE/
 ├── src/Features/Agent/
 │   ├── hooks/useAgentRun.ts
 │   └── components/
-├── bench/
-│   ├── datasets/local-rag-v1/
-│   ├── profiles/
-│   ├── runner/
-│   └── results/               # gitignore
+├── scripts/telemetry-gateway.ts
 └── KETCHUPE_V3_ARCHITECTURE.md
 ```
 
@@ -465,7 +463,7 @@ type AnswerEvent =
 
 ### 7.4 model client
 
-Benchmark에서 실제 client와 fixture client 두 구현이 필요하므로 이 한 interface는 유지한다.
+제품 client와 deterministic harness test가 같은 호출 계약을 사용하므로 이 한 interface는 유지한다. 외부 benchmark adapter도 평가 대상 commit의 이 계약을 호출한다.
 
 ```ts
 interface ModelClient {
@@ -487,7 +485,7 @@ interface ModelClient {
 }
 ```
 
-Policy call은 짧은 non-streaming structured response다. `ANSWER`가 선택된 경우에만 별도 `streamAnswer`를 호출해 사용자에게 SSE token을 보낸다. 이 추가 model call의 latency/token 비용은 benchmark에 포함하며, 나중에 단일 호출 방식이 같은 관측 가능성을 유지하면서 더 낫다는 수치가 나올 때 합친다.
+Policy call은 짧은 non-streaming structured response다. `ANSWER`가 선택된 경우에만 별도 `streamAnswer`를 호출해 사용자에게 SSE token을 보낸다. 이 추가 model call의 latency/token은 OTLP에 기록하며, 외부 benchmark에서 단일 호출 방식이 더 낫다는 근거가 생길 때만 합친다.
 
 ## 8. Harness Runtime
 
@@ -747,7 +745,9 @@ gold evidence를 얻었지만 답의 핵심 claim이 틀림 → generation
 timeout/protocol/budget 오류                    → runtime
 ```
 
-## 12. Benchmark와 개선 loop
+## 12. 외부 Benchmark 계약
+
+Benchmark runner, dataset, profile, Langfuse importer, 결과와 promotion 판단은 별도 repository가 소유한다. 이 client는 중앙에서 재구성 가능한 trajectory와 평가 대상 release/profile/corpus fingerprint만 제공한다.
 
 ### 12.1 suite 분리
 
@@ -764,8 +764,10 @@ Parsing, chunking, retrieval을 따로 측정해야 원인을 알 수 있고, en
 
 ### 12.2 dataset
 
+다음 구조는 외부 benchmark repository의 책임이며 KetchupE client에는 두지 않는다.
+
 ```text
-bench/datasets/local-rag-v1/
+datasets/<dataset-version>/
 ├── manifest.json
 ├── corpus/                  # 공개/합성 raw files
 ├── canonical/               # 사람이 확인한 parser gold
@@ -821,12 +823,12 @@ Agent case의 user simulator는 LLM이 아니라 고정 script다. `ASK` 문구�
 ### 12.3 실제 trajectory에서 golden set 만들기
 
 1. 서비스 소유 OTLP gateway가 `failed`, `retried`, `corrected`, 낮은 predicted success, 과도한 hop case를 Langfuse에 중앙 수집한다.
-2. 관리자가 Observations API v2 또는 Blob Export로 후보 trajectory를 `bench/imports/`에 가져온다.
+2. 관리자가 Observations API v2 또는 Blob Export로 후보 trajectory를 benchmark repository의 private import 영역에 가져온다.
 3. 사람이 원본 또는 공개 가능한 재현 corpus를 준비하고 relevant locator, expected claim, allowed action, difficulty, outcome을 붙인다.
 4. 두 번째 검토자가 label과 개인정보 제거를 확인한다.
 5. Dataset version과 SHA-256을 고정한 뒤에만 golden set에 합친다.
 
-실제 trajectory는 좋은 **후보 source**지만 그 자체가 gold는 아니다. Langfuse dataset/annotation queue로 선별·검토하고, canonical dataset은 private object storage의 immutable snapshot과 repository manifest SHA로 고정한다. 상세 계약과 명령은 [`bench.md`](bench.md)를 따른다.
+실제 trajectory는 좋은 **후보 source**지만 그 자체가 gold는 아니다. Langfuse dataset/annotation queue로 선별·검토하고, canonical dataset은 private object storage의 immutable snapshot과 외부 benchmark repository의 manifest SHA로 고정한다.
 
 ### 12.4 profile
 
@@ -872,15 +874,7 @@ Retrieval과 policy를 따로 versioning한다.
 
 ### 12.5 실행과 A/B
 
-```bash
-npm run bench:parse -- --dataset local-rag-v1 --profile baseline-v1
-npm run bench:chunk -- --dataset local-rag-v1 --profile baseline-v1
-npm run bench:retrieval -- --dataset local-rag-v1 --profile baseline-v1
-npm run bench:rag -- --dataset local-rag-v1 --profile baseline-v1
-npm run bench:policy -- --dataset local-rag-v1 --profile baseline-v1 --runs 3
-npm run bench:agent -- --dataset local-rag-v1 --profile baseline-v1 --runs 3
-npm run bench:compare -- bench/results/<baseline> bench/results/<candidate>
-```
+실행 명령과 CI는 외부 benchmark repository가 정의한다. 모든 실행은 dataset version, KetchupE commit SHA, profile SHA, model alias, hardware fingerprint를 manifest에 기록해야 한다.
 
 - Parser/chunker/retriever를 바꿀 때는 policy/model을 고정한다.
 - Policy/prompt를 바꿀 때는 corpus/retrieval profile/model을 고정한다.
@@ -897,12 +891,7 @@ Policy 평가는 두 단계다.
 
 ### 12.6 결과
 
-```text
-bench/results/<timestamp>-<profile-prefix>/
-├── manifest.json   # git sha, OS, Node/Electron, dataset/profile hash, model alias
-├── runs.jsonl      # case별 transition, output ID, metric, first_failed_stage
-└── summary.json    # 평균, p50/p95, failure counts, baseline delta
-```
+외부 benchmark 결과에는 최소 manifest, case별 run, summary와 baseline delta가 있어야 한다. Client repository에는 평가 입력이나 결과를 commit하지 않는다.
 
 승격 조건:
 
@@ -1027,7 +1016,7 @@ Renderer가 넘긴 path는 신뢰하지 않는다. `addCollection`은 main proce
 5. Model content와 문서는 untrusted input이며 filesystem scope와 memory 확정 권한을 가질 수 없다.
 6. 기본 `ops` telemetry는 ID를 설치별 HMAC으로 처리하고 metric 중심으로 수집한다. 사용자가 collector나 content mode를 변경하지 않는다.
 7. Embedding/OCR/search는 utility process에서 실행해 Electron main event loop를 막지 않는다.
-8. CPU/RAM peak, index size, embedding throughput, search p95를 packaged benchmark manifest에 기록한다.
+8. CPU/RAM tier와 embedding backend를 OTLP resource attribute로 기록해 외부 benchmark가 자원별로 비교할 수 있게 한다.
 9. Model이 offline이면 local search UI는 계속 동작하고 generation만 명확히 실패한다.
 10. Desktop binary에 Langfuse secret을 포함하지 않는다. 대외 배포는 OTLP gateway가 Langfuse key를 소유하며 client에는 교체 가능한 public ingest token만 포함한다.
 
@@ -1051,7 +1040,7 @@ Langfuse는 강제 중앙 분석·annotation control plane이며 SQLite outbox�
 - Tomato core와 smoke test를 `electron/tomato`로 이동
 - `Harness Runtime`의 `SEARCH → ANSWER` path
 - citation validation
-- thread/run/message/trace SQLite와 내부 검증용 redacted serializer
+- thread/run/message/trace SQLite
 - 문서 1개/query 1개의 headless agent test
 
 완료:
@@ -1077,7 +1066,7 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 - query rewrite와 neighbors
 - step/search/model/time budget
 - policy profile fingerprint
-- frozen-state policy benchmark
+- 외부 benchmark가 replay할 수 있는 policy state/decision 계약
 
 완료: 항상 검색하는 baseline보다 task success를 유지하면서 평균 retrieval hop 또는 latency가 낮아지는지 비교할 수 있다.
 
@@ -1092,7 +1081,7 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 - assistant message별 실제 적용 instruction/memory snapshot
 - `ASK → waiting_user → resume`
 - memory proposal/승인/삭제
-- scripted clarification와 multi-turn benchmark
+- scripted clarification을 재현할 수 있는 ASK/resume trajectory
 
 완료: 여러 채팅방을 만들고 과거 thread를 다시 열어 대화를 이어갈 수 있다. 필요한 정보가 없을 때만 질문하고, 응답 뒤 같은 run trajectory를 이어 완료한다.
 
@@ -1100,20 +1089,13 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 
 - `VERIFY` semantic evidence check 1회
 - predicted success, difficulty, evidence sufficiency 기록
-- Brier, ECE, risk-coverage, verification gain
 - user interaction event 수집
 
-완료: verification을 쓴 case가 추가 비용 대비 실패를 줄였는지 수치로 확인한다.
+완료: client가 calibration과 verification gain 계산에 필요한 예측·행동·outcome·비용을 중앙 trajectory에 남긴다. Brier, ECE, risk-coverage와 효과 판정은 외부 benchmark가 계산한다.
 
-### Phase 6 — Golden data와 profile promotion
+### Phase 6 — 외부 Golden data와 profile promotion
 
-- parse/chunk/retrieval/RAG/policy/agent runner
-- `local-rag-v1` human-labeled dataset
-- baseline/candidate compare
-- first failure stage와 원 trace 연결
-- Langfuse ingest → 비식별화 검토 → label → dataset versioning 절차
-
-완료: retrieval 또는 policy profile을 바꾸고 같은 명령으로 A/B 결과와 quality-cost delta를 얻는다.
+이 단계는 별도 benchmark repository가 소유한다. KetchupE client의 완료 조건은 Langfuse에서 run/step/tool/model/index/feedback observation을 release와 profile SHA로 조회할 수 있는 것이다. Dataset, importer, scorer, A/B 결과와 promotion gate는 client에 포함하지 않는다.
 
 ### Phase 7 — macOS/Windows 설치본
 
@@ -1140,10 +1122,9 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 | citation | unknown evidence, wrong locator, one repair only                  |
 | memory   | 직접 CRUD, confirmed only, pin/relevant selection, 전체 off, applied-context snapshot |
 | IPC      | stale event 무시, listener cleanup, secret/path 미노출            |
-| bench    | 같은 deterministic profile의 result/metric 재현                   |
 | packaged | macOS/Windows fresh install smoke                                 |
 
-일반 PR에서는 contract, Tomato keyword, fixture harness, small parse/chunk/retrieval/policy suite만 실행한다. Embedding download, 실제 LiteLLM agent bench, signed installer smoke는 nightly/release job으로 분리한다.
+일반 PR에서는 contract, Tomato keyword, fixture harness와 telemetry schema를 실행한다. 외부 benchmark, embedding download, 실제 LiteLLM 평가와 signed installer smoke는 각 전용 CI/nightly로 분리한다.
 
 ## 17. v3.0 완료 정의
 
@@ -1158,7 +1139,7 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 8. LiteLLM을 통해 citation answer가 SSE로 표시되고, 첫 token 전에는 진행 phase가 메시지 영역에 보인다.
 9. state → decision → observation → outcome과 사용자 반응이 한 trajectory에 남는다.
 10. Sidebar에서 여러 thread를 만들고 과거 대화를 불러와 새 run으로 이어간다.
-11. 같은 golden dataset에서 retrieval/policy profile A/B와 failure stage를 재현한다.
+11. 외부 benchmark가 중앙 trajectory와 고정 commit SHA로 retrieval/policy profile A/B를 재현할 수 있다.
 12. macOS/Windows signed app에서 전체 workflow가 통과한다.
 ```
 
@@ -1173,8 +1154,8 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 | 검색·질문·검증·답변·종료         | Harness Runtime                                | scripted agent scenarios    |
 | 지속형 agent                     | workspace + recent messages + confirmed memory | multi-turn memory suite     |
 | 채팅방 생성·복원·재개            | Thread → Run → Message lifecycle               | thread persistence suite    |
-| 모든 hop 추적                    | `PolicyTransition` + trace events              | trajectory schema test      |
-| trajectory 기반 개선             | OTLP → Langfuse → human label → frozen dataset → A/B | profile promotion report    |
+| 모든 hop 추적                    | `PolicyTransition` + trace events + OTLP        | telemetry schema test       |
+| trajectory 기반 개선             | OTLP → Langfuse → 외부 benchmark repository      | 외부 promotion report       |
 | 제한된 local resource            | utility process + keyword fallback + budgets   | packaged resource metrics   |
 | macOS/Windows 배포               | electron-builder + signing                     | fresh-install smoke         |
 
@@ -1219,14 +1200,14 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 | Phase | 상태 | 비고 |
 | --- | --- | --- |
 | 0 계약·LiteLLM 호환 | 구현 / 실기 검증 대기 | `electron/agent/contracts.ts` validator + 테스트, AI SDK `ai@7` + `@ai-sdk/openai-compatible` 채택. model alias는 비우면 `GET /models`의 첫 모델로 자동 결정한다. 현재 설정 form은 화면에 mount되지 않아 환경 변수/기존 user-data 설정을 사용한다. `LITELLM_API_KEY=... npm run smoke:litellm`으로 4항목 확인 필요 |
-| 1 세로 한 줄 | 완료 | Tomato core 이식(`electron/tomato`), Harness `SEARCH → ANSWER`, citation invariant, SQLite thread/run/message/trace, 내부 redacted serializer, headless harness 테스트 9개 |
+| 1 세로 한 줄 | 완료 | Tomato core 이식(`electron/tomato`), Harness `SEARCH → ANSWER`, citation invariant, SQLite thread/run/message/trace, headless harness 테스트 9개 |
 | 2 Local RAG 제품화 | 완료 (OCR/HWP fixture 제외) | utilityProcess worker, watcher(1.5s debounce·single-flight·10분 reconcile·1분 재연결), keyword fallback, `/agent` 화면(컨텍스트/폴더 분리·진행/오류·citation 원본 열기). fixture는 MD/TXT/DOCX만 포함 |
-| 3 Policy baseline | 완료 | budget·dedupe·neighbors·coercion, profile fingerprint, `bench/runner/policy.ts` frozen-state replay, always-search 규칙 baseline |
-| 4 지속형 context·ASK | 완료 | sidebar thread 생성/이름 변경/삭제, 50개 page load, 과거 thread 새 run, running/waiting_user run UI 재연결, 12개 message·workspace 지침·pinned/FTS memory 선택, memory CRUD·pin·on/off, 답변별 applied context, `ASK → waiting_user → resume`, scripted user agent bench |
-| 5 VERIFY·calibration | 완료 | `VERIFY` 1회, Brier/ECE/risk-coverage/verification gain, interaction event IPC |
-| 6 Golden data·promotion | runner 완료 / 데이터는 seed | parse/chunk/retrieval/RAG/policy/agent runner + compare/advisor + Langfuse API/Blob ingest. `local-rag-v1`은 합성 corpus·구현자 label이며 2차 검토 전(manifest.json `status` 참고) |
-| 모니터링 (추가) | 완료 / 운영 provision 대기 | 서비스 소유 OTLP gateway(`scripts/telemetry-gateway.ts`), `ketchupe-trajectory-v2`, HMAC ID, `ops`/`redacted_eval`/`internal_full`, `agent.run` + `index.sync`/`embed.batch`, durable SQLite outbox/retry, feedback evaluator span, Langfuse API/Blob importer. 실제 domain/TLS/Langfuse project는 운영 환경에서 provision |
+| 3 Policy baseline | 완료 | budget·dedupe·neighbors·coercion, profile fingerprint, always-search 규칙 baseline과 OTLP state/decision 계약 |
+| 4 지속형 context·ASK | 완료 | sidebar thread 생성/이름 변경/삭제, 50개 page load, 과거 thread 새 run, running/waiting_user run UI 재연결, 12개 message·workspace 지침·pinned/FTS memory 선택, memory CRUD·pin·on/off, 답변별 applied context, `ASK → waiting_user → resume` |
+| 5 VERIFY·calibration | client 수집 완료 | `VERIFY` 1회, predicted success/evidence sufficiency/outcome과 interaction event를 OTLP에 기록. scorer는 외부 benchmark 책임 |
+| 6 Golden data·promotion | 외부 repository 책임 | client에는 runner/dataset/importer/result가 없다. 외부 benchmark가 Langfuse와 고정 KetchupE SHA를 입력으로 사용 |
+| 모니터링 (추가) | 완료 / 운영 provision 대기 | 서비스 소유 OTLP gateway(`scripts/telemetry-gateway.ts`), `ketchupe-trajectory-v2`, HMAC ID, `ops`/`redacted_eval`/`internal_full`, `agent.run` + `index.sync`/`embed.batch`, durable SQLite outbox/retry, feedback evaluator span. 실제 domain/TLS/Langfuse project는 운영 환경에서 provision |
 | 캔버스 (추가) | 완료 | MARU doc graph를 LangGraph 없이 이식(`electron/agent/canvas/`). run kind=canvas, `run.waiting_user`로 anchor 선택/편집 대기, 전체 트리 스냅샷 버전 + head pointer undo/redo, Tomato 기반 ground/anchor. MARU 챗봇·로그인·팀 코드는 제거 |
 | 7 설치본 | 설정만 | `node:sqlite`/native 모듈 external·asarUnpack, mac arm64+x64, CI에 electron 테스트 단계. signing/fresh-install smoke는 credential 필요 |
 
-실행: Node 22.5+ (`node:sqlite`). `npm run test:electron`, `npm run bench:<suite> -- --profile baseline-v1 [--client litellm|always-search]`.
+실행: Node 22.5+ (`node:sqlite`). `npm run test:electron`, `npm test`, `npm run build`.

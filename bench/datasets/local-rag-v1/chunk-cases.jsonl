@@ -1,4 +1,0 @@
-{"caseId":"chunk-001","sourceKey":"handbook.md","goldSpans":[{"mustContain":["배우자 출산","10일"]},{"mustContain":["미사용 연차","통상임금","수당"]},{"mustContain":["30일 전","종료 확인서"]}]}
-{"caseId":"chunk-002","sourceKey":"travel.md","goldSpans":[{"mustContain":["서울","120,000원"]},{"mustContain":["해외","200 USD"]},{"mustContain":["7일 이내","영수증"]}]}
-{"caseId":"chunk-003","sourceKey":"security.md","goldSpans":[{"mustContain":["12자 이상","90일","5개"]}]}
-{"caseId":"chunk-004","sourceKey":"meeting-2026-08.md","goldSpans":[{"mustContain":["강릉","15만원"]}]}
