@@ -97,6 +97,12 @@ export function buildRunTrace(
 
   const transitions = events.filter((event) => event.type === "policy.decided" && event.payload.transition);
   const decisions = transitions.map((event) => (event.payload.transition as PolicyTransition).decision);
+  const usedMaru = transitions.some((event) => {
+    const transition = event.payload.transition as PolicyTransition;
+    return transition.observation?.kind === "external"
+      || transition.decision.search?.tool === "browse_storage"
+      || transition.decision.search?.tool === "find_storage";
+  });
   const actions = decisions.map((decision) => decision.action);
   const validated = events.find((event) => event.type === "answer.validated")?.payload;
   const failed = events.find((event) => event.type === "run.failed")?.payload;
@@ -140,17 +146,19 @@ export function buildRunTrace(
     snippet: text(item.snippet),
     score: item.score,
   }));
-  const exportObservation = (observation: PolicyTransition["observation"]) => observation?.kind === "verification"
-    ? { ...observation, missingClaims: observation.missingClaims.map((claim) => text(claim)) }
-    : observation?.kind === "user"
-      ? { ...observation, messageId: id(observation.messageId) }
-      : observation;
+  const exportObservation = (observation: PolicyTransition["observation"]) => observation?.kind === "external"
+    ? { kind: observation.kind, tool: observation.tool, latencyMs: observation.latencyMs, result: "[MARU_RESULT_OMITTED]" }
+    : observation?.kind === "verification"
+      ? { ...observation, missingClaims: observation.missingClaims.map((claim) => text(claim)) }
+      : observation?.kind === "user"
+        ? { ...observation, messageId: id(observation.messageId) }
+        : observation;
   const exportState = (state: PolicyTransition["state"]) => ({
     userGoal: text(state.userGoal),
-    activeTask: text(state.activeTask),
     selectedMemories: state.selectedMemories.map((memory) => ({ ...memory, id: id(memory.id), content: text(memory.content) })),
     recentMessages: state.recentMessages.map((message) => ({ ...message, content: text(message.content) })),
     activeCollections: state.activeCollections.map((name) => text(name)),
+    maruAvailable: state.maruAvailable,
     evidence: exportEvidence(state.evidence),
     signals: state.signals,
     previousDecisions: state.previousDecisions,
@@ -159,7 +167,11 @@ export function buildRunTrace(
   });
   const exportDecision = (decision: PolicyTransition["decision"]) => ({
     ...decision,
-    search: decision.search ? { ...decision.search, query: text(decision.search.query) } : undefined,
+    search: !decision.search
+      ? undefined
+      : decision.search.tool === "browse_storage" || decision.search.tool === "find_storage"
+        ? { tool: decision.search.tool, arguments: "[MARU_ARGUMENTS_OMITTED]" }
+        : { ...decision.search, query: text(decision.search.query) },
     question: text(decision.question),
     claimsToVerify: decision.claimsToVerify?.map((claim) => text(claim)),
     stopReason: text(decision.stopReason),
@@ -177,7 +189,7 @@ export function buildRunTrace(
         ...attr("langfuse.observation.type", "agent"),
         ...traceAttributes(),
         ...attr("langfuse.observation.input", text(run.goal)),
-        ...attr("langfuse.observation.output", text(answer?.content)),
+        ...attr("langfuse.observation.output", usedMaru ? undefined : text(answer?.content)),
         ...attr("langfuse.trace.metadata.status", run.status),
         ...attr("langfuse.trace.metadata.errorCode", run.error_code ?? undefined),
         ...attr("langfuse.trace.metadata.actions", actions.join(">")),

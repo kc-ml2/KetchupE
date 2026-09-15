@@ -43,6 +43,13 @@ describe("validateDecision", () => {
     const result = validateDecision({ ...base, action: "ASK", question: "어떤 휴가인가요?" }, state, ["SEARCH", "ANSWER", "STOP"]);
     expect(result).toMatchObject({ ok: false, code: "INVALID_DECISION" });
   });
+  it("validates MARU availability and find arguments", () => {
+    const enabled = { ...state, maruAvailable: true };
+    expect(validateDecision({ ...base, action: "SEARCH", search: { tool: "browse_storage" } }, state).ok).toBe(false);
+    expect(validateDecision({ ...base, action: "SEARCH", search: { tool: "browse_storage" } }, enabled).ok).toBe(true);
+    expect(validateDecision({ ...base, action: "SEARCH", search: { tool: "find_storage", arguments: {} } }, enabled).ok).toBe(false);
+    expect(validateDecision({ ...base, action: "SEARCH", search: { tool: "find_storage", arguments: { storage_id: "s1", file_path: "report.md" } } }, enabled).ok).toBe(true);
+  });
 });
 
 describe("normalizeBaseURL", async () => {

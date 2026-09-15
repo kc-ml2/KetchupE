@@ -17,6 +17,7 @@ import { loadModelSettings, loadTelemetrySettings, saveModelSettings, type Model
 import { interactionScore, LangfuseExporter, loadInstallId } from "./telemetry.ts";
 import type { InteractionKind } from "../../src/app-types/Agent.types.ts";
 import { ensureWorkspace, inactiveCollections } from "./store.ts";
+import { MaruClient } from "./maru.ts";
 
 export const DEFAULT_RETRIEVAL = { mode: "hybrid", topK: 8 } as const;
 
@@ -107,12 +108,14 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
 
   const watchers = new CollectionWatchers(tomato, () => options.emitCollectionsChanged(), (result) => telemetry.indexSync(result));
   const harnessModel = settingsBackedModelClient(() => current, resolvedModelAlias);
+  const maruToken = process.env.MARU_API_TOKEN?.trim();
   const harness = new Harness({
     db,
     model: harnessModel,
     tools: {
       search: (query, names) => tomato.search(query, { collections: names, mode: DEFAULT_RETRIEVAL.mode, limit: DEFAULT_RETRIEVAL.topK }),
       neighbors: (chunkId, before, after) => tomato.getNeighbors(chunkId, before, after),
+      ...(maruToken ? { maru: new MaruClient(maruToken, options.appVersion) } : {}),
     },
     profiles: {
       retrieval: { ...PIPELINE_PROFILE, ...DEFAULT_RETRIEVAL },

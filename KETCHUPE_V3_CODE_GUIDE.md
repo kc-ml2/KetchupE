@@ -77,7 +77,7 @@ electron/
 │   ├── harness.ts              ★ 판단을 실제로 실행하는 유일한 loop (예산·검사·기록)
 │   ├── policy.ts               판단용 프롬프트(POLICY/ANSWER/VERIFY), profile, variant, fingerprint
 │   ├── modelClient.ts          LiteLLM(AI SDK) 어댑터 + fixture 클라이언트
-│   ├── context.ts              workspace 지침/memory/최근 메시지 선택
+│   ├── context.ts              저장 컨텍스트/최근 메시지 선택
 │   ├── memory.ts               사용자 기억 CRUD + pending→confirmed + FTS
 │   ├── store.ts                workspace/thread/run/message/interaction SQL
 │   ├── tools.ts                Tomato 호출 표면, SearchResult→Evidence 변환, withTimeout
@@ -113,7 +113,7 @@ src/
 용어를 섞어 쓰면 바로 길을 잃는다. 다섯 개뿐이고, DB 테이블과 1:1이다.
 
 ```text
-Workspace (기본 1개, 작업 공간 지침 + 활성 collection + memory on/off)
+Workspace (기본 1개, 활성 collection + 저장 컨텍스트 on/off)
 └── Thread (= sidebar 채팅방)
     ├── Run 1 (= 사용자 목표 하나)   kind = "agent" | "canvas"
     │   ├── Message …               user/assistant 발화
@@ -123,10 +123,10 @@ Workspace (기본 1개, 작업 공간 지침 + 활성 collection + memory on/off
 
 | 단위 | 테이블 | 시작 → 종료 |
 | --- | --- | --- |
-| Workspace | `workspaces` | 앱이 `default` 1개를 보장. `active_task`(지침 호환 필드) + `memory_enabled` 보존 ([store.ts:ensureWorkspace](electron/agent/store.ts)) |
+| Workspace | `workspaces` | 앱이 `default` 1개를 보장. `active_task`는 이전 데이터 migration용이고 `memory_enabled`로 저장 컨텍스트 사용 여부를 보존 ([store.ts:ensureWorkspace](electron/agent/store.ts)) |
 | Thread | `threads` | 새 채팅 → 삭제. `updated_at`으로 sidebar 정렬, 첫 user 메시지 40자가 제목 |
 | Run | `runs` | 첫 user 메시지 → `ANSWER`/`STOP`/실패. 상태: running/waiting_user/completed/abstained/failed/cancelled |
-| Message | `messages` | 발화마다. thread + run에 연결. assistant 발화는 `applied_context`로 실제 사용한 지침·기억 snapshot을 보존 |
+| Message | `messages` | 발화마다. thread + run에 연결. assistant 발화는 `applied_context`로 실제 사용한 저장 컨텍스트 snapshot을 보존 |
 | Step | `trace_events(type='policy.decided')` | 별도 테이블 없음. payload가 곧 `PolicyTransition` |
 
 **한 thread에 열린 run은 최대 하나**. DB가 강제한다:
@@ -156,9 +156,8 @@ allowedActions: SEARCH, ASK, VERIFY, ANSWER, STOP
 
 userGoal: 퇴직할 때 안 쓴 연차는 어떻게 되나요?
 
-workspaceInstructions: 사내 규정 기준으로만 답할 것
-
 memories:
+- (preference) 사내 규정 기준으로만 답할 것
 - (preference) 답변은 존댓말로 간결하게
 
 recentMessages:
@@ -187,7 +186,6 @@ evidence:
 | --- | --- |
 | `allowedActions` | 이번 profile에서 **쓸 수 있는 행동 목록**. 여기 없는 걸 고르면 거부당한다 |
 | `userGoal` | 이 run을 시작시킨 질문 |
-| `workspaceInstructions` | 사용자가 컨텍스트 패널에 저장해둔 지침 (DB 컬럼은 호환 때문에 `active_task`) |
 | `memories` | 승인된 기억 중 이번 질문과 관련된 것 (pinned + FTS top 5) |
 | `recentMessages` | 최근 대화 12개까지 |
 | `activeCollections` | 지금 검색 대상인 폴더 |
@@ -340,7 +338,7 @@ stage는 `input → context → policy → retrieval → verification → genera
 ```text
 [준비]
   대화에 질문 저장 (messages)
-  지침·기억·최근 대화를 골라 context 구성 (context.selected 기록)
+  저장 컨텍스트·최근 대화를 골라 context 구성 (context.selected 기록)
   근거 0개, 예산 6/8/3/1/180초로 시작 (run.started 기록)
 
 [1번째 판단]
@@ -438,7 +436,7 @@ id 발급 규칙: `e${sources.size+1}`. 같은 chunk가 다시 나오면 **기�
 …
 ```
 
-answer 프롬프트([policy.ts:138](electron/agent/policy.ts#L138))는 `context` + `evidence` + `question` 3단이다. `context`는 [context.ts](electron/agent/context.ts)가 만든 workspace instruction/memory/최근 메시지 문자열이다. DB·TypeScript의 `active_task`/`activeTask`는 기존 DB 호환을 위한 이름이고, 현재 모델 프롬프트에는 `workspaceInstructions` 라벨로 전달한다(`policy-2`, `grounded-answer-2`).
+answer 프롬프트([policy.ts](electron/agent/policy.ts))는 `context` + `evidence` + `question` 3단이다. `context`는 [context.ts](electron/agent/context.ts)가 만든 저장 컨텍스트/최근 메시지 문자열이다. 기존 DB의 `active_task` 값은 앱 시작 시 pinned `preference` memory로 이전하고 비운다.
 
 시스템 프롬프트가 인용 규칙을 강제한다:
 
@@ -458,7 +456,7 @@ invalid가 있으면 **딱 한 번** `stripInvalidCitations()`로 마커를 지�
 
 `VERIFY` action은 이것과 별개다. 그쪽은 선택적인 **의미 검증**(claim이 evidence에 의해 지지되는지 모델에게 묻는 것)이고, 여기 인용 검증은 항상 실행된다.
 
-**(6) 표시와 열기** — 최종 텍스트는 `[[e1]]` 마커를 포함한 채로 `messages`에 저장된다. [AgentMessages.tsx `CitedText`](src/Features/Agent/components/AgentMessages.tsx)가 같은 정규식으로 split해서 마커를 파란 칩으로 렌더한다. 답변 아래 `사용한 컨텍스트`에는 `eN → 문서 제목·페이지`, workspace 지침, 선택된 기억이 함께 나온다. 인용 칩이나 문서 제목을 클릭하면 `agent:openCitation` → `citations.path` → `shell.openPath`로 원본 파일이 열리고 `citation_opened` interaction이 기록된다(weak label).
+**(6) 표시와 열기** — 최종 텍스트는 `[[e1]]` 마커를 포함한 채로 `messages`에 저장된다. [AgentMessages.tsx `MessageBody`](src/Features/Agent/components/AgentMessages.tsx)가 마커를 파란 칩으로 렌더한다. 답변 아래 `사용한 컨텍스트`에는 `eN → 문서 제목·페이지`와 선택된 저장 컨텍스트가 함께 나온다. 인용 칩이나 문서 제목을 클릭하면 `agent:openCitation` → `citations.path` → `shell.openPath`로 원본 파일이 열리고 `citation_opened` interaction이 기록된다(weak label).
 
 ### 6.3 evidence가 policy에도 들어간다는 점
 
@@ -508,14 +506,13 @@ Canvas run도 같은 메커니즘을 쓴다(§8).
 
 [context.ts `selectContext()`](electron/agent/context.ts) — 순서가 결정적이다(재현 가능해야 하므로):
 
-1. workspace 지침 1개(DB 컬럼은 호환성 때문에 `active_task` 유지, 최대 1,000자)
-2. `memory_enabled=1`일 때 pinned confirmed memory
-3. 같은 조건에서 현재 질문으로 `memories_fts`(FTS5, CJK 정규화) 검색한 confirmed memory top 5
-4. 최근 메시지 12개 (방금 넣은 현재 user 메시지는 제외)
+1. `memory_enabled=1`일 때 pinned confirmed memory
+2. 같은 조건에서 현재 질문으로 `memories_fts`(FTS5, CJK 정규화) 검색한 confirmed memory top 5
+3. 최근 메시지 12개 (방금 넣은 현재 user 메시지는 제외)
 
-지침과 메모리는 합쳐 **1,500 토큰**에서 자르고, 선택/제외된 memory id를 `context.selected` 이벤트에 남긴다. 사용자가 UI에서 직접 추가한 memory는 즉시 `confirmed`가 되고 추가·수정·삭제·항상 적용(pin)이 가능하다. 모델이 제안한 memory만 `pending`이며 사용자가 승인해야 FTS 인덱스에 들어간다([memory.ts](electron/agent/memory.ts)). 기억 전체를 끄면 저장값은 유지하되 context 선택에서 제외한다.
+저장 컨텍스트는 **1,500 토큰**에서 자르고, 선택/제외된 memory id를 `context.selected` 이벤트에 남긴다. 사용자가 UI에서 직접 추가한 memory는 즉시 `confirmed`가 되고 추가·수정·삭제·항상 적용(pin)이 가능하다. 모델이 제안한 memory만 `pending`이며 사용자가 승인해야 FTS 인덱스에 들어간다([memory.ts](electron/agent/memory.ts)). 전체를 끄면 저장값은 유지하되 context 선택에서 제외한다.
 
-Assistant message마다 생성 당시 실제 사용한 workspace 지침과 memory 목록을 `messages.applied_context` JSON snapshot으로 저장한다. 이후 지침이나 기억을 바꿔도 과거 답변의 “사용한 컨텍스트” 표시는 바뀌지 않는다. 문서 evidence는 중복 저장하지 않고 `citations`에서 조회한다.
+Assistant message마다 생성 당시 실제 사용한 memory 목록을 `messages.applied_context` JSON snapshot으로 저장한다. 이후 저장 컨텍스트를 바꿔도 과거 답변의 “사용한 컨텍스트” 표시는 바뀌지 않는다. 문서 evidence는 중복 저장하지 않고 `citations`에서 조회한다.
 
 UI에 보이는 50개 페이지와 모델에 보내는 12개는 **별개 기준**이다. 화면 전체를 모델에 보내지 않는다.
 
@@ -531,7 +528,7 @@ UI에 보이는 50개 페이지와 모델에 보내는 12개는 **별개 기준*
 
 | 패널 | 역할 |
 | --- | --- |
-| **컨텍스트** | 모든 대화에 적용할 workspace 지침과 durable memory의 추가·수정·삭제·pin·전체 on/off |
+| **컨텍스트** | 응답 방식과 업무 정보의 추가·수정·삭제·pin·전체 on/off |
 | **폴더** | Tomato가 검색할 local collection 등록·활성화·수동 동기화·등록 해제와 색인 상태 확인 |
 
 상단의 “현재 작업 한 줄” 입력은 제거했다. 가운데 입력창의 질문은 현재 thread/run에만 적용되고, 지속적으로 적용할 내용은 컨텍스트 패널에서 명시적으로 저장한다.

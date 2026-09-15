@@ -1,35 +1,62 @@
-import { Fragment } from "react";
-import { LuThumbsDown, LuThumbsUp } from "react-icons/lu";
-import type { AppliedContext, CitationSummary, InteractionKind, MemoryKind, MessageRecord } from "@app-types/Agent.types";
+import { useMemo } from "react";
+import { LuCopy } from "react-icons/lu";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
+import type { AppliedContext, CitationSummary, MemoryKind, MessageRecord } from "@app-types/Agent.types";
 
 const CITATION = /\[\[(e\d+)\]\]/g;
+const CITE_HREF = "#cite-";
 
-/** Renders [[eN]] markers as clickable chips that open the original document location. */
-export const CitedText = ({ text, runId, onOpenCitation }: { text: string; runId: string | null; onOpenCitation: (runId: string, evidenceId: string) => void }): React.JSX.Element => {
-  const parts = text.split(CITATION);
+/** `[[e1]]` → `[e1](#cite-e1)` so the markdown renderer hands it to the link component as a chip. */
+const withCitationLinks = (text: string): string => text.replace(CITATION, `[$1](${CITE_HREF}$1)`);
+
+const chip = "inline-flex items-center mx-0.5 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[#E6F0FF] text-[#0066FF] dark:bg-[#1E293B] align-middle";
+const border = "border-[#D4D4D8] dark:border-[#3F3F46]";
+const codeBg = "bg-black/5 dark:bg-white/10";
+
+const buildComponents = (runId: string | null, onOpenCitation: (runId: string, evidenceId: string) => void): Components => ({
+  a: ({ href, children }) => {
+    const evidenceId = href?.startsWith(CITE_HREF) ? href.slice(CITE_HREF.length) : null;
+    if (evidenceId) {
+      return (
+        <button type="button" disabled={!runId} onClick={() => runId && onOpenCitation(runId, evidenceId)} className={chip} title="원본 위치 열기">
+          {evidenceId}
+        </button>
+      );
+    }
+    return <a href={href} target="_blank" rel="noreferrer noopener" className="text-[#0066FF] underline">{children}</a>;
+  },
+  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  ul: ({ children }) => <ul className="mb-2 list-disc pl-5 last:mb-0">{children}</ul>,
+  ol: ({ children }) => <ol className="mb-2 list-decimal pl-5 last:mb-0">{children}</ol>,
+  li: ({ children }) => <li className="mb-0.5">{children}</li>,
+  h1: ({ children }) => <h1 className="mb-2 mt-1 text-base font-semibold first:mt-0">{children}</h1>,
+  h2: ({ children }) => <h2 className="mb-2 mt-1 text-[15px] font-semibold first:mt-0">{children}</h2>,
+  h3: ({ children }) => <h3 className="mb-1.5 mt-1 text-sm font-semibold first:mt-0">{children}</h3>,
+  // A fenced block keeps react-markdown's language class; inline code gets the pill styling.
+  code: ({ className, children }) => (className ? <code className={className}>{children}</code> : <code className={`rounded px-1 py-0.5 text-[13px] ${codeBg}`}>{children}</code>),
+  pre: ({ children }) => <pre className={`mb-2 overflow-x-auto rounded-lg p-3 text-[13px] last:mb-0 ${codeBg}`}>{children}</pre>,
+  blockquote: ({ children }) => <blockquote className={`mb-2 border-l-2 pl-3 text-[#52525B] last:mb-0 dark:text-[#A1A1AA] ${border}`}>{children}</blockquote>,
+  table: ({ children }) => <div className="mb-2 overflow-x-auto last:mb-0"><table className="w-full border-collapse text-[13px]">{children}</table></div>,
+  th: ({ children }) => <th className={`border px-2 py-1 text-left font-semibold ${border}`}>{children}</th>,
+  td: ({ children }) => <td className={`border px-2 py-1 ${border}`}>{children}</td>,
+  hr: () => <hr className={`my-3 ${border}`} />,
+});
+
+/** Assistant answers are markdown; `[[eN]]` markers render as chips that open the original document. */
+export const MessageBody = ({ text, runId, onOpenCitation }: { text: string; runId: string | null; onOpenCitation: (runId: string, evidenceId: string) => void }): React.JSX.Element => {
+  const components = useMemo(() => buildComponents(runId, onOpenCitation), [runId, onOpenCitation]);
   return (
-    <>
-      {parts.map((part, index) =>
-        index % 2 === 1 ? (
-          <button
-            key={index}
-            type="button"
-            disabled={!runId}
-            onClick={() => runId && onOpenCitation(runId, part)}
-            className="inline-flex items-center mx-0.5 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[#E6F0FF] text-[#0066FF] dark:bg-[#1E293B] align-middle"
-            title="원본 위치 열기"
-          >
-            {part}
-          </button>
-        ) : (
-          <Fragment key={index}>{part}</Fragment>
-        ),
-      )}
-    </>
+    <div className="break-words">
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
+        {withCitationLinks(text)}
+      </ReactMarkdown>
+    </div>
   );
 };
 
-const MEMORY_KIND_LABEL: Record<MemoryKind, string> = { preference: "응답 선호", fact: "업무·사용자 정보", task: "작업" };
+const MEMORY_KIND_LABEL: Record<MemoryKind, string> = { preference: "응답 방식", fact: "업무 정보", task: "작업" };
 
 const ContextSources = ({ citations, appliedContext, runId, onOpenCitation }: { citations: CitationSummary[]; appliedContext: AppliedContext; runId: string | null; onOpenCitation: (runId: string, evidenceId: string) => void }): React.JSX.Element | null => {
   if (!citations.length && !appliedContext.workspaceInstruction && !appliedContext.memories.length) return null;
@@ -54,7 +81,7 @@ const ContextSources = ({ citations, appliedContext, runId, onOpenCitation }: { 
       )}
       {appliedContext.workspaceInstruction && (
         <div className="mb-2 text-xs text-[#52525B] dark:text-[#A1A1AA]">
-          <span className="block text-[11px] text-[#71717A]">작업 공간 지침</span>
+          <span className="block text-[11px] text-[#71717A]">저장된 컨텍스트</span>
           {appliedContext.workspaceInstruction}
         </div>
       )}
@@ -78,10 +105,9 @@ type Props = {
   hasMore: boolean;
   onLoadOlder: () => void;
   onOpenCitation: (runId: string, evidenceId: string) => void;
-  onInteraction: (runId: string, kind: InteractionKind) => void;
 };
 
-const AgentMessages = ({ messages, streamingText, streamingRunId, streamingCitations, streamingAppliedContext, progressText, hasMore, onLoadOlder, onOpenCitation, onInteraction }: Props): React.JSX.Element => (
+const AgentMessages = ({ messages, streamingText, streamingRunId, streamingCitations, streamingAppliedContext, progressText, hasMore, onLoadOlder, onOpenCitation }: Props): React.JSX.Element => (
   <div className="flex flex-col gap-3">
     {hasMore && (
       <button type="button" onClick={onLoadOlder} className="self-center text-xs text-[#0066FF] hover:underline">
@@ -90,13 +116,12 @@ const AgentMessages = ({ messages, streamingText, streamingRunId, streamingCitat
     )}
     {messages.map((message) => (
       <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-        <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed ${message.role === "user" ? "bg-[#0066FF] text-white" : "bg-[#F4F4F5] dark:bg-[#1F1F1F] text-[#18181B] dark:text-[#FAFAFA]"}`}>
-          {message.role === "assistant" ? <CitedText text={message.content} runId={message.runId} onOpenCitation={onOpenCitation} /> : message.content}
+        <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${message.role === "user" ? "whitespace-pre-wrap bg-[#0066FF] text-white" : "bg-[#F4F4F5] dark:bg-[#1F1F1F] text-[#18181B] dark:text-[#FAFAFA]"}`}>
+          {message.role === "assistant" ? <MessageBody text={message.content} runId={message.runId} onOpenCitation={onOpenCitation} /> : message.content}
           {message.role === "assistant" && <ContextSources citations={message.citations} appliedContext={message.appliedContext} runId={message.runId} onOpenCitation={onOpenCitation} />}
-          {message.role === "assistant" && message.runId && (
+          {message.role === "assistant" && (
             <div className="flex items-center gap-2 mt-2 text-[#71717A]">
-              <button type="button" title="도움됨" onClick={() => onInteraction(message.runId as string, "accepted")} className="hover:text-[#0066FF]"><LuThumbsUp className="w-3.5 h-3.5" /></button>
-              <button type="button" title="틀렸거나 수정 필요" onClick={() => onInteraction(message.runId as string, "corrected")} className="hover:text-[#DC2626]"><LuThumbsDown className="w-3.5 h-3.5" /></button>
+              <button type="button" title="답변 복사" aria-label="답변 복사" onClick={() => void navigator.clipboard.writeText(message.content)} className="hover:text-[#0066FF]"><LuCopy className="w-3.5 h-3.5" /></button>
             </div>
           )}
         </div>
@@ -104,8 +129,8 @@ const AgentMessages = ({ messages, streamingText, streamingRunId, streamingCitat
     ))}
     {streamingText && (
       <div className="flex justify-start">
-        <div className="max-w-[80%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap leading-relaxed bg-[#F4F4F5] dark:bg-[#1F1F1F] text-[#18181B] dark:text-[#FAFAFA]">
-          <CitedText text={streamingText} runId={streamingRunId} onOpenCitation={onOpenCitation} />
+        <div className="max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed bg-[#F4F4F5] dark:bg-[#1F1F1F] text-[#18181B] dark:text-[#FAFAFA]">
+          <MessageBody text={streamingText} runId={streamingRunId} onOpenCitation={onOpenCitation} />
           <ContextSources citations={streamingCitations} appliedContext={streamingAppliedContext} runId={streamingRunId} onOpenCitation={onOpenCitation} />
         </div>
       </div>

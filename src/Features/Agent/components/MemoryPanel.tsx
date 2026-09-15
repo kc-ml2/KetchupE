@@ -11,8 +11,8 @@ type Props = {
 };
 
 const KIND_LABEL: Record<MemoryKind, string> = {
-  preference: "응답 선호",
-  fact: "업무·사용자 정보",
+  preference: "응답 방식",
+  fact: "업무 정보",
   task: "작업(기존)",
 };
 const field = "w-full rounded-lg border border-[#E4E4E7] bg-white px-2.5 py-2 text-sm text-[#18181B] outline-none focus:border-[#0066FF] dark:border-[#27272A] dark:bg-[#0F0F0F] dark:text-[#FAFAFA]";
@@ -68,34 +68,34 @@ const MemoryPanel = ({ memories, onAdd, onUpdate, onPin, onConfirm, onDelete }: 
             setPinned(next === "preference");
           }}
           className={field}
-          aria-label="기억 종류"
+          aria-label="컨텍스트 종류"
         >
-          <option value="preference">응답 선호</option>
-          <option value="fact">업무·사용자 정보</option>
+          <option value="preference">응답 방식</option>
+          <option value="fact">업무 정보</option>
         </select>
         <textarea
           value={content}
           onChange={(event) => setContent(event.target.value)}
-          placeholder="예: 답변은 항상 존댓말로 작성"
+          placeholder={kind === "preference" ? "예: 답변은 결론부터 존댓말로 작성" : "예: 우리 회사 회계연도는 4월에 시작"}
           maxLength={500}
           rows={2}
           className={`${field} resize-none`}
-          aria-label="새 기억 내용"
+          aria-label="새 컨텍스트 내용"
         />
         <label className="flex items-center gap-2 text-xs text-[#52525B] dark:text-[#A1A1AA]">
           <input type="checkbox" checked={pinned} onChange={(event) => setPinned(event.target.checked)} />
           모든 질문에 항상 적용
         </label>
         <button type="submit" disabled={!content.trim()} className="self-start rounded-lg bg-[#0066FF] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">
-          기억 추가
+          컨텍스트 추가
         </button>
       </form>
 
       <p className="text-[11px] leading-relaxed text-[#71717A]">
-        직접 저장한 기억은 바로 사용할 수 있습니다. 문서에서 가져온 사실은 기억 대신 참고 문서에 두세요.
+        직접 저장한 컨텍스트는 바로 사용할 수 있습니다. 문서 내용은 여기에 복사하지 말고 참고 문서에 두세요.
       </p>
       {error && <p className="text-xs text-[#DC2626]">{error}</p>}
-      {memories.length === 0 && <p className="text-xs text-[#71717A]">저장된 기억이 없습니다.</p>}
+      {memories.length === 0 && <p className="text-xs text-[#71717A]">저장된 컨텍스트가 없습니다.</p>}
 
       {memories.map((memory) => (
         <div key={memory.id} className="rounded-lg border border-[#E4E4E7] p-3 text-sm dark:border-[#27272A]">
@@ -108,7 +108,7 @@ const MemoryPanel = ({ memories, onAdd, onUpdate, onPin, onConfirm, onDelete }: 
 
           {editingId === memory.id ? (
             <div className="mt-2 flex flex-col gap-2">
-              <textarea value={editContent} onChange={(event) => setEditContent(event.target.value)} maxLength={500} rows={2} className={`${field} resize-none`} aria-label="기억 내용 수정" />
+              <textarea value={editContent} onChange={(event) => setEditContent(event.target.value)} maxLength={500} rows={2} className={`${field} resize-none`} aria-label="컨텍스트 내용 수정" />
               <div className="flex gap-3 text-xs">
                 <button type="button" onClick={() => void update(memory)} className="text-[#0066FF] hover:underline">저장</button>
                 <button type="button" onClick={() => setEditingId(null)} className="text-[#71717A] hover:underline">취소</button>
@@ -120,7 +120,7 @@ const MemoryPanel = ({ memories, onAdd, onUpdate, onPin, onConfirm, onDelete }: 
 
           {editingId !== memory.id && (
             <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-              {memory.status === "pending" && <button type="button" onClick={() => void perform(() => onConfirm(memory.id))} className="text-[#0066FF] hover:underline">기억하기</button>}
+              {memory.status === "pending" && <button type="button" onClick={() => void perform(() => onConfirm(memory.id))} className="text-[#0066FF] hover:underline">저장하기</button>}
               {memory.status === "confirmed" && (
                 <label className="flex items-center gap-1.5 text-[#71717A]">
                   <input type="checkbox" checked={memory.pinned} onChange={(event) => void perform(() => onPin(memory.id, event.target.checked))} />
@@ -128,7 +128,7 @@ const MemoryPanel = ({ memories, onAdd, onUpdate, onPin, onConfirm, onDelete }: 
                 </label>
               )}
               <button type="button" onClick={() => { setEditingId(memory.id); setEditContent(memory.content); }} className="text-[#0066FF] hover:underline">수정</button>
-              <button type="button" onClick={() => window.confirm("이 기억을 삭제할까요?") && void perform(() => onDelete(memory.id))} className="text-[#DC2626] hover:underline">삭제</button>
+              <button type="button" onClick={() => window.confirm("이 컨텍스트를 삭제할까요?") && void perform(() => onDelete(memory.id))} className="text-[#DC2626] hover:underline">삭제</button>
             </div>
           )}
         </div>

@@ -5,6 +5,9 @@ import type { ChunkRecord, SearchMode, SearchResult, Tomato, TomatoSearch } from
 export interface SearchTools {
   search(query: string, collections: string[]): Promise<TomatoSearch>;
   neighbors(chunkId: string, before: number, after: number): Promise<ChunkRecord[]>;
+  maru?: {
+    call(tool: "browse_storage" | "find_storage", args: Record<string, unknown>, signal: AbortSignal): Promise<unknown>;
+  };
 }
 
 export type RetrievalSettings = { mode: SearchMode; topK: number };

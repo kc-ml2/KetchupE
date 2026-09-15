@@ -3,7 +3,6 @@ const { contextBridge, ipcRenderer } = require('electron');
 // v3 local RAG agent API — narrow surface, no paths or secrets cross this bridge.
 contextBridge.exposeInMainWorld('agentAPI', {
   getWorkspace: () => ipcRenderer.invoke('agent:getWorkspace'),
-  setActiveTask: (workspaceId, task) => ipcRenderer.invoke('agent:setActiveTask', workspaceId, task),
   setMemoryEnabled: (workspaceId, enabled) => ipcRenderer.invoke('agent:setMemoryEnabled', workspaceId, enabled),
 
   createThread: (workspaceId) => ipcRenderer.invoke('agent:createThread', workspaceId),

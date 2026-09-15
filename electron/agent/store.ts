@@ -5,7 +5,6 @@ import type { AppliedContext, CitationSummary, InteractionKind, MessagePage, Mes
 export const DEFAULT_WORKSPACE_ID = "default";
 export const THREAD_TITLE_MAX_CHARS = 40;
 export const THREAD_PAGE_SIZE = 50;
-export const WORKSPACE_INSTRUCTION_MAX_CHARS = 1000;
 
 const now = () => new Date().toISOString();
 
@@ -15,15 +14,11 @@ export function ensureWorkspace(db: DatabaseSync, id = DEFAULT_WORKSPACE_ID): Wo
 }
 
 export function getWorkspace(db: DatabaseSync, id: string): WorkspaceSummary {
-  const row = db.prepare("SELECT id, name, active_task, memory_enabled FROM workspaces WHERE id = ?").get(id) as
-    | { id: string; name: string; active_task: string | null; memory_enabled: number }
+  const row = db.prepare("SELECT id, name, memory_enabled FROM workspaces WHERE id = ?").get(id) as
+    | { id: string; name: string; memory_enabled: number }
     | undefined;
   if (!row) throw new Error(`workspace not found: ${id}`);
-  return { id: row.id, name: row.name, activeTask: row.active_task, memoryEnabled: row.memory_enabled === 1 };
-}
-
-export function setActiveTask(db: DatabaseSync, workspaceId: string, task: string | null): void {
-  db.prepare("UPDATE workspaces SET active_task = ? WHERE id = ?").run(task?.trim().slice(0, WORKSPACE_INSTRUCTION_MAX_CHARS) || null, workspaceId);
+  return { id: row.id, name: row.name, memoryEnabled: row.memory_enabled === 1 };
 }
 
 export function setMemoryEnabled(db: DatabaseSync, workspaceId: string, enabled: boolean): void {

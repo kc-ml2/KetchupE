@@ -45,7 +45,7 @@ production trajectory
 2. 로컬 폴더, rclone으로 동기화된 Google Drive 폴더, Notion export 폴더를 같은 collection으로 취급한다.
 3. HWP/HWPX/PDF/DOCX/XLS/XLSX/MD/TXT/이미지 OCR을 구조와 locator를 보존해 검색한다.
 4. agent가 `SEARCH`, `ASK`, `VERIFY`, `ANSWER`, `STOP` 중 다음 행동을 고르고 그 이유·난도·성공 확률을 기록한다.
-5. 최근 대화, workspace 지침, 활성 collection, 사용자가 확인한 장기 기억을 다음 run에 사용한다.
+5. 최근 대화, 활성 collection, 사용자가 확인한 저장 컨텍스트를 다음 run에 사용한다.
 6. 모든 policy decision, model call, retrieval, verification, answer와 사용자 반응을 한 trajectory로 연결한다.
 7. release와 retrieval/policy/answer profile SHA를 중앙 trajectory에 남긴다.
 8. macOS와 Windows의 서명된 설치본에서 같은 기능이 동작한다.
@@ -197,7 +197,7 @@ KetchupE/
 │   ├── agent/
 │   │   ├── contracts.ts       # state, decision, observation, event
 │   │   ├── modelClient.ts     # LiteLLM policy/verify/answer calls
-│   │   ├── context.ts         # history + workspace instruction + memory selection
+│   │   ├── context.ts         # history + saved context selection
 │   │   ├── memory.ts          # user-authored/confirmed memory CRUD + FTS
 │   │   ├── policy.ts          # policy prompt/profile + decision validation
 │   │   ├── harness.ts         # 유일한 bounded orchestration loop
@@ -249,7 +249,7 @@ Workspace
 
 | 단위        | 의미                               | 시작과 종료                                    | 보존 범위                                  |
 | ----------- | ---------------------------------- | ---------------------------------------------- | ------------------------------------------ |
-| `Workspace` | 작업 환경                          | 앱이 `default` 1개를 보장; 현재 생성/삭제 UI 없음 | workspace 지침, memory on/off, collections, confirmed memory |
+| `Workspace` | 작업 환경                          | 앱이 `default` 1개를 보장; 현재 생성/삭제 UI 없음 | saved context on/off, collections, confirmed memory |
 | `Thread`    | sidebar의 채팅방                   | 새 채팅 생성부터 삭제까지                      | 모든 message와 여러 run                    |
 | `Run`       | 하나의 사용자 목표를 처리하는 실행 | 최초 user message부터 `ANSWER`/`STOP`/실패까지 | state, evidence, outcome                   |
 | `Message`   | user/assistant의 실제 발화         | 발화마다 생성                                  | thread와 run에 연결                        |
@@ -337,7 +337,6 @@ type PolicyState = {
   runId: string;
   step: number;
   userGoal: string;
-  activeTask?: string; // DB/API 호환 이름; 의미는 workspace instruction
   selectedMemories: Array<{
     id: string;
     kind: "preference" | "fact" | "task";
@@ -631,24 +630,23 @@ Embedding이 준비되지 않았거나 실패해도 keyword 검색을 계속하�
 | -------------- | ------------------------------------------- | ---------------------- |
 | working        | 현재 state, decision, observation, evidence | run 완료까지           |
 | conversation   | 최근 message 12개                           | thread 삭제까지        |
-| workspace      | 모든 대화에 적용할 지침, 활성 collection     | 사용자가 변경할 때까지 |
-| durable memory | 사용자가 확인한 preference/fact/task        | 사용자가 삭제할 때까지 |
+| workspace      | 활성 collection과 저장 컨텍스트 사용 여부     | 사용자가 변경할 때까지 |
+| durable memory | 사용자가 확인한 응답 방식/업무 정보/task      | 사용자가 삭제할 때까지 |
 
 선택 순서는 결정적으로 고정한다.
 
-1. workspace instruction 1개(최대 1,000자)
-2. memory가 켜져 있으면 pinned confirmed memory
-3. memory가 켜져 있으면 현재 질문으로 SQLite FTS5 검색한 confirmed memory top 5
-4. 최근 message 12개
-5. 현재 user message
+1. 저장 컨텍스트가 켜져 있으면 pinned confirmed memory
+2. 같은 조건에서 현재 질문으로 SQLite FTS5 검색한 confirmed memory top 5
+3. 최근 message 12개
+4. 현재 user message
 
-지침과 memory context는 합쳐 1,500 estimated tokens에서 자르고 선택/제외 ID를 `context.selected`에 남긴다. `workspaces.memory_enabled=0`이면 저장된 memory는 보존하지만 선택하지 않는다. 문서 원문을 memory로 복사하지 않는다. 문서 기반 memory는 `sourceId + locator + 사용자가 확인한 요약`만 저장한다.
+memory context는 1,500 estimated tokens에서 자르고 선택/제외 ID를 `context.selected`에 남긴다. `workspaces.memory_enabled=0`이면 저장값은 보존하지만 선택하지 않는다. 문서 원문을 memory로 복사하지 않는다. 문서 기반 memory는 `sourceId + locator + 사용자가 확인한 요약`만 저장한다.
 
 사용자가 컨텍스트 패널에서 직접 추가한 memory는 사용자 의사가 명확하므로 즉시 `confirmed`가 된다. content는 500자로 제한하고 종류 검증 후 memory 행과 FTS를 한 transaction에서 갱신한다. 사용자는 수정·삭제·항상 적용(pin)할 수 있다. Model이 제안한 memory만 `pending`이고 사용자가 승인해야 `confirmed`가 된다. 자동 conversation summarization과 semantic memory index는 baseline에 넣지 않는다.
 
-DB와 기존 TypeScript의 `active_task`/`activeTask` 이름은 migration 호환을 위해 유지하지만, 제품 의미는 “현재 작업”이 아니라 **workspace instruction**이다. 모델 prompt에는 `workspaceInstructions`로 전달하며 이 의미 변경에 맞춰 runtime prompt version은 `policy-2`, `grounded-answer-2`다.
+기존 DB의 `active_task`는 migration 호환을 위해서만 유지한다. 앱 시작 시 값이 있으면 pinned `preference` memory로 한 번 이전하고 비운다. 새 값은 만들지 않는다.
 
-Assistant message에는 생성 당시 실제 적용한 instruction과 memory를 다음 형태로 snapshot한다. 문서 evidence는 `citations`가 원본이므로 중복하지 않는다.
+Assistant message에는 생성 당시 실제 적용한 memory를 다음 형태로 snapshot한다. 문서 evidence는 `citations`가 원본이므로 중복하지 않는다. `workspaceInstruction`은 이전 버전 답변을 읽기 위한 호환 필드다.
 
 ```ts
 type AppliedContext = {
@@ -657,11 +655,11 @@ type AppliedContext = {
 };
 ```
 
-`messages.applied_context`를 답변 단위로 저장하므로 사용자가 나중에 지침이나 memory를 수정해도 과거 답변의 적용 내역은 바뀌지 않는다. UI는 답변 아래 “사용한 컨텍스트”에 이 snapshot과 실제 인용한 문서 제목·페이지를 함께 보여준다.
+`messages.applied_context`를 답변 단위로 저장하므로 사용자가 나중에 저장 컨텍스트를 수정해도 과거 답변의 적용 내역은 바뀌지 않는다. UI는 답변 아래 “사용한 컨텍스트”에 이 snapshot과 실제 인용한 문서 제목·페이지를 함께 보여준다.
 
 ### 10.1 Renderer 패널 경계
 
-오른쪽 sidebar는 **컨텍스트 / 폴더** 두 패널로 나눈다. 컨텍스트는 workspace instruction과 durable memory만 관리하고, 폴더는 Tomato collection 등록·활성화·동기화·해제를 담당한다. 가운데 질문 입력은 현재 thread/run에만 적용된다. 서로 수명이 다른 질문, 지침, memory, retrieval source를 한 입력이나 한 패널로 섞지 않는다.
+오른쪽 sidebar의 컨텍스트 패널은 응답 방식과 업무 정보를 하나의 durable memory 목록으로 관리한다. 폴더 패널은 Tomato collection 등록·활성화·동기화·해제를 담당한다. 가운데 질문 입력은 현재 thread/run에만 적용된다.
 
 ## 11. Trajectory와 사용자 interaction
 
@@ -911,7 +909,7 @@ Tomato index와 agent state를 분리한다. Retrieval profile을 바꿔 index�
 `agent.sqlite`의 최소 table은 다음과 같다.
 
 ```text
-workspaces               active_task + memory_enabled
+workspaces               active_task(legacy migration) + memory_enabled
 workspace_collections    collection 활성 상태
 threads                  workspace_id + title + created_at + updated_at
 runs                     thread_id + kind + goal + status + profile fingerprints
@@ -962,7 +960,6 @@ type AgentStreamEvent = {
 
 type KetchupEAgentAPI = {
   getWorkspace(): Promise<WorkspaceSummary>;
-  setActiveTask(workspaceId: string, instruction: string | null): Promise<void>;
   setMemoryEnabled(workspaceId: string, enabled: boolean): Promise<void>;
 
   createThread(workspaceId: string): Promise<ThreadSummary>;
@@ -1076,9 +1073,9 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 - 최신 message 50개와 이전 page load
 - 과거 thread에서 새 run 시작
 - 앱 재시작 후 thread/run/message 복원과 running/waiting_user run UI 재연결
-- workspace instruction, recent messages, confirmed memory 선택
+- recent messages와 confirmed memory 선택
 - memory 직접 추가·수정·삭제·pin·전체 on/off
-- assistant message별 실제 적용 instruction/memory snapshot
+- assistant message별 실제 적용 memory snapshot
 - `ASK → waiting_user → resume`
 - memory proposal/승인/삭제
 - scripted clarification을 재현할 수 있는 ASK/resume trajectory
@@ -1203,7 +1200,7 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 | 1 세로 한 줄 | 완료 | Tomato core 이식(`electron/tomato`), Harness `SEARCH → ANSWER`, citation invariant, SQLite thread/run/message/trace, headless harness 테스트 9개 |
 | 2 Local RAG 제품화 | 완료 (OCR/HWP fixture 제외) | utilityProcess worker, watcher(1.5s debounce·single-flight·10분 reconcile·1분 재연결), keyword fallback, `/agent` 화면(컨텍스트/폴더 분리·진행/오류·citation 원본 열기). fixture는 MD/TXT/DOCX만 포함 |
 | 3 Policy baseline | 완료 | budget·dedupe·neighbors·coercion, profile fingerprint, always-search 규칙 baseline과 OTLP state/decision 계약 |
-| 4 지속형 context·ASK | 완료 | sidebar thread 생성/이름 변경/삭제, 50개 page load, 과거 thread 새 run, running/waiting_user run UI 재연결, 12개 message·workspace 지침·pinned/FTS memory 선택, memory CRUD·pin·on/off, 답변별 applied context, `ASK → waiting_user → resume` |
+| 4 지속형 context·ASK | 완료 | sidebar thread 생성/이름 변경/삭제, 50개 page load, 과거 thread 새 run, running/waiting_user run UI 재연결, 12개 message·pinned/FTS memory 선택, memory CRUD·pin·on/off, 답변별 applied context, `ASK → waiting_user → resume` |
 | 5 VERIFY·calibration | client 수집 완료 | `VERIFY` 1회, predicted success/evidence sufficiency/outcome과 interaction event를 OTLP에 기록. scorer는 외부 benchmark 책임 |
 | 6 Golden data·promotion | 외부 repository 책임 | client에는 runner/dataset/importer/result가 없다. 외부 benchmark가 Langfuse와 고정 KetchupE SHA를 입력으로 사용 |
 | 모니터링 (추가) | 완료 / 운영 provision 대기 | 서비스 소유 OTLP gateway(`scripts/telemetry-gateway.ts`), `ketchupe-trajectory-v2`, HMAC ID, `ops`/`redacted_eval`/`internal_full`, `agent.run` + `index.sync`/`embed.batch`, durable SQLite outbox/retry, feedback evaluator span. 실제 domain/TLS/Langfuse project는 운영 환경에서 provision |

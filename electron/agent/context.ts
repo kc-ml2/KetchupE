@@ -9,7 +9,6 @@ export const RECENT_MESSAGE_COUNT = 12;
 export const MEMORY_SEARCH_LIMIT = 5;
 
 export type ContextSelection = {
-  activeTask?: string;
   memories: SelectedMemory[];
   recentMessages: Array<{ id: string; role: "user" | "assistant"; content: string }>;
   selected: { memoryIds: string[]; excludedMemoryIds: string[]; messageIds: string[] };
@@ -17,7 +16,7 @@ export type ContextSelection = {
   contextText: string;
 };
 
-/** Deterministic order: workspace instruction → pinned memories → FTS memories → recent messages. */
+/** Deterministic order: pinned memories → FTS memories → recent messages. */
 export function selectContext(
   db: DatabaseSync,
   input: { workspaceId: string; threadId: string; userGoal: string; excludeMessageId?: string },
@@ -30,7 +29,7 @@ export function selectContext(
   const uniqueCandidates = candidates
     .filter((memory) => !seen.has(memory.id) && seen.add(memory.id));
 
-  let budget = MEMORY_CONTEXT_TOKEN_LIMIT - (workspace.activeTask ? estimateTokens(workspace.activeTask) : 0);
+  let budget = MEMORY_CONTEXT_TOKEN_LIMIT;
   const memories: SelectedMemory[] = [];
   const excludedMemoryIds: string[] = [];
   for (const memory of uniqueCandidates) {
@@ -47,7 +46,6 @@ export function selectContext(
     .map((message) => ({ id: message.id, role: message.role, content: message.content }));
 
   const contextText = [
-    workspace.activeTask ? `workspaceInstructions: ${workspace.activeTask}` : undefined,
     memories.length ? `memories:\n${memories.map((memory) => `- (${memory.kind}) ${memory.content}`).join("\n")}` : undefined,
     messages.length ? `recentMessages:\n${messages.map((message) => `${message.role}: ${message.content}`).join("\n")}` : undefined,
   ]
@@ -55,7 +53,6 @@ export function selectContext(
     .join("\n\n");
 
   return {
-    activeTask: workspace.activeTask ?? undefined,
     memories,
     recentMessages: messages,
     selected: { memoryIds: memories.map((memory) => memory.id), excludedMemoryIds, messageIds: messages.map((message) => message.id) },

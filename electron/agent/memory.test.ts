@@ -1,4 +1,7 @@
 // @vitest-environment node
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { openAgentDb } from "../db/openAgentDb.ts";
 import { selectContext } from "./context.ts";
@@ -6,6 +9,25 @@ import { addMemory, deleteMemory, listMemories, setMemoryPinned, updateMemory } 
 import { createThread, ensureWorkspace, setMemoryEnabled } from "./store.ts";
 
 describe("workspace memory", () => {
+  it("moves a legacy workspace instruction into pinned context", () => {
+    const temporary = mkdtempSync(join(tmpdir(), "context-migration-"));
+    const path = join(temporary, "agent.db");
+    try {
+      let db = openAgentDb(path);
+      const workspace = ensureWorkspace(db);
+      db.prepare("UPDATE workspaces SET active_task = ? WHERE id = ?").run("불확실하면 확인 질문하기", workspace.id);
+      db.close();
+
+      db = openAgentDb(path);
+      const memories = listMemories(db, workspace.id);
+      expect(memories).toMatchObject([{ kind: "preference", content: "불확실하면 확인 질문하기", status: "confirmed", pinned: true }]);
+      expect(db.prepare("SELECT active_task FROM workspaces WHERE id = ?").get(workspace.id)).toMatchObject({ active_task: null });
+      db.close();
+    } finally {
+      rmSync(temporary, { recursive: true, force: true });
+    }
+  });
+
   it("adds, edits, pins, disables, and deletes a user memory", () => {
     const db = openAgentDb(":memory:");
     const workspace = ensureWorkspace(db);

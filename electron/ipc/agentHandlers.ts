@@ -3,13 +3,12 @@ import type { InteractionKind, MemoryInput, StartRunInput } from "../../src/app-
 import type { AnchorChoiceResumeContent, CanvasEditOp, StartCanvasInput } from "../../src/app-types/CanvasEdit.types.ts";
 import type { AgentRuntime } from "../agent/runtime.ts";
 import { addMemory, confirmMemory, deleteMemory, listMemories, setMemoryPinned, updateMemory } from "../agent/memory.ts";
-import { createThread, deleteThread, findOpenRun, getWorkspace, listThreads, loadThread, recordInteraction, renameThread, setActiveTask, setMemoryEnabled, DEFAULT_WORKSPACE_ID } from "../agent/store.ts";
+import { createThread, deleteThread, findOpenRun, getWorkspace, listThreads, loadThread, recordInteraction, renameThread, setMemoryEnabled, DEFAULT_WORKSPACE_ID } from "../agent/store.ts";
 
 export function registerAgentHandlers(runtime: AgentRuntime): void {
   const { db } = runtime;
 
   ipcMain.handle("agent:getWorkspace", () => getWorkspace(db, DEFAULT_WORKSPACE_ID));
-  ipcMain.handle("agent:setActiveTask", (_event, workspaceId: string, task: string | null) => setActiveTask(db, workspaceId, task));
   ipcMain.handle("agent:setMemoryEnabled", (_event, workspaceId: string, enabled: boolean) => setMemoryEnabled(db, workspaceId, enabled));
 
   ipcMain.handle("agent:createThread", (_event, workspaceId: string) => createThread(db, workspaceId));

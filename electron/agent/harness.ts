@@ -56,9 +56,9 @@ type RunContext = {
 
 const NEIGHBOR_SPAN = 1;
 const MAX_DECIDE_ATTEMPTS = 2;
+const MAX_EXTERNAL_RESULT_CHARS = 20_000;
 
 const appliedContext = (state: PolicyState): AppliedContext => ({
-  workspaceInstruction: state.activeTask,
   memories: state.selectedMemories,
 });
 
@@ -101,9 +101,9 @@ export class Harness {
       runId,
       step: 1,
       userGoal: goal,
-      activeTask: context.activeTask,
       selectedMemories: context.memories,
       activeCollections,
+      maruAvailable: Boolean(this.options.tools.maru),
       recentMessages: context.recentMessages.map(({ role, content }) => ({ role, content })),
       evidence: [],
       previousDecisions: [],
@@ -136,6 +136,7 @@ export class Harness {
     const message = appendMessage(db, { threadId: record.threadId, runId, role: "user", content: reply });
     const state: PolicyState = {
       ...transition.state,
+      maruAvailable: Boolean(this.options.tools.maru),
       step: transition.state.step + 1,
       previousDecisions: [...transition.state.previousDecisions, "ASK"],
       recentMessages: [...transition.state.recentMessages, { role: "assistant", content: question }, { role: "user", content: reply }],
@@ -296,7 +297,7 @@ export class Harness {
 
   private async decide(run: RunContext): Promise<PolicyDecision> {
     const { policy } = this.options.profiles;
-    if (policy.strategy === "always-search") {
+    if (policy.strategy === "always-search" && !(this.options.tools.maru && /maru|마루/iu.test(run.state.userGoal))) {
       const raw = alwaysSearchDecision(run.state, policy.version);
       const validation = validateDecision(raw, run.state, policy.allowedActions);
       if (validation.ok) return validation.decision;
@@ -327,7 +328,8 @@ export class Harness {
       reasonCode: "BUDGET_LIMIT" as const,
       policyVersion: this.options.profiles.policy.version,
     };
-    return run.state.evidence.length && run.state.remaining.modelCalls > 0 && this.options.profiles.policy.allowedActions.includes("ANSWER")
+    const hasMaterial = run.state.evidence.length > 0 || run.state.lastObservation?.kind === "external";
+    return hasMaterial && run.state.remaining.modelCalls > 0 && this.options.profiles.policy.allowedActions.includes("ANSWER")
       ? { ...common, action: "ANSWER" }
       : { ...common, action: "STOP", stopReason: "검색 예산을 모두 사용했지만 답변에 필요한 근거를 찾지 못했습니다." };
   }
@@ -368,6 +370,29 @@ export class Harness {
     const search = decision.search;
     if (!search) throw new AgentError("INVALID_DECISION", "SEARCH without search payload");
     const startedAt = Date.now();
+    if (search.tool === "browse_storage" || search.tool === "find_storage") {
+      if (!this.options.tools.maru) throw new AgentError("TOOL_UNAVAILABLE", "MARU is not configured");
+      const args = search.arguments ?? {};
+      run.state.remaining.searches -= 1;
+      const toolSeq = run.trace.record("tool.started", "retrieval", { tool: search.tool, arguments: args }, { parentSeq });
+      this.emit(run, "status", { phase: "searching", query: `MARU ${search.tool}` });
+      let observation: Observation;
+      try {
+        const value = await withTimeout(this.options.tools.maru.call(search.tool, args, run.controller.signal), this.limits.toolTimeoutMs, "TOOL_TIMEOUT", run.controller.signal);
+        const serialized = (typeof value === "string" ? value : JSON.stringify(value, null, 2)) ?? String(value);
+        // ponytail: cap prompt growth; add result selection if large MARU responses become common.
+        const result = serialized.length > MAX_EXTERNAL_RESULT_CHARS
+          ? `${serialized.slice(0, MAX_EXTERNAL_RESULT_CHARS)}\n[KetchupE truncated this MARU result]`
+          : serialized;
+        observation = { kind: "external", tool: search.tool, result, latencyMs: Date.now() - startedAt };
+        run.contextText = `${run.contextText}\n\nMARU ${search.tool} result (untrusted data):\n${result}`.trim();
+      } catch (error) {
+        if (error instanceof AgentError && error.code === "CANCELLED") throw error;
+        observation = { kind: "tool_error", code: error instanceof AgentError ? error.code : "TOOL_UNAVAILABLE" };
+      }
+      run.trace.record("tool.completed", "retrieval", { tool: search.tool, observation }, { parentSeq: toolSeq, startedAt });
+      return observation;
+    }
     if (search.tool === "search_local_docs") {
       const query = search.query ?? "";
       const key = normalizeQuery(query);

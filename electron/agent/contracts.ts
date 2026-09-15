@@ -67,6 +67,7 @@ export type SelectedMemory = { id: string; kind: MemoryKind; content: string };
 
 export type Observation =
   | { kind: "search"; resultIds: string[]; effectiveMode: "keyword" | "semantic" | "hybrid"; latencyMs: number }
+  | { kind: "external"; tool: "browse_storage" | "find_storage"; result: string; latencyMs: number }
   | { kind: "user"; messageId: string }
   | { kind: "verification"; supported: boolean; missingClaims: string[]; confidence: number }
   | { kind: "tool_error"; code: AgentErrorCode };
@@ -83,9 +84,9 @@ export type PolicyState = {
   runId: string;
   step: number;
   userGoal: string;
-  activeTask?: string;
   selectedMemories: SelectedMemory[];
   activeCollections: string[];
+  maruAvailable?: boolean;
   recentMessages: Array<{ role: "user" | "assistant"; content: string }>;
   evidence: Evidence[];
   signals?: {
@@ -102,19 +103,44 @@ export type PolicyState = {
 
 const probability = z.number().min(0).max(1);
 
+const nullableString = z.string().nullable().optional();
+const browseStorageArguments = z.object({
+  storage_id: nullableString,
+  path: z.string().optional(),
+  max_depth: z.number().int().nonnegative().optional(),
+  max_results: z.number().int().positive().optional(),
+}).optional();
+const findStorageArguments = z.object({
+  query: nullableString,
+  storage_id: nullableString,
+  file_path: nullableString,
+  extensions: z.array(z.string()).nullable().optional(),
+  modified_from: nullableString,
+  modified_before: nullableString,
+  min_size_bytes: z.number().int().nonnegative().nullable().optional(),
+  max_size_bytes: z.number().int().nonnegative().nullable().optional(),
+  search_in: z.enum(["filename", "content", "both"]).optional(),
+  path: z.string().optional(),
+  case_sensitive: z.boolean().optional(),
+  include_globs: z.array(z.string()).nullable().optional(),
+  exclude_globs: z.array(z.string()).nullable().optional(),
+  max_results: z.number().int().positive().optional(),
+});
+
+const searchDecision = z.discriminatedUnion("tool", [
+  z.object({ tool: z.literal("search_local_docs"), query: z.string(), evidenceId: z.string().optional() }),
+  z.object({ tool: z.literal("get_document_context"), query: z.string().optional(), evidenceId: z.string() }),
+  z.object({ tool: z.literal("browse_storage"), arguments: browseStorageArguments }),
+  z.object({ tool: z.literal("find_storage"), arguments: findStorageArguments }),
+]);
+
 export const PolicyDecisionSchema = z.object({
   action: z.enum(POLICY_ACTIONS),
   taskDifficulty: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]),
   predictedSuccess: probability,
   evidenceSufficiency: probability,
   reasonCode: z.enum(REASON_CODES),
-  search: z
-    .object({
-      tool: z.enum(["search_local_docs", "get_document_context"]),
-      query: z.string().optional(),
-      evidenceId: z.string().optional(),
-    })
-    .optional(),
+  search: searchDecision.optional(),
   question: z.string().optional(),
   claimsToVerify: z.array(z.string()).optional(),
   stopReason: z.string().optional(),
@@ -240,8 +266,21 @@ export function validateDecision(raw: unknown, state: PolicyState, allowedAction
       if (!decision.search) return invalid("SEARCH requires search");
       if (decision.search.tool === "search_local_docs" && !decision.search.query?.trim()) return invalid("search_local_docs requires query");
       if (decision.search.tool === "get_document_context") {
-        const known = state.evidence.some((item) => item.evidenceId === decision.search?.evidenceId);
+        const evidenceId = decision.search.evidenceId;
+        const known = state.evidence.some((item) => item.evidenceId === evidenceId);
         if (!known) return invalid("get_document_context requires an existing evidenceId");
+      }
+      if (decision.search.tool === "browse_storage" || decision.search.tool === "find_storage") {
+        if (!state.maruAvailable) return invalid("MARU is not configured");
+        if (decision.search.tool === "find_storage") {
+          const args = decision.search.arguments;
+          const hasQuery = Boolean(args.query?.trim());
+          const hasExactFile = Boolean(args.storage_id?.trim() && args.file_path?.trim());
+          if (!hasQuery && !hasExactFile) return invalid("find_storage requires query or storage_id with file_path");
+          if (args.min_size_bytes != null && args.max_size_bytes != null && args.min_size_bytes > args.max_size_bytes) {
+            return invalid("find_storage min_size_bytes cannot exceed max_size_bytes");
+          }
+        }
       }
       break;
     }

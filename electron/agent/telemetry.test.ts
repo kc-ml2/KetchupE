@@ -15,6 +15,7 @@ import { tomatoTools } from "./tools.ts";
 
 let temporary: string;
 let runId: string;
+let maruRunId: string;
 const db = openAgentDb(":memory:");
 const base = { taskDifficulty: 1, predictedSuccess: 0.7, evidenceSufficiency: 0.5, policyVersion: "orchestration-1" } as const;
 const decisions: PolicyDecision[] = [
@@ -45,6 +46,26 @@ beforeAll(async () => {
   runId = handle.runId;
   expect(settled).toEqual([`${runId}:completed`]);
   recordInteraction(db, runId, "accepted");
+
+  const maruHarness = new Harness({
+    db,
+    model: createFixtureClient({
+      decide: [
+        { ...base, action: "SEARCH", reasonCode: "MISSING_EVIDENCE", search: { tool: "browse_storage" } },
+        { ...base, action: "ANSWER", reasonCode: "ENOUGH_EVIDENCE" },
+      ],
+      answer: "MARU 비밀 답변",
+    }),
+    tools: {
+      ...tomatoTools(tomato, { mode: "keyword", topK: 8 }),
+      maru: { call: async () => ({ storages: [{ name: "공유문서 비밀", storage_id: "secret-storage" }] }) },
+    },
+    profiles: { retrieval: PIPELINE_PROFILE, policy: DEFAULT_POLICY_PROFILE, answer: { modelAlias: "fixture", promptVersion: ANSWER_PROMPT_VERSION, temperature: 0 } },
+    activeCollections: () => ["work"],
+  });
+  const maruHandle = maruHarness.startRun({ workspaceId: workspace.id, threadId: createThread(db, workspace.id).id, text: "MARU 목록" });
+  await maruHandle.done;
+  maruRunId = maruHandle.runId;
 });
 
 afterAll(async () => {
@@ -77,6 +98,16 @@ describe("telemetry", () => {
     expect(JSON.stringify(built!.payload)).toContain("연차 정산?");
     expect(JSON.stringify(built!.payload)).toContain("미사용 연차는 수당으로 정산한다.");
     expect(JSON.stringify(built!.payload)).not.toContain(temporary);
+  });
+
+  it("never exports MARU content, even in internal mode", () => {
+    const built = buildRunTrace(db, maruRunId, { userId: "u", identityKey: "key", contentMode: "internal_full", environment: "test", tenantId: "test", resource: {} });
+    const payload = JSON.stringify(built!.payload);
+    expect(payload).toContain("[MARU_RESULT_OMITTED]");
+    expect(payload).toContain("browse_storage");
+    expect(payload).not.toContain("공유문서 비밀");
+    expect(payload).not.toContain("MARU 비밀 답변");
+    expect(payload).not.toContain("secret-storage");
   });
 
   it("turns interactions into scores on the same trace id", () => {

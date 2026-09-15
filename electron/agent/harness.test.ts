@@ -11,8 +11,8 @@ import { Harness } from "./harness.ts";
 import { addMemory, confirmMemory, proposeMemory } from "./memory.ts";
 import { createFixtureClient, type FixtureScript } from "./modelClient.ts";
 import { ANSWER_PROMPT_VERSION, DEFAULT_POLICY_PROFILE } from "./policy.ts";
-import { createThread, deleteThread, ensureWorkspace, getRun, listThreads, loadThread, setActiveTask } from "./store.ts";
-import { tomatoTools } from "./tools.ts";
+import { createThread, deleteThread, ensureWorkspace, getRun, listThreads, loadThread } from "./store.ts";
+import { tomatoTools, type SearchTools } from "./tools.ts";
 import { readTrace, transitions } from "./trace.ts";
 
 const base = { taskDifficulty: 1, predictedSuccess: 0.8, evidenceSufficiency: 0.5, policyVersion: "orchestration-1" } as const;
@@ -24,11 +24,11 @@ let tomato: Tomato;
 const db = openAgentDb(":memory:");
 const workspace = ensureWorkspace(db);
 
-function harness(script: FixtureScript, events: AgentStreamEvent[] = [], policy: PolicyProfile = DEFAULT_POLICY_PROFILE) {
+function harness(script: FixtureScript, events: AgentStreamEvent[] = [], policy: PolicyProfile = DEFAULT_POLICY_PROFILE, maru?: NonNullable<SearchTools["maru"]>) {
   return new Harness({
     db,
     model: createFixtureClient(script),
-    tools: tomatoTools(tomato, { mode: "hybrid", topK: 8 }),
+    tools: { ...tomatoTools(tomato, { mode: "hybrid", topK: 8 }), ...(maru ? { maru } : {}) },
     profiles: { retrieval: PIPELINE_PROFILE, policy, answer: { modelAlias: "fixture", promptVersion: ANSWER_PROMPT_VERSION, temperature: 0 } },
     activeCollections: () => ["work"],
     emit: (event) => events.push(event),
@@ -120,6 +120,31 @@ describe("harness", () => {
     expect(calls).toEqual(["answer"]);
   });
 
+  it("calls MARU and gives its result to answer generation", async () => {
+    const thread = createThread(db, workspace.id);
+    const calls: Array<{ tool: string; args: Record<string, unknown> }> = [];
+    let answerContext = "";
+    const browse: PolicyDecision = { ...base, action: "SEARCH", reasonCode: "MISSING_EVIDENCE", search: { tool: "browse_storage" } };
+    const handle = harness({
+      decide: [browse, answer],
+      answer: (input) => {
+        answerContext = input.context;
+        return "접근 가능한 스토리지는 1개입니다.";
+      },
+    }, [], DEFAULT_POLICY_PROFILE, {
+      call: async (tool, args) => {
+        calls.push({ tool, args });
+        return { storages: [{ storage_id: "s1", name: "공유 문서" }] };
+      },
+    }).startRun({ workspaceId: workspace.id, threadId: thread.id, text: "MARU 스토리지 목록 보여줘" });
+    await handle.done;
+
+    expect(getRun(db, handle.runId).status).toBe("completed");
+    expect(calls).toEqual([{ tool: "browse_storage", args: {} }]);
+    expect(answerContext).toContain('"name": "공유 문서"');
+    expect(transitions(db, handle.runId)[0].observation).toMatchObject({ kind: "external", tool: "browse_storage" });
+  });
+
   it("does not exceed the model-call budget for answer generation", async () => {
     const thread = createThread(db, workspace.id);
     const profile: PolicyProfile = { ...DEFAULT_POLICY_PROFILE, maxModelCalls: 1 };
@@ -151,10 +176,10 @@ describe("harness", () => {
     expect(transitions(db, handle.runId)[0].state.selectedMemories[0].content).toBe("답변은 존댓말로");
   });
 
-  it("stores the instruction and memories actually applied to an answer", async () => {
+  it("stores the memories actually applied to an answer", async () => {
     const scopedWorkspace = ensureWorkspace(db, "applied-context");
-    setActiveTask(db, scopedWorkspace.id, "불확실하면 확인 질문하기");
-    const memoryId = addMemory(db, scopedWorkspace.id, { kind: "preference", content: "답변은 존댓말로", pinned: true });
+    const ruleId = addMemory(db, scopedWorkspace.id, { kind: "preference", content: "불확실하면 확인 질문하기", pinned: true });
+    const factId = addMemory(db, scopedWorkspace.id, { kind: "fact", content: "답변은 존댓말로", pinned: true });
     const thread = createThread(db, scopedWorkspace.id);
     const events: AgentStreamEvent[] = [];
     const handle = harness({ decide: [search("연차"), answer], answer: "정산합니다 [[e1]]" }, events)
@@ -162,10 +187,12 @@ describe("harness", () => {
     await handle.done;
 
     expect(loadThread(db, thread.id).messages.at(-1)?.appliedContext).toEqual({
-      workspaceInstruction: "불확실하면 확인 질문하기",
-      memories: [{ id: memoryId, kind: "preference", content: "답변은 존댓말로" }],
+      memories: [
+        { id: ruleId, kind: "preference", content: "불확실하면 확인 질문하기" },
+        { id: factId, kind: "fact", content: "답변은 존댓말로" },
+      ],
     });
-    expect(events.at(-1)).toMatchObject({ type: "completed", payload: { appliedContext: { memories: [{ id: memoryId }] } } });
+    expect(events.at(-1)).toMatchObject({ type: "completed", payload: { appliedContext: { memories: [{ id: ruleId }, { id: factId }] } } });
   });
 
   it("cancel aborts the run", async () => {

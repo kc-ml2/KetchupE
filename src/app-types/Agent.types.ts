@@ -91,11 +91,10 @@ export type InteractionKind =
   | "memory_confirmed"
   | "memory_rejected";
 
-export type WorkspaceSummary = { id: string; name: string; activeTask: string | null; memoryEnabled: boolean };
+export type WorkspaceSummary = { id: string; name: string; memoryEnabled: boolean };
 
 export interface KetchupEAgentAPI {
   getWorkspace(): Promise<WorkspaceSummary>;
-  setActiveTask(workspaceId: string, task: string | null): Promise<void>;
   setMemoryEnabled(workspaceId: string, enabled: boolean): Promise<void>;
 
   createThread(workspaceId: string): Promise<ThreadSummary>;
