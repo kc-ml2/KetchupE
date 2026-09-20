@@ -31,6 +31,8 @@ async function handle(request: WorkerRequest): Promise<unknown> {
       return tomato.listSources(...request.args);
     case "getSourceChunks":
       return tomato.getSourceChunks(...request.args);
+    case "ingestFile":
+      return tomato.ingestFile(...request.args);
     case "status":
       return tomato.status();
   }

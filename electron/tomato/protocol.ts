@@ -1,4 +1,4 @@
-import type { ChunkRecord, Collection, CollectionStatus, EmbeddingReport, OcrMode, SearchMode, SourceRecord, TomatoSearch, UpdateReport } from "./tomato.ts";
+import type { ChunkRecord, Collection, CollectionStatus, EmbeddingReport, IngestedSource, OcrMode, SearchMode, SourceRecord, TomatoSearch, UpdateReport } from "./tomato.ts";
 
 /** Request/response protocol between the main process and the Tomato utility process. */
 export type TomatoMethods = {
@@ -12,6 +12,7 @@ export type TomatoMethods = {
   getChunks: { args: [chunkIds: string[]]; result: ChunkRecord[] };
   listSources: { args: [collections: string[]]; result: SourceRecord[] };
   getSourceChunks: { args: [sourceId: string]; result: ChunkRecord[] };
+  ingestFile: { args: [path: string, collection: string, relativePath: string, ocr?: OcrMode]; result: IngestedSource };
   status: { args: []; result: CollectionStatus[] };
 };
 

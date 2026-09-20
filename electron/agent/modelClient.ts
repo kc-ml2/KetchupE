@@ -69,10 +69,14 @@ export type ModelCallInfo = {
   finishReason: string;
 };
 
+/** System-prompt overrides: the harness surface that benchmarks vary per promptVersion. Undefined = the built-in prompt. */
+export type PromptOverrides = { policySystem?: string; answerSystem?: string; verifySystem?: string };
+
 export type LiteLLMClientOptions = {
   baseURL: string;
   apiKey: string;
   onCall?: (info: ModelCallInfo) => void;
+  prompts?: PromptOverrides;
 };
 
 export function toAgentError(error: unknown): AgentError {
@@ -126,7 +130,6 @@ export function createLiteLLMClient(options: LiteLLMClientOptions): ModelClient 
         model: provider(profile.modelAlias),
         system: messages.system,
         prompt: messages.prompt,
-        temperature: profile.temperature,
         abortSignal: signal,
         tools: { [toolName]: tool({ description, inputSchema: schema }) },
         toolChoice: { type: "tool", toolName },
@@ -153,7 +156,7 @@ export function createLiteLLMClient(options: LiteLLMClientOptions): ModelClient 
         "policy_decision",
         "Choose the next orchestration action with difficulty and probability estimates.",
         PolicyDecisionSchema,
-        buildPolicyMessages(state, profile),
+        buildPolicyMessages(state, profile, options.prompts?.policySystem),
         profile,
         signal,
       );
@@ -164,7 +167,7 @@ export function createLiteLLMClient(options: LiteLLMClientOptions): ModelClient 
         "verification_result",
         "Report whether the evidence supports the claims.",
         VerificationResultSchema,
-        buildVerifyMessages(input),
+        buildVerifyMessages(input, options.prompts?.verifySystem),
         profile,
         signal,
       );
@@ -172,7 +175,7 @@ export function createLiteLLMClient(options: LiteLLMClientOptions): ModelClient 
     async complete(input, profile, signal) {
       const startedAt = Date.now();
       try {
-        const result = await generateText({ model: provider(profile.modelAlias), system: input.system, prompt: input.prompt, temperature: profile.temperature, abortSignal: signal });
+        const result = await generateText({ model: provider(profile.modelAlias), system: input.system, prompt: input.prompt, abortSignal: signal });
         report({ purpose: input.purpose ?? "canvas", modelAlias: profile.modelAlias, latencyMs: Date.now() - startedAt, promptTokens: result.usage.inputTokens ?? 0, completionTokens: result.usage.outputTokens ?? 0, finishReason: result.finishReason });
         return result.text;
       } catch (error) {
@@ -181,13 +184,12 @@ export function createLiteLLMClient(options: LiteLLMClientOptions): ModelClient 
     },
     async *streamAnswer(input, profile, signal) {
       const startedAt = Date.now();
-      const messages = buildAnswerMessages(input);
+      const messages = buildAnswerMessages(input, options.prompts?.answerSystem);
       try {
         const result = streamText({
           model: provider(profile.modelAlias),
           system: messages.system,
           prompt: messages.prompt,
-          temperature: profile.temperature,
           abortSignal: signal,
         });
         for await (const text of result.textStream) yield { type: "text_delta", text };

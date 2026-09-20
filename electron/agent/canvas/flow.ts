@@ -61,6 +61,10 @@ export type CanvasFlowOptions = {
   activeCollections: (workspaceId: string) => string[];
   emit?: (event: AgentStreamEvent) => void;
   onRunSettled?: (runId: string, status: RunStatus) => void;
+  /** Harness knobs varied by benchmarks; defaults are the product values. */
+  limits?: { groundTopK?: number; anchorContextMaxChunks?: number };
+  /** Replaces the preset guidance line of the draft prompt (prompt-axis experiments). */
+  draftGuidance?: string;
 };
 
 export type CanvasHandle = { runId: string; done: Promise<void> };
@@ -338,7 +342,7 @@ export class CanvasFlow {
     const refs: CanvasReference[] = [];
     for (const sourceId of sourceIds) {
       const chunks = await this.options.retrieval.getSourceChunks(sourceId);
-      refs.push(...chunks.slice(0, ANCHOR_CONTEXT_MAX_CHUNKS).map((chunk) => chunkToReference(chunk, null, "anchor")));
+      refs.push(...chunks.slice(0, this.options.limits?.anchorContextMaxChunks ?? ANCHOR_CONTEXT_MAX_CHUNKS).map((chunk) => chunkToReference(chunk, null, "anchor")));
     }
     return refs;
   }
@@ -372,7 +376,7 @@ export class CanvasFlow {
     let ragRefs: CanvasReference[] = [];
     if (!pending.anchorOnly && collections.length) {
       const groundStart = Date.now();
-      const search = await withTimeout(this.options.retrieval.search(pending.instruction, collections, GROUND_TOP_K), LIMITS.toolTimeoutMs, "TOOL_TIMEOUT", signal);
+      const search = await withTimeout(this.options.retrieval.search(pending.instruction, collections, this.options.limits?.groundTopK ?? GROUND_TOP_K), LIMITS.toolTimeoutMs, "TOOL_TIMEOUT", signal);
       const chunks = await this.options.retrieval.getChunks(search.results.map((result) => result.chunkId));
       ragRefs = chunks.map((chunk) => chunkToReference(chunk, search.results.find((result) => result.chunkId === chunk.chunkId)?.score ?? null));
       trace.record("tool.completed", "retrieval", { tool: "ground", effectiveMode: search.effectiveMode, results: ragRefs.length }, { startedAt: groundStart });
@@ -394,7 +398,8 @@ export class CanvasFlow {
     input: { instruction: string; preset: DocPreset; context: string; references: CanvasReference[]; feedback?: string; priorParties?: CanvasPayload["metadata"]["parties"] },
     signal: AbortSignal,
   ): Promise<CanvasPayload> {
-    const text = await this.complete(trace, draftPrompt({ preset: input.preset, instruction: input.instruction, context: input.context, feedback: input.feedback }), signal);
+    const preset = this.options.draftGuidance ? { ...input.preset, guidance: this.options.draftGuidance } : input.preset;
+    const text = await this.complete(trace, draftPrompt({ preset, instruction: input.instruction, context: input.context, feedback: input.feedback }), signal);
     const tree = parseJsonObject(text);
     if (!Array.isArray(tree.sections) || !tree.sections.length) throw new AgentError("MODEL_PROTOCOL", "모델이 문서 구조(JSON)를 반환하지 않았습니다.");
     const payload = assignIds(tree);

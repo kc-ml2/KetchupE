@@ -101,7 +101,8 @@ export function buildRunTrace(
     const transition = event.payload.transition as PolicyTransition;
     return transition.observation?.kind === "external"
       || transition.decision.search?.tool === "browse_storage"
-      || transition.decision.search?.tool === "find_storage";
+      || transition.decision.search?.tool === "find_storage"
+      || transition.decision.search?.tool === "read_external_document";
   });
   const actions = decisions.map((decision) => decision.action);
   const validated = events.find((event) => event.type === "answer.validated")?.payload;
@@ -171,6 +172,8 @@ export function buildRunTrace(
       ? undefined
       : decision.search.tool === "browse_storage" || decision.search.tool === "find_storage"
         ? { tool: decision.search.tool, arguments: "[MARU_ARGUMENTS_OMITTED]" }
+        : decision.search.tool === "read_external_document"
+          ? { tool: decision.search.tool, ref_id: id(decision.search.ref_id), query: text(decision.search.query) }
         : { ...decision.search, query: text(decision.search.query) },
     question: text(decision.question),
     claimsToVerify: decision.claimsToVerify?.map((claim) => text(claim)),

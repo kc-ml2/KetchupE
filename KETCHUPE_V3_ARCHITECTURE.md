@@ -49,10 +49,11 @@ production trajectory
 6. 모든 policy decision, model call, retrieval, verification, answer와 사용자 반응을 한 trajectory로 연결한다.
 7. release와 retrieval/policy/answer profile SHA를 중앙 trajectory에 남긴다.
 8. macOS와 Windows의 서명된 설치본에서 같은 기능이 동작한다.
+9. MARU에서 찾은 문서는 만료 URL을 프롬프트에 노출하지 않고 내려받아 Tomato로 본문을 인덱싱한다.
 
 ### 이번 범위에서 하지 않는 것
 
-- MARU, 팀 문서, 인증과 권한
+- 임의 MCP 서버를 사용자가 직접 추가하는 설정 UI와 범용 OAuth 동의 화면
 - KetchupE가 Google Drive/Notion API를 직접 구현하는 것; (rclone/export로 local folder는 다른 프로젝트에서 진행됨.)
 - 파일 수정, shell, browser처럼 부작용이 있는 action tool
 - trace를 이용한 실시간 online learning 또는 자동 prompt 배포
@@ -84,6 +85,7 @@ production trajectory
 | local DB           | Node 내장 `node:sqlite`; agent state DB와 Tomato index DB 분리                                                 |
 | model gateway      | 이미 운영 중인 LiteLLM의 OpenAI-compatible endpoint 사용                                                       |
 | model transport    | Phase 0 호환성 검증 후 AI SDK Core의 OpenAI-compatible provider 사용; 실패 시 `openai` SDK adapter 하나로 대체 |
+| MCP client         | 공식 TypeScript SDK v2의 `@modelcontextprotocol/client`; 서버마다 인증·수명주기가 격리된 client 1개              |
 | streaming          | 최종 answer만 LiteLLM SSE → Electron main → typed IPC로 전달                                                   |
 | retrieval          | 기존 Tomato의 KorDoc + FTS5/BM25 + multilingual E5 + RRF hybrid 재사용                                         |
 | 기본 검색          | 활성 collection 전체, hybrid, top 8; embedding 전에는 keyword fallback                                         |
@@ -171,6 +173,9 @@ flowchart LR
 
     HR <-->|policy / verify / answer| LITELLM[LiteLLM OpenAI-compatible API]
     LITELLM --> LLM[on-prem LLM]
+    HR <-->|browse / find / exact URL renewal| MARU[MARU MCP]
+    MARU -->|short-lived signed download| HR
+    HR -->|app-managed cached file| TW
     TRACE -->|durable OTLP outbox| GATEWAY[KetchupE Telemetry Gateway]
     GATEWAY --> LANGFUSE[Langfuse]
 ```
@@ -184,6 +189,20 @@ flowchart LR
 | Policy          | 상태를 보고 다음 action과 estimate를 반환              | tool 실행, DB 쓰기, 무제한 반복   |
 | Tomato worker   | scan, parse, chunk, embed, index, search, locator      | 대화, 기억, policy, LLM 호출      |
 | LiteLLM         | configured model alias를 on-prem model로 routing       | KetchupE state와 local file 접근  |
+
+### MARU 문서 본문 경로
+
+```text
+find_storage
+  → URL을 제거한 ExternalDocumentRef(ref_id, storage_id, path)
+  → read_external_document(ref_id)
+  → storage_id + file_path exact lookup으로 다운로드 URL 갱신
+  → HTTPS/origin/크기 제한을 검사해 app-managed cache에 다운로드
+  → Tomato ingestFile로 해당 파일만 parse/chunk/index
+  → Tomato 검색 결과를 일반 Evidence/citation으로 답변
+```
+
+서명 URL은 policy prompt, SQLite trace, telemetry에 기록하지 않는다. MARU의 목록·검색 결과는 필드 단위로 제한하며 JSON 문자열 전체를 글자 수 기준으로 자르지 않는다. 다른 MCP 서버는 `McpConnection`을 재사용하되, 결과의 의미와 안전 정책은 서버별 adapter가 담당한다.
 
 Tomato worker가 죽으면 현재 tool을 `TOOL_UNAVAILABLE`로 끝내고 한 번만 재시작한다. Harness는 진행 중인 step을 무한 재시도하지 않는다.
 
@@ -427,7 +446,6 @@ type PolicyProfile = {
   allowedActions: PolicyAction[];
   modelAlias: string;
   promptVersion: string;
-  temperature: number;
   maxSteps: number;
   maxModelCalls: number;
   maxSearchCalls: number;
@@ -747,6 +765,15 @@ timeout/protocol/budget 오류                    → runtime
 
 Benchmark runner, dataset, profile, Langfuse importer, 결과와 promotion 판단은 별도 repository가 소유한다. 이 client는 중앙에서 재구성 가능한 trajectory와 평가 대상 release/profile/corpus fingerprint만 제공한다.
 
+구현 저장소: [ketchupE-bench](../ketchupE-bench) (sibling checkout, `ketchupe` symlink로 이 저장소의 `electron/`을 그대로 import). 이 client가 bench에 노출하는 harness knob은 다음뿐이며, 각각 fingerprint 또는 prompt hash로 결과 manifest에 남는다.
+
+| knob | client 진입점 |
+| --- | --- |
+| parser `articleHeadings`, chunk target/max/overlap | `new Tomato(home, { parser, chunk })` → 인스턴스별 `profile`/`fingerprint` |
+| policy/answer/verify system prompt | `createLiteLLMClient({ prompts })` |
+| `evidenceSnippetChars`, `maxEvidence` 등 runtime limit | `new Harness({ limits })` |
+| canvas `groundTopK`, `anchorContextMaxChunks`, draft guidance | `new CanvasFlow({ limits, draftGuidance })` |
+
 ### 12.1 suite 분리
 
 | suite     | 고정 입력 → candidate 출력                  | 핵심 지표                                                                                                    |
@@ -852,8 +879,7 @@ Retrieval과 policy를 따로 versioning한다.
     "strategy": "llm",
     "allowedActions": ["SEARCH", "ASK", "VERIFY", "ANSWER", "STOP"],
     "modelAlias": "<LITELLM_MODEL_ALIAS>",
-    "promptVersion": "policy-2",
-    "temperature": 0,
+    "promptVersion": "policy-4",
     "maxSteps": 6,
     "maxModelCalls": 8,
     "maxSearchCalls": 3,
@@ -862,8 +888,7 @@ Retrieval과 policy를 따로 versioning한다.
   },
   "answer": {
     "modelAlias": "<LITELLM_MODEL_ALIAS>",
-    "promptVersion": "grounded-answer-2",
-    "temperature": 0
+    "promptVersion": "grounded-answer-4"
   }
 }
 ```
@@ -1202,7 +1227,7 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 | 3 Policy baseline | 완료 | budget·dedupe·neighbors·coercion, profile fingerprint, always-search 규칙 baseline과 OTLP state/decision 계약 |
 | 4 지속형 context·ASK | 완료 | sidebar thread 생성/이름 변경/삭제, 50개 page load, 과거 thread 새 run, running/waiting_user run UI 재연결, 12개 message·pinned/FTS memory 선택, memory CRUD·pin·on/off, 답변별 applied context, `ASK → waiting_user → resume` |
 | 5 VERIFY·calibration | client 수집 완료 | `VERIFY` 1회, predicted success/evidence sufficiency/outcome과 interaction event를 OTLP에 기록. scorer는 외부 benchmark 책임 |
-| 6 Golden data·promotion | 외부 repository 책임 | client에는 runner/dataset/importer/result가 없다. 외부 benchmark가 Langfuse와 고정 KetchupE SHA를 입력으로 사용 |
+| 6 Golden data·promotion | 외부 repository 책임 (ketchupE-bench 구현) | client에는 runner/dataset/importer/result가 없다. `../ketchupE-bench`가 parse/chunk/retrieval/rag/policy/agent/draft suite, ablation, held-out loop, Langfuse ingest/upload를 구현한다. 2026-09-19 첫 실행에서 (1) kordoc이 “제N조” 조항을 heading으로 잡지 못해 `articleHeadings` 정규화를 추가했고, (2) evidence snippet 400자가 표·긴 항 목록의 답을 잘라 `limits.evidenceSnippetChars`를 knob으로 열었다 |
 | 모니터링 (추가) | 완료 / 운영 provision 대기 | 서비스 소유 OTLP gateway(`scripts/telemetry-gateway.ts`), `ketchupe-trajectory-v2`, HMAC ID, `ops`/`redacted_eval`/`internal_full`, `agent.run` + `index.sync`/`embed.batch`, durable SQLite outbox/retry, feedback evaluator span. 실제 domain/TLS/Langfuse project는 운영 환경에서 provision |
 | 캔버스 (추가) | 완료 | MARU doc graph를 LangGraph 없이 이식(`electron/agent/canvas/`). run kind=canvas, `run.waiting_user`로 anchor 선택/편집 대기, 전체 트리 스냅샷 버전 + head pointer undo/redo, Tomato 기반 ground/anchor. MARU 챗봇·로그인·팀 코드는 제거 |
 | 7 설치본 | 설정만 | `node:sqlite`/native 모듈 external·asarUnpack, mac arm64+x64, CI에 electron 테스트 단계. signing/fresh-install smoke는 credential 필요 |

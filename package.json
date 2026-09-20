@@ -18,6 +18,7 @@
     "test:electron": "vitest run electron",
     "typecheck:electron": "tsc -p tsconfig.electron.json",
     "smoke:litellm": "vite-node scripts/litellm-smoke.ts",
+    "probe:maru": "vite-node scripts/maru-probe.ts",
     "telemetry:gateway": "vite-node scripts/telemetry-gateway.ts"
   },
   "build": {
@@ -100,7 +101,7 @@
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.43",
     "@huggingface/transformers": "^4.2.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/client": "^2.0.0",
     "agentation": "^2.3.2",
     "ai": "^7.0.92",
     "docx": "^9.7.1",

@@ -89,6 +89,10 @@ export class TomatoClient {
     return this.call("getSourceChunks", [sourceId]);
   }
 
+  ingestFile(path: string, collection: string, relativePath: string) {
+    return this.call("ingestFile", [path, collection, relativePath, "auto"], { timeoutMs: TOMATO_LONG_CALL_TIMEOUT_MS });
+  }
+
   stop(): void {
     this.child?.kill();
     this.child = undefined;

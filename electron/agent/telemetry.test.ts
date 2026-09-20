@@ -36,7 +36,7 @@ beforeAll(async () => {
     db,
     model: createFixtureClient({ decide: decisions, answer: "수당으로 정산합니다 [[e1]]" }),
     tools: tomatoTools(tomato, { mode: "keyword", topK: 8 }),
-    profiles: { retrieval: PIPELINE_PROFILE, policy: DEFAULT_POLICY_PROFILE, answer: { modelAlias: "fixture", promptVersion: ANSWER_PROMPT_VERSION, temperature: 0 } },
+    profiles: { retrieval: PIPELINE_PROFILE, policy: DEFAULT_POLICY_PROFILE, answer: { modelAlias: "fixture", promptVersion: ANSWER_PROMPT_VERSION } },
     activeCollections: () => ["work"],
     runMetadata: { variant: "baseline-v1" },
     onRunSettled: (id, status) => settled.push(`${id}:${status}`),
@@ -58,9 +58,12 @@ beforeAll(async () => {
     }),
     tools: {
       ...tomatoTools(tomato, { mode: "keyword", topK: 8 }),
-      maru: { call: async () => ({ storages: [{ name: "공유문서 비밀", storage_id: "secret-storage" }] }) },
+      maru: {
+        call: async () => ({ summary: JSON.stringify({ storages: [{ name: "공유문서 비밀", storage_id: "secret-storage" }] }), documents: [] }),
+        readDocument: async () => { throw new Error("not used"); },
+      },
     },
-    profiles: { retrieval: PIPELINE_PROFILE, policy: DEFAULT_POLICY_PROFILE, answer: { modelAlias: "fixture", promptVersion: ANSWER_PROMPT_VERSION, temperature: 0 } },
+    profiles: { retrieval: PIPELINE_PROFILE, policy: DEFAULT_POLICY_PROFILE, answer: { modelAlias: "fixture", promptVersion: ANSWER_PROMPT_VERSION } },
     activeCollections: () => ["work"],
   });
   const maruHandle = maruHarness.startRun({ workspaceId: workspace.id, threadId: createThread(db, workspace.id).id, text: "MARU 목록" });

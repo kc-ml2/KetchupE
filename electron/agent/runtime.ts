@@ -109,18 +109,20 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
   const watchers = new CollectionWatchers(tomato, () => options.emitCollectionsChanged(), (result) => telemetry.indexSync(result));
   const harnessModel = settingsBackedModelClient(() => current, resolvedModelAlias);
   const maruToken = process.env.MARU_API_TOKEN?.trim();
+  const maru = maruToken ? new MaruClient(maruToken, options.appVersion, join(options.userData, "mcp-cache", "maru"), tomato) : undefined;
   const harness = new Harness({
     db,
     model: harnessModel,
     tools: {
       search: (query, names) => tomato.search(query, { collections: names, mode: DEFAULT_RETRIEVAL.mode, limit: DEFAULT_RETRIEVAL.topK }),
       neighbors: (chunkId, before, after) => tomato.getNeighbors(chunkId, before, after),
-      ...(maruToken ? { maru: new MaruClient(maruToken, options.appVersion) } : {}),
+      sourceChunks: (sourceId) => tomato.getSourceChunks(sourceId),
+      ...(maru ? { maru } : {}),
     },
     profiles: {
       retrieval: { ...PIPELINE_PROFILE, ...DEFAULT_RETRIEVAL },
       policy: { ...policyProfile, modelAlias: current.modelAlias || "gateway-default" },
-      answer: { modelAlias: current.modelAlias || "gateway-default", promptVersion: ANSWER_PROMPT_VERSION, temperature: 0 },
+      answer: { modelAlias: current.modelAlias || "gateway-default", promptVersion: ANSWER_PROMPT_VERSION },
     },
     activeCollections: (workspaceId) => {
       const inactive = inactiveCollections(db, workspaceId);
@@ -211,6 +213,7 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
     },
     stop: async () => {
       watchers.stop();
+      await maru?.close();
       tomato.stop();
       await telemetry.stop();
       db.close();

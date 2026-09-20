@@ -65,6 +65,16 @@ export type MemoryKind = "preference" | "fact" | "task";
 
 export type SelectedMemory = { id: string; kind: MemoryKind; content: string };
 
+export type ExternalDocumentRef = {
+  refId: string;
+  provider: "maru";
+  storageId: string;
+  storageName?: string;
+  path: string;
+  size?: number;
+  modifiedAt?: string;
+};
+
 export type Observation =
   | { kind: "search"; resultIds: string[]; effectiveMode: "keyword" | "semantic" | "hybrid"; latencyMs: number }
   | { kind: "external"; tool: "browse_storage" | "find_storage"; result: string; latencyMs: number }
@@ -87,6 +97,7 @@ export type PolicyState = {
   selectedMemories: SelectedMemory[];
   activeCollections: string[];
   maruAvailable?: boolean;
+  externalDocuments?: ExternalDocumentRef[];
   recentMessages: Array<{ role: "user" | "assistant"; content: string }>;
   evidence: Evidence[];
   signals?: {
@@ -132,6 +143,7 @@ const searchDecision = z.discriminatedUnion("tool", [
   z.object({ tool: z.literal("get_document_context"), query: z.string().optional(), evidenceId: z.string() }),
   z.object({ tool: z.literal("browse_storage"), arguments: browseStorageArguments }),
   z.object({ tool: z.literal("find_storage"), arguments: findStorageArguments }),
+  z.object({ tool: z.literal("read_external_document"), ref_id: z.string(), query: z.string().optional() }),
 ]);
 
 export const PolicyDecisionSchema = z.object({
@@ -171,7 +183,6 @@ export type PolicyProfile = {
   allowedActions: PolicyAction[];
   modelAlias: string;
   promptVersion: string;
-  temperature: number;
   maxSteps: number;
   maxModelCalls: number;
   maxSearchCalls: number;
@@ -195,6 +206,8 @@ export const LIMITS = {
   maxEvidence: 12,
   runTimeoutMs: 180_000,
   toolTimeoutMs: 30_000,
+  /** Characters of chunk text shown to the policy/answer model per evidence item. Tables and long 항 lists get cut here. */
+  evidenceSnippetChars: EVIDENCE_SNIPPET_MAX_CHARS,
 } as const;
 
 export type TraceStage =
@@ -280,6 +293,13 @@ export function validateDecision(raw: unknown, state: PolicyState, allowedAction
           if (args.min_size_bytes != null && args.max_size_bytes != null && args.min_size_bytes > args.max_size_bytes) {
             return invalid("find_storage min_size_bytes cannot exceed max_size_bytes");
           }
+        }
+      }
+      if (decision.search.tool === "read_external_document") {
+        if (!state.maruAvailable) return invalid("MARU is not configured");
+        const refId = decision.search.ref_id;
+        if (!state.externalDocuments?.some((document) => document.refId === refId)) {
+          return invalid("read_external_document requires a known ref_id");
         }
       }
       break;

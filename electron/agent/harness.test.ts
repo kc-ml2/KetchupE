@@ -29,7 +29,7 @@ function harness(script: FixtureScript, events: AgentStreamEvent[] = [], policy:
     db,
     model: createFixtureClient(script),
     tools: { ...tomatoTools(tomato, { mode: "hybrid", topK: 8 }), ...(maru ? { maru } : {}) },
-    profiles: { retrieval: PIPELINE_PROFILE, policy, answer: { modelAlias: "fixture", promptVersion: ANSWER_PROMPT_VERSION, temperature: 0 } },
+    profiles: { retrieval: PIPELINE_PROFILE, policy, answer: { modelAlias: "fixture", promptVersion: ANSWER_PROMPT_VERSION } },
     activeCollections: () => ["work"],
     emit: (event) => events.push(event),
   });
@@ -94,17 +94,18 @@ describe("harness", () => {
     expect(loadThread(db, thread.id).messages.map((message) => message.role)).toEqual(["user", "assistant", "user", "assistant"]);
   });
 
-  it("budget wins: repeated searches are deduped and over-budget SEARCH is coerced", async () => {
+  it("stops after a repeated empty search instead of exhausting the step budget", async () => {
     const thread = createThread(db, workspace.id);
-    const queries = ["연차 1", "연차 1", "연차 2", "연차 3", "연차 4"];
-    const decide = (): PolicyDecision => search(queries.shift() ?? "연차 5");
-    const handle = harness({ decide, answer: "답 [[e1]]" }).startRun({ workspaceId: workspace.id, threadId: thread.id, text: "budget" });
+    const repeated = search("available tools list");
+    const handle = harness({ decide: () => repeated }).startRun({ workspaceId: workspace.id, threadId: thread.id, text: "사용할 수 있는 tool들 reload 해줘" });
     await handle.done;
+
     const trajectory = transitions(db, handle.runId);
-    expect(trajectory.map((transition) => transition.decision.action)).toEqual(["SEARCH", "SEARCH", "SEARCH", "SEARCH", "ANSWER"]);
+    expect(trajectory.map((transition) => transition.decision.action)).toEqual(["SEARCH", "STOP"]);
     expect(trajectory.at(-1)?.decision.reasonCode).toBe("BUDGET_LIMIT");
-    expect(readTrace(db, handle.runId).filter((event) => event.type === "tool.completed" && event.payload.cached)).toHaveLength(1);
-    expect(getRun(db, handle.runId).status).toBe("completed");
+    expect(trajectory[0].observation).toMatchObject({ kind: "search", resultIds: [] });
+    expect(readTrace(db, handle.runId).filter((event) => event.type === "tool.completed")).toHaveLength(1);
+    expect(getRun(db, handle.runId).status).toBe("abstained");
   });
 
   it("runs the fixed policy with the same model client reserved for answer generation", async () => {
@@ -134,8 +135,9 @@ describe("harness", () => {
     }, [], DEFAULT_POLICY_PROFILE, {
       call: async (tool, args) => {
         calls.push({ tool, args });
-        return { storages: [{ storage_id: "s1", name: "공유 문서" }] };
+        return { summary: JSON.stringify({ storages: [{ storage_id: "s1", name: "공유 문서" }] }, null, 2), documents: [] };
       },
+      readDocument: async () => { throw new Error("not used"); },
     }).startRun({ workspaceId: workspace.id, threadId: thread.id, text: "MARU 스토리지 목록 보여줘" });
     await handle.done;
 
@@ -143,6 +145,41 @@ describe("harness", () => {
     expect(calls).toEqual([{ tool: "browse_storage", args: {} }]);
     expect(answerContext).toContain('"name": "공유 문서"');
     expect(transitions(db, handle.runId)[0].observation).toMatchObject({ kind: "external", tool: "browse_storage" });
+  });
+
+  it("renews and indexes a selected MARU document before answering from its body", async () => {
+    const thread = createThread(db, workspace.id);
+    const document = { refId: "abc123", provider: "maru" as const, storageId: "s1", storageName: "공유 문서", path: "handbook.md" };
+    const find: PolicyDecision = {
+      ...base,
+      action: "SEARCH",
+      reasonCode: "MISSING_EVIDENCE",
+      search: { tool: "find_storage", arguments: { query: "연차 정산" } },
+    };
+    const read: PolicyDecision = {
+      ...base,
+      action: "SEARCH",
+      reasonCode: "MISSING_EVIDENCE",
+      search: { tool: "read_external_document", ref_id: document.refId, query: "미사용 연차 정산" },
+    };
+    const imported = (await tomato.listSources(["work"]))[0];
+    const handle = harness({
+      decide: [find, read, answer],
+      answer: "문서 본문에 따르면 미사용 연차는 수당으로 정산합니다 [[e1]].",
+    }, [], DEFAULT_POLICY_PROFILE, {
+      call: async () => ({ summary: JSON.stringify({ results: [{ ref_id: document.refId, path: document.path }] }), documents: [document] }),
+      readDocument: async (selected) => {
+        expect(selected).toEqual(document);
+        return imported;
+      },
+    }).startRun({ workspaceId: workspace.id, threadId: thread.id, text: "MARU handbook 문서 본문에서 연차 정산을 확인해줘" });
+    await handle.done;
+
+    expect(getRun(db, handle.runId).status).toBe("completed");
+    const trajectory = transitions(db, handle.runId);
+    expect(trajectory.map((transition) => transition.decision.action)).toEqual(["SEARCH", "SEARCH", "ANSWER"]);
+    expect(trajectory[1].observation).toMatchObject({ kind: "search", resultIds: ["e1"] });
+    expect(trajectory[2].state.evidence[0]).toMatchObject({ title: "인사 규정" });
   });
 
   it("does not exceed the model-call budget for answer generation", async () => {

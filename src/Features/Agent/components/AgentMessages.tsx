@@ -14,6 +14,7 @@ const withCitationLinks = (text: string): string => text.replace(CITATION, `[$1]
 const chip = "inline-flex items-center mx-0.5 px-1.5 py-0.5 rounded text-[11px] font-semibold bg-[#E6F0FF] text-[#0066FF] dark:bg-[#1E293B] align-middle";
 const border = "border-[#D4D4D8] dark:border-[#3F3F46]";
 const codeBg = "bg-black/5 dark:bg-white/10";
+const formatCitationLabel = (evidenceId: string): string => evidenceId.replace(/^e/i, "");
 
 const buildComponents = (runId: string | null, onOpenCitation: (runId: string, evidenceId: string) => void): Components => ({
   a: ({ href, children }) => {
@@ -21,7 +22,7 @@ const buildComponents = (runId: string | null, onOpenCitation: (runId: string, e
     if (evidenceId) {
       return (
         <button type="button" disabled={!runId} onClick={() => runId && onOpenCitation(runId, evidenceId)} className={chip} title="원본 위치 열기">
-          {evidenceId}
+          {formatCitationLabel(evidenceId)}
         </button>
       );
     }
@@ -74,7 +75,7 @@ const ContextSources = ({ citations, appliedContext, runId, onOpenCitation }: { 
               onClick={() => runId && onOpenCitation(runId, citation.evidenceId)}
               className="text-left text-xs text-[#0066FF] hover:underline disabled:text-[#71717A]"
             >
-              [{citation.evidenceId}] {citation.title || "제목 없는 문서"}{citation.page !== undefined ? ` · ${citation.page}쪽` : ""}
+              [{formatCitationLabel(citation.evidenceId)}] {citation.title || "제목 없는 문서"}{citation.page !== undefined ? ` · ${citation.page}쪽` : ""}
             </button>
           ))}
         </div>

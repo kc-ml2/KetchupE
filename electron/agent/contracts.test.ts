@@ -44,11 +44,17 @@ describe("validateDecision", () => {
     expect(result).toMatchObject({ ok: false, code: "INVALID_DECISION" });
   });
   it("validates MARU availability and find arguments", () => {
-    const enabled = { ...state, maruAvailable: true };
+    const enabled = {
+      ...state,
+      maruAvailable: true,
+      externalDocuments: [{ refId: "doc1", provider: "maru" as const, storageId: "s1", path: "report.md" }],
+    };
     expect(validateDecision({ ...base, action: "SEARCH", search: { tool: "browse_storage" } }, state).ok).toBe(false);
     expect(validateDecision({ ...base, action: "SEARCH", search: { tool: "browse_storage" } }, enabled).ok).toBe(true);
     expect(validateDecision({ ...base, action: "SEARCH", search: { tool: "find_storage", arguments: {} } }, enabled).ok).toBe(false);
     expect(validateDecision({ ...base, action: "SEARCH", search: { tool: "find_storage", arguments: { storage_id: "s1", file_path: "report.md" } } }, enabled).ok).toBe(true);
+    expect(validateDecision({ ...base, action: "SEARCH", search: { tool: "read_external_document", ref_id: "missing" } }, enabled).ok).toBe(false);
+    expect(validateDecision({ ...base, action: "SEARCH", search: { tool: "read_external_document", ref_id: "doc1" } }, enabled).ok).toBe(true);
   });
 });
 

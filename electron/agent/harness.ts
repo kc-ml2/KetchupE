@@ -20,7 +20,7 @@ import { chunkToEvidence, normalizeQuery, resultToEvidence, withTimeout, type Ev
 import { readTrace, TraceWriter } from "./trace.ts";
 import { stripInvalidCitations, validateCitations } from "./verify.ts";
 
-export type AnswerProfile = { modelAlias: string; promptVersion: string; temperature: number };
+export type AnswerProfile = { modelAlias: string; promptVersion: string };
 export type HarnessProfiles = { retrieval: Record<string, unknown>; policy: PolicyProfile; answer: AnswerProfile };
 export type HarnessLimits = { [Key in keyof typeof LIMITS]: number };
 
@@ -56,7 +56,7 @@ type RunContext = {
 
 const NEIGHBOR_SPAN = 1;
 const MAX_DECIDE_ATTEMPTS = 2;
-const MAX_EXTERNAL_RESULT_CHARS = 20_000;
+const EXTERNAL_DOCUMENT_TIMEOUT_MS = 120_000;
 
 const appliedContext = (state: PolicyState): AppliedContext => ({
   memories: state.selectedMemories,
@@ -104,6 +104,7 @@ export class Harness {
       selectedMemories: context.memories,
       activeCollections,
       maruAvailable: Boolean(this.options.tools.maru),
+      externalDocuments: [],
       recentMessages: context.recentMessages.map(({ role, content }) => ({ role, content })),
       evidence: [],
       previousDecisions: [],
@@ -310,7 +311,14 @@ export class Harness {
       if (run.state.remaining.modelCalls <= 0) break;
       const raw = await this.callModel(run, "policy", () => this.options.model.decide(run.state, this.options.profiles.policy, run.controller.signal));
       const validation = validateDecision(raw, run.state, policy.allowedActions);
-      if (validation.ok) return validation.decision;
+      if (validation.ok) {
+        const decision = validation.decision;
+        const proposedSearch = decision.search;
+        const duplicateSearch = decision.action === "SEARCH"
+          && proposedSearch?.tool === "search_local_docs"
+          && run.searchCache.has(normalizeQuery(proposedSearch.query));
+        return duplicateSearch ? this.coerce(run, decision) : decision;
+      }
       lastReason = validation.reason;
       run.trace.record("policy.decided", "policy", { invalid: true, code: validation.code, reason: validation.reason, raw, attempt });
       if (validation.code === "BUDGET_EXCEEDED") return this.coerce(run, raw);
@@ -370,6 +378,37 @@ export class Harness {
     const search = decision.search;
     if (!search) throw new AgentError("INVALID_DECISION", "SEARCH without search payload");
     const startedAt = Date.now();
+    if (search.tool === "read_external_document") {
+      if (!this.options.tools.maru) throw new AgentError("TOOL_UNAVAILABLE", "MARU is not configured");
+      const document = run.state.externalDocuments?.find((item) => item.refId === search.ref_id);
+      if (!document) throw new AgentError("INVALID_DECISION", "unknown external document ref_id");
+      run.state.remaining.searches -= 1;
+      const query = search.query?.trim() || run.state.userGoal;
+      const toolSeq = run.trace.record("tool.started", "retrieval", { tool: search.tool, refId: document.refId, query }, { parentSeq });
+      this.emit(run, "status", { phase: "searching", query: `MARU ${document.path}` });
+      let observation: Observation;
+      try {
+        const imported = await withTimeout(
+          this.options.tools.maru.readDocument(document, run.controller.signal),
+          Math.min(EXTERNAL_DOCUMENT_TIMEOUT_MS, run.state.remaining.wallTimeMs),
+          "TOOL_TIMEOUT",
+          run.controller.signal,
+        );
+        const result = await withTimeout(this.options.tools.search(query, [imported.collection]), this.limits.toolTimeoutMs, "TOOL_TIMEOUT", run.controller.signal);
+        let items = result.results.map((item) => resultToEvidence(item, this.nextEvidenceIdFor(run, item.chunkId), this.limits.evidenceSnippetChars));
+        if (!items.length) {
+          const chunks = await withTimeout(this.options.tools.sourceChunks(imported.sourceId), this.limits.toolTimeoutMs, "TOOL_TIMEOUT", run.controller.signal);
+          items = chunks.slice(0, this.limits.maxEvidence).map((chunk, index) => chunkToEvidence(chunk, this.nextEvidenceIdFor(run, chunk.chunkId), 1 / (index + 1), this.limits.evidenceSnippetChars));
+        }
+        const ids = this.addEvidence(run, items);
+        observation = { kind: "search", resultIds: ids, effectiveMode: result.effectiveMode, latencyMs: Date.now() - startedAt };
+      } catch (error) {
+        if (error instanceof AgentError && error.code === "CANCELLED") throw error;
+        observation = { kind: "tool_error", code: error instanceof AgentError ? error.code : "TOOL_UNAVAILABLE" };
+      }
+      run.trace.record("tool.completed", "retrieval", { tool: search.tool, refId: document.refId, observation, evidence: this.observedEvidence(run, observation) }, { parentSeq: toolSeq, startedAt });
+      return observation;
+    }
     if (search.tool === "browse_storage" || search.tool === "find_storage") {
       if (!this.options.tools.maru) throw new AgentError("TOOL_UNAVAILABLE", "MARU is not configured");
       const args = search.arguments ?? {};
@@ -379,11 +418,10 @@ export class Harness {
       let observation: Observation;
       try {
         const value = await withTimeout(this.options.tools.maru.call(search.tool, args, run.controller.signal), this.limits.toolTimeoutMs, "TOOL_TIMEOUT", run.controller.signal);
-        const serialized = (typeof value === "string" ? value : JSON.stringify(value, null, 2)) ?? String(value);
-        // ponytail: cap prompt growth; add result selection if large MARU responses become common.
-        const result = serialized.length > MAX_EXTERNAL_RESULT_CHARS
-          ? `${serialized.slice(0, MAX_EXTERNAL_RESULT_CHARS)}\n[KetchupE truncated this MARU result]`
-          : serialized;
+        const known = new Map((run.state.externalDocuments ?? []).map((document) => [document.refId, document]));
+        for (const document of value.documents) known.set(document.refId, document);
+        run.state.externalDocuments = [...known.values()];
+        const result = value.summary;
         observation = { kind: "external", tool: search.tool, result, latencyMs: Date.now() - startedAt };
         run.contextText = `${run.contextText}\n\nMARU ${search.tool} result (untrusted data):\n${result}`.trim();
       } catch (error) {
@@ -407,7 +445,7 @@ export class Harness {
       let observation: Observation;
       try {
         const result = await withTimeout(this.options.tools.search(query, run.state.activeCollections), this.limits.toolTimeoutMs, "TOOL_TIMEOUT", run.controller.signal);
-        const ids = this.addEvidence(run, result.results.map((item) => resultToEvidence(item, this.nextEvidenceIdFor(run, item.chunkId))));
+        const ids = this.addEvidence(run, result.results.map((item) => resultToEvidence(item, this.nextEvidenceIdFor(run, item.chunkId), this.limits.evidenceSnippetChars)));
         observation = { kind: "search", resultIds: ids, effectiveMode: result.effectiveMode, latencyMs: Date.now() - startedAt };
       } catch (error) {
         if (error instanceof AgentError && error.code === "CANCELLED") throw error;
@@ -426,7 +464,7 @@ export class Harness {
     let observation: Observation;
     try {
       const chunks = await withTimeout(this.options.tools.neighbors(anchor.chunkId, NEIGHBOR_SPAN, NEIGHBOR_SPAN), this.limits.toolTimeoutMs, "TOOL_TIMEOUT", run.controller.signal);
-      const ids = this.addEvidence(run, chunks.map((chunk) => chunkToEvidence(chunk, this.nextEvidenceIdFor(run, chunk.chunkId), anchor.score)));
+      const ids = this.addEvidence(run, chunks.map((chunk) => chunkToEvidence(chunk, this.nextEvidenceIdFor(run, chunk.chunkId), anchor.score, this.limits.evidenceSnippetChars)));
       observation = { kind: "search", resultIds: ids, effectiveMode: "keyword", latencyMs: Date.now() - startedAt };
     } catch (error) {
       if (error instanceof AgentError && error.code === "CANCELLED") throw error;

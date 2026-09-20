@@ -26,7 +26,12 @@ import { CJK_RUN, estimateTokens, normalizeCjkForFts } from "./text.ts";
 export { estimateTokens, normalizeCjkForFts };
 
 const SCHEMA_VERSION = 1;
-const PARSER_VERSION = `kordoc-${KORDOC_VERSION}+markdown-1`;
+const BASE_PARSER_VERSION = `kordoc-${KORDOC_VERSION}+markdown-1`;
+/** Harness knob: Korean statute/contract articles ("제N조 …") become headings and 항 lists become numbered paragraphs. */
+export type ParserOptions = { articleHeadings?: boolean };
+export const DEFAULT_PARSER_OPTIONS: Required<ParserOptions> = { articleHeadings: true };
+export const parserVersion = (options: ParserOptions = {}): string =>
+  `${BASE_PARSER_VERSION}${(options.articleHeadings ?? DEFAULT_PARSER_OPTIONS.articleHeadings) ? "+article-1" : ""}`;
 const CHUNKER_VERSION = "structure-1";
 const SEARCH_VERSION = "fts5-cjk-1";
 const SUPPORTED_EXTENSIONS = new Set([
@@ -173,6 +178,8 @@ export interface SourceRecord {
   chunks: number;
 }
 
+export type IngestedSource = SourceRecord;
+
 export interface CollectionStatus extends Collection {
   sources: number;
   chunks: number;
@@ -197,13 +204,20 @@ export interface ChunkOptions {
 
 export class TomatoError extends Error {}
 
-export const PIPELINE_PROFILE = {
-  schemaVersion: SCHEMA_VERSION,
-  parser: PARSER_VERSION,
-  chunker: { version: CHUNKER_VERSION, ...DEFAULT_CHUNK_OPTIONS },
-  lexical: SEARCH_VERSION,
-  dense: EMBEDDING_PROFILE,
-};
+export type PipelineOptions = { chunk?: ChunkOptions; parser?: ParserOptions };
+
+/** The retrieval profile that an index is keyed by; benchmarks vary these knobs and get a distinct fingerprint per variant. */
+export function pipelineProfile(options: PipelineOptions = {}) {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    parser: parserVersion(options.parser),
+    chunker: { version: CHUNKER_VERSION, ...DEFAULT_CHUNK_OPTIONS, ...options.chunk },
+    lexical: SEARCH_VERSION,
+    dense: EMBEDDING_PROFILE,
+  };
+}
+
+export const PIPELINE_PROFILE = pipelineProfile();
 
 export const PIPELINE_FINGERPRINT = sha256(stableJson(PIPELINE_PROFILE));
 
@@ -322,8 +336,32 @@ function isTableStart(lines: string[], index: number): boolean {
   return /^\s*\|?(?:\s*:?-{3,}:?\s*\|)+\s*:?-{3,}:?\s*\|?\s*$/.test(lines[index + 1]);
 }
 
+const ARTICLE_HEADING = /^제\s*\d+\s*조(?:의\s*\d+)?\s*[(\[【]?/u;
+
+/** kordoc emits "제N조 (…)" as bold paragraphs and 항 as list items, so breadcrumbs become body sentences.
+ *  Promote articles to level-2 headings and turn 항 lists into "N. …" paragraphs so one article is one section. */
+export function normalizeArticleBlocks(blocks: IRBlock[]): IRBlock[] {
+  const out: IRBlock[] = [];
+  let item = 0;
+  for (const block of blocks) {
+    const text = block.text?.trim() ?? "";
+    if (block.type === "paragraph" && ARTICLE_HEADING.test(text)) {
+      out.push({ ...block, type: "heading", level: 2, text });
+      item = 0;
+    } else if (block.type === "list" && block.listType === "ordered" && !block.children?.length) {
+      item += 1;
+      out.push({ ...block, type: "paragraph", text: `${item}. ${text}` });
+    } else {
+      if (block.type === "heading") item = 0;
+      out.push(block);
+    }
+  }
+  return out;
+}
+
 function kordocUnits(blocks: IRBlock[]): StructuralUnit[] {
-  return blocksToChunks(blocks, { granularity: "section" }).map((chunk): StructuralUnit => ({
+  // Heading-only chunks carry no body (the heading lives on in the breadcrumb of what follows) and would only pollute search.
+  return blocksToChunks(blocks, { granularity: "section" }).filter((chunk) => chunk.type !== "heading").map((chunk): StructuralUnit => ({
     type: chunk.type === "table" ? "table" : "text",
     text: chunk.text.trim(),
     breadcrumb: chunk.breadcrumb,
@@ -505,13 +543,21 @@ export function chunkMarkdown(sourceId: string, title: string, markdown: string,
 
 export class Tomato {
   readonly home: string;
-  readonly fingerprint = PIPELINE_FINGERPRINT;
-
+  readonly profile: ReturnType<typeof pipelineProfile>;
+  readonly fingerprint: string;
+  readonly parserVersion: string;
   readonly modelCache: string;
+  private readonly chunkOptions: ChunkOptions;
+  private readonly parserOptions: ParserOptions;
 
-  constructor(home: string, options: { modelCache?: string } = {}) {
+  constructor(home: string, options: { modelCache?: string } & PipelineOptions = {}) {
     this.home = resolve(home);
     this.modelCache = resolve(options.modelCache ?? process.env.TOMATO_MODEL_CACHE ?? join(this.home, "models"));
+    this.chunkOptions = options.chunk ?? {};
+    this.parserOptions = options.parser ?? {};
+    this.profile = pipelineProfile(options);
+    this.fingerprint = sha256(stableJson(this.profile));
+    this.parserVersion = parserVersion(this.parserOptions);
   }
 
   async init(): Promise<{ home: string; pipelineFingerprint: string }> {
@@ -775,6 +821,35 @@ export class Tomato {
     }
   }
 
+  /** Indexes one app-managed file without registering its cache directory as a user collection. */
+  async ingestFile(path: string, collection: string, relativePath: string, ocr: OcrMode = "auto"): Promise<IngestedSource> {
+    validateCollectionName(collection);
+    if (!relativePath.trim() || relativePath.includes("\0")) throw new TomatoError("relativePath가 비어 있거나 올바르지 않습니다.");
+    await this.init();
+    const absolutePath = await realpath(resolve(path));
+    const info = await stat(absolutePath);
+    if (!info.isFile()) throw new TomatoError(`파일이 아닙니다: ${absolutePath}`);
+    if (!SUPPORTED_EXTENSIONS.has(extname(absolutePath).toLowerCase())) {
+      throw new TomatoError(`지원하지 않는 파일 형식입니다: ${extname(absolutePath) || "(확장자 없음)"}`);
+    }
+    const sourceId = sha256(`${collection}\u0000${relativePath}`).slice(0, 24);
+    const buffer = await readFile(absolutePath);
+    const db = this.openDb();
+    try {
+      const chunks = await this.writeIndexedFile(db, collection, absolutePath, relativePath, sourceId, info, buffer, sha256(buffer), ocr);
+      return {
+        sourceId,
+        collection,
+        path: absolutePath,
+        relativePath,
+        title: chunks[0]?.title ?? basename(absolutePath),
+        chunks: chunks.length,
+      };
+    } finally {
+      db.close();
+    }
+  }
+
   async status(): Promise<CollectionStatus[]> {
     await this.init();
     const config = await this.readConfig();
@@ -818,7 +893,6 @@ export class Tomato {
       seen.add(sourceId);
       const sourceDir = join(this.artifactCollectionDir(collection.name), sourceId);
       const manifestPath = join(sourceDir, "manifest.json");
-      const parsePath = join(sourceDir, "parse.json");
       const info = await stat(absolutePath);
       const existing = await readJson<Manifest>(manifestPath);
 
@@ -849,36 +923,7 @@ export class Tomato {
           continue;
         }
 
-        let artifact = await readJson<ParseArtifact>(parsePath);
-        if (!artifact || artifact.sourceHash !== contentHash || artifact.parserVersion !== PARSER_VERSION || artifact.ocrMode !== ocr) {
-          artifact = await parseSource(absolutePath, buffer, contentHash, ocr);
-          await atomicJson(parsePath, artifact);
-        }
-        const chunks = chunkUnits(sourceId, artifact.title || basename(absolutePath), artifact.units);
-        if (!chunks.length) throw new Error("검색 가능한 텍스트를 찾지 못했습니다.");
-        const manifest: Manifest = {
-          schemaVersion: SCHEMA_VERSION,
-          source: {
-            id: sourceId,
-            collection: collection.name,
-            absolutePath,
-            relativePath,
-            extension: extname(absolutePath).toLowerCase(),
-            size: info.size,
-            mtimeMs: info.mtimeMs,
-            contentHash,
-          },
-          parserVersion: PARSER_VERSION,
-          ocrMode: ocr,
-          pipelineFingerprint: this.fingerprint,
-          updatedAt: new Date().toISOString(),
-          chunks,
-        };
-        this.replaceSourceRows(db, manifest);
-        await Promise.all([
-          atomicJson(join(sourceDir, "chunks.json"), chunks),
-          atomicJson(manifestPath, manifest),
-        ]);
+        await this.writeIndexedFile(db, collection.name, absolutePath, relativePath, sourceId, info, buffer, contentHash, ocr);
         report.updated += 1;
       } catch (error) {
         report.failed.push({ path: absolutePath, error: errorMessage(error) });
@@ -892,6 +937,54 @@ export class Tomato {
       report.removed += 1;
     }
     return report;
+  }
+
+  private async writeIndexedFile(
+    db: DatabaseSync,
+    collection: string,
+    absolutePath: string,
+    relativePath: string,
+    sourceId: string,
+    info: { size: number; mtimeMs: number },
+    buffer: Buffer,
+    contentHash: string,
+    ocr: OcrMode,
+  ): Promise<TomatoChunk[]> {
+    const sourceDir = join(this.artifactCollectionDir(collection), sourceId);
+    const manifestPath = join(sourceDir, "manifest.json");
+    const parsePath = join(sourceDir, "parse.json");
+    await mkdir(sourceDir, { recursive: true });
+    let artifact = await readJson<ParseArtifact>(parsePath);
+    if (!artifact || artifact.sourceHash !== contentHash || artifact.parserVersion !== this.parserVersion || artifact.ocrMode !== ocr) {
+      artifact = await parseSource(absolutePath, buffer, contentHash, ocr, this.parserOptions);
+      await atomicJson(parsePath, artifact);
+    }
+    const chunks = chunkUnits(sourceId, artifact.title || basename(absolutePath), artifact.units, this.chunkOptions);
+    if (!chunks.length) throw new Error("검색 가능한 텍스트를 찾지 못했습니다.");
+    const manifest: Manifest = {
+      schemaVersion: SCHEMA_VERSION,
+      source: {
+        id: sourceId,
+        collection,
+        absolutePath,
+        relativePath,
+        extension: extname(absolutePath).toLowerCase(),
+        size: info.size,
+        mtimeMs: info.mtimeMs,
+        contentHash,
+      },
+      parserVersion: this.parserVersion,
+      ocrMode: ocr,
+      pipelineFingerprint: this.fingerprint,
+      updatedAt: new Date().toISOString(),
+      chunks,
+    };
+    this.replaceSourceRows(db, manifest);
+    await Promise.all([
+      atomicJson(join(sourceDir, "chunks.json"), chunks),
+      atomicJson(manifestPath, manifest),
+    ]);
+    return chunks;
   }
 
   private keywordSearch(db: DatabaseSync, query: string, collections: string[], limit: number): SearchResult[] {
@@ -1211,15 +1304,16 @@ export function reciprocalRankFusion(keyword: SearchResult[], semantic: SearchRe
   return results;
 }
 
-export async function parseSource(path: string, buffer: Buffer, contentHash: string, ocr: OcrMode): Promise<ParseArtifact> {
+export async function parseSource(path: string, buffer: Buffer, contentHash: string, ocr: OcrMode, parser: ParserOptions = {}): Promise<ParseArtifact> {
   const extension = extname(path).toLowerCase();
+  const version = parserVersion(parser);
   if (extension === ".md" || extension === ".markdown" || extension === ".txt") {
     const markdown = buffer.toString("utf8").normalize("NFC");
     const parsed = markdownUnits(markdown);
     return {
       schemaVersion: SCHEMA_VERSION,
       sourceHash: contentHash,
-      parserVersion: PARSER_VERSION,
+      parserVersion: version,
       ocrMode: ocr,
       title: parsed.title ?? basename(path, extension),
       markdown,
@@ -1232,14 +1326,15 @@ export async function parseSource(path: string, buffer: Buffer, contentHash: str
     filePath: path,
   });
   if (!result.success) throw new Error(`${result.code ?? "PARSE_ERROR"}: ${result.error}`);
+  const articles = parser.articleHeadings ?? DEFAULT_PARSER_OPTIONS.articleHeadings;
   return {
     schemaVersion: SCHEMA_VERSION,
     sourceHash: contentHash,
-    parserVersion: PARSER_VERSION,
+    parserVersion: version,
     ocrMode: ocr,
     title: result.metadata?.title ?? basename(path, extension),
     markdown: result.markdown,
-    units: kordocUnits(result.blocks),
+    units: kordocUnits(articles ? normalizeArticleBlocks(result.blocks) : result.blocks),
     metadata: result.metadata as Record<string, unknown> | undefined,
     warnings: result.warnings,
   };

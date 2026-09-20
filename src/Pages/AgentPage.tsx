@@ -370,8 +370,8 @@ const AgentPage = (): React.JSX.Element => {
         >
           {(
             [
-              ["context", LuLayers, "컨텍스트"],
               ["collections", LuFolderSearch, "폴더"],
+              ["context", LuLayers, "컨텍스트"],
               ["model", LuSettings, "모델"],
             ] as const
           ).map(([key, Icon, label]) => (

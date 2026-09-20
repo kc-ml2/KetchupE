@@ -31,7 +31,7 @@ describe("AgentMessages", () => {
       />,
     );
     expect(screen.queryByText("문서 검색 중")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "[e1] 인사 규정 · 2쪽" }));
+    fireEvent.click(screen.getByRole("button", { name: "[1] 인사 규정 · 2쪽" }));
     expect(onOpenCitation).toHaveBeenCalledWith("run-1", "e1");
     expect(screen.getByText("인사 규정에 근거해 답변")).toBeInTheDocument();
     expect(screen.getByText(/답변은 존댓말로 작성/)).toBeInTheDocument();
@@ -53,7 +53,7 @@ describe("AgentMessages", () => {
     expect(screen.getByText("미사용 연차").tagName).toBe("STRONG");
     expect(screen.getByText("통상임금").tagName).toBe("CODE");
 
-    fireEvent.click(screen.getByRole("button", { name: "e1" }));
+    fireEvent.click(screen.getByRole("button", { name: "1" }));
     expect(onOpenCitation).toHaveBeenCalledWith("run-1", "e1");
   });
 
