@@ -93,6 +93,10 @@ export class TomatoClient {
     return this.call("ingestFile", [path, collection, relativePath, "auto"], { timeoutMs: TOMATO_LONG_CALL_TIMEOUT_MS });
   }
 
+  collectionFingerprint(name: string) {
+    return this.call("collectionFingerprint", [name]);
+  }
+
   stop(): void {
     this.child?.kill();
     this.child = undefined;

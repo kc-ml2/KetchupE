@@ -14,6 +14,7 @@ export type TomatoMethods = {
   getSourceChunks: { args: [sourceId: string]; result: ChunkRecord[] };
   ingestFile: { args: [path: string, collection: string, relativePath: string, ocr?: OcrMode]; result: IngestedSource };
   status: { args: []; result: CollectionStatus[] };
+  collectionFingerprint: { args: [name: string]; result: string };
 };
 
 export type TomatoMethodName = keyof TomatoMethods;

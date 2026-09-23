@@ -219,6 +219,12 @@ export function pipelineProfile(options: PipelineOptions = {}) {
 
 export const PIPELINE_PROFILE = pipelineProfile();
 
+/** Content identity of a document set: sha256 over sorted "relativePath\0sha256(bytes)" lines. The external benchmark computes the
+ *  same value from a folder, so a production trajectory can be matched to a benchmark corpus without ever sharing the documents. */
+export function corpusFingerprint(entries: Array<{ relativePath: string; contentHash: string }>): string {
+  return sha256(entries.map((entry) => `${entry.relativePath.normalize("NFC")}\0${entry.contentHash}`).sort().join("\n"));
+}
+
 export const PIPELINE_FINGERPRINT = sha256(stableJson(PIPELINE_PROFILE));
 
 
@@ -786,6 +792,12 @@ export class Tomato {
     } finally {
       db.close();
     }
+  }
+
+  /** See corpusFingerprint(); recorded on every run so trajectories can be tied to the exact documents they saw. */
+  async collectionFingerprint(name: string): Promise<string> {
+    const manifests = await this.collectionManifests(name);
+    return corpusFingerprint(manifests.map((manifest) => ({ relativePath: manifest.source.relativePath, contentHash: manifest.source.contentHash })));
   }
 
   async listSources(collections: string[]): Promise<SourceRecord[]> {

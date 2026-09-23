@@ -114,6 +114,8 @@ export function buildRunTrace(
   const profiles = (started?.payload.profiles ?? {}) as Record<string, string>;
   const activeCollections = Array.isArray(started?.payload.activeCollections) ? started.payload.activeCollections.map(String).sort() : [];
   const corpusSnapshotId = hmac(options.identityKey, JSON.stringify({ activeCollections, retrievalProfile: profiles.retrieval ?? "" }));
+  const fingerprintMap = (started?.payload.corpusFingerprints ?? {}) as Record<string, unknown>;
+  const corpusFingerprints = activeCollections.map((name) => fingerprintMap[name]).filter((value): value is string => typeof value === "string" && value.length > 0).sort();
   const evidenceById = new Map(transitions.flatMap((event) => (event.payload.transition as PolicyTransition).state.evidence).map((item) => [item.evidenceId, item]));
   const terminal = run.status !== "running" && run.status !== "waiting_user";
   const tags = [variant || "unassigned", run.status].filter(Boolean);
@@ -131,6 +133,7 @@ export function buildRunTrace(
     ...attr("langfuse.trace.metadata.policyProfileSha", profiles.policy),
     ...attr("langfuse.trace.metadata.retrievalProfileSha", profiles.retrieval),
     ...attr("langfuse.trace.metadata.answerProfileSha", profiles.answer),
+    ...attr("langfuse.trace.metadata.corpusFingerprints", corpusFingerprints.length ? JSON.stringify(corpusFingerprints) : undefined),
   ];
   const exportLocator = (locator: PolicyTransition["state"]["evidence"][number]["locator"]) => ({
     ...locator,

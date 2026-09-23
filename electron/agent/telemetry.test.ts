@@ -38,7 +38,7 @@ beforeAll(async () => {
     tools: tomatoTools(tomato, { mode: "keyword", topK: 8 }),
     profiles: { retrieval: PIPELINE_PROFILE, policy: DEFAULT_POLICY_PROFILE, answer: { modelAlias: "fixture", promptVersion: ANSWER_PROMPT_VERSION } },
     activeCollections: () => ["work"],
-    runMetadata: { variant: "baseline-v1" },
+    runMetadata: () => ({ variant: "baseline-v1", corpusFingerprints: { work: "fp-work-1" } }),
     onRunSettled: (id, status) => settled.push(`${id}:${status}`),
   });
   const handle = harness.startRun({ workspaceId: workspace.id, threadId: createThread(db, workspace.id).id, text: "연차 정산?" });
@@ -89,6 +89,7 @@ describe("telemetry", () => {
     expect(value("langfuse.trace.tags")).toEqual({ arrayValue: { values: [{ stringValue: "baseline-v1" }, { stringValue: "completed" }] } });
     expect(value("langfuse.trace.metadata.variant")).toEqual({ stringValue: "baseline-v1" });
     expect(value("langfuse.trace.metadata.actions")).toEqual({ stringValue: "SEARCH>ANSWER" });
+    expect(value("langfuse.trace.metadata.corpusFingerprints")).toEqual({ stringValue: JSON.stringify(["fp-work-1"]) });
     expect((value("langfuse.observation.input") as { stringValue: string }).stringValue).toMatch(/^hmac-sha256:/);
     expect(JSON.stringify(built!.payload)).not.toContain("연차");
     expect(spans.every((span) => span.attributes.some((item) => item.key === "langfuse.trace.metadata.trajectorySchemaVersion"))).toBe(true);

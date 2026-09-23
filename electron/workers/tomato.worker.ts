@@ -35,6 +35,8 @@ async function handle(request: WorkerRequest): Promise<unknown> {
       return tomato.ingestFile(...request.args);
     case "status":
       return tomato.status();
+    case "collectionFingerprint":
+      return tomato.collectionFingerprint(...request.args);
   }
 }
 

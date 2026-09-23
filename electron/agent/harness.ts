@@ -32,8 +32,8 @@ export type HarnessOptions = {
   activeCollections: (workspaceId: string) => string[];
   emit?: (event: AgentStreamEvent) => void;
   limits?: Partial<HarnessLimits>;
-  /** Extra fields for the run.started payload (variant, app version, …). */
-  runMetadata?: Record<string, unknown>;
+  /** Extra fields for the run.started payload (variant, app version, corpus fingerprints, …); a function is read per run. */
+  runMetadata?: Record<string, unknown> | (() => Record<string, unknown>);
   /** Called when a run stops running (completed, abstained, waiting_user, failed, cancelled). */
   onRunSettled?: (runId: string, status: RunStatus) => void;
 };
@@ -117,7 +117,8 @@ export class Harness {
       },
     };
     const run = this.createContext(runId, thread.id, input.workspaceId, state, context.contextText);
-    run.trace.record("run.started", "input", { workspaceId: input.workspaceId, threadId: thread.id, messageId: message.id, profiles: this.fingerprints, activeCollections, ...this.options.runMetadata });
+    const metadata = typeof this.options.runMetadata === "function" ? this.options.runMetadata() : this.options.runMetadata;
+    run.trace.record("run.started", "input", { workspaceId: input.workspaceId, threadId: thread.id, messageId: message.id, profiles: this.fingerprints, activeCollections, ...metadata });
     run.trace.record("context.selected", "context", { ...context.selected, tokenEstimate: context.tokenEstimate });
     return { runId, done: this.loop(run) };
   }

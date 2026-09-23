@@ -106,7 +106,19 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
     return aliasCache.alias;
   };
 
-  const watchers = new CollectionWatchers(tomato, () => options.emitCollectionsChanged(), (result) => telemetry.indexSync(result));
+  // Content fingerprint per collection: lets the external benchmark match a trajectory to a corpus it also holds.
+  const corpusFingerprints: Record<string, string> = {};
+  const refreshFingerprint = async (name: string) => {
+    try {
+      corpusFingerprints[name] = await tomato.collectionFingerprint(name);
+    } catch (error) {
+      console.warn(`[agent] corpus fingerprint failed for ${name}:`, error);
+    }
+  };
+  const watchers = new CollectionWatchers(tomato, () => options.emitCollectionsChanged(), (result) => {
+    telemetry.indexSync(result);
+    void refreshFingerprint(result.collection);
+  });
   const harnessModel = settingsBackedModelClient(() => current, resolvedModelAlias);
   const maruToken = process.env.MARU_API_TOKEN?.trim();
   const maru = maruToken ? new MaruClient(maruToken, options.appVersion, join(options.userData, "mcp-cache", "maru"), tomato) : undefined;
@@ -129,7 +141,7 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
       return collections.map((collection) => collection.name).filter((name) => !inactive.has(name));
     },
     emit: options.emitAgentEvent,
-    runMetadata: { variant, appVersion: options.appVersion, installId },
+    runMetadata: () => ({ variant, appVersion: options.appVersion, installId, corpusFingerprints: { ...corpusFingerprints } }),
     onRunSettled: (runId) => telemetry.exportRun(db, runId),
   });
   telemetry.appSession(variant);
@@ -154,6 +166,9 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
 
   const refreshCollections = async () => {
     collections = await tomato.call("listCollections", []);
+    const names = new Set(collections.map((collection) => collection.name));
+    for (const name of Object.keys(corpusFingerprints)) if (!names.has(name)) delete corpusFingerprints[name];
+    await Promise.all(collections.filter((collection) => !corpusFingerprints[collection.name]).map((collection) => refreshFingerprint(collection.name)));
     return collections;
   };
 

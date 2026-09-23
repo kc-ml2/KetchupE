@@ -774,6 +774,8 @@ Benchmark runner, dataset, profile, Langfuse importer, 결과와 promotion 판�
 | `evidenceSnippetChars`, `maxEvidence` 등 runtime limit | `new Harness({ limits })` |
 | canvas `groundTopK`, `anchorContextMaxChunks`, draft guidance | `new CanvasFlow({ limits, draftGuidance })` |
 
+수집은 두 모드로만 동작한다. production 빌드는 telemetry 설정을 빌드 시점에 굽고 사용자 개입 없이 outbox → gateway → Langfuse로 보낸다. 개발 머신에서는 endpoint가 비어 있어 전송이 없고, bench가 `agent.sqlite`를 read-only로 열어 같은 exporter(`buildRunTrace`)로 envelope을 만든다. 두 경로 모두 run.started의 `corpusFingerprints`(collection별 `Tomato.collectionFingerprint`, 정렬된 `relativePath\0sha256(bytes)`의 sha256)를 trace metadata에 남기므로, bench는 같은 문서 폴더를 가진 run만 골라 end-to-end로 재실행할 수 있다. 문서 내용은 어떤 모드에서도 나가지 않는다.
+
 ### 12.1 suite 분리
 
 | suite     | 고정 입력 → candidate 출력                  | 핵심 지표                                                                                                    |

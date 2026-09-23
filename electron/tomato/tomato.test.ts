@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { blobToVector, cosineSimilarity, vectorToBlob } from "./embedding.ts";
-import { chunkMarkdown, normalizeArticleBlocks, PIPELINE_FINGERPRINT, reciprocalRankFusion, Tomato, type SearchResult } from "./tomato.ts";
+import { createHash } from "node:crypto";
+import { chunkMarkdown, corpusFingerprint, normalizeArticleBlocks, PIPELINE_FINGERPRINT, reciprocalRankFusion, Tomato, type SearchResult } from "./tomato.ts";
 
 let temporary: string;
 let documents: string;
@@ -45,6 +46,9 @@ it("structure chunks and incremental Korean BM25 search work end to end", async 
   expect(collection.path).toBe(await realpath(documents));
   const status = await tomato.status();
   expect(status[0]).toMatchObject({ name: "work", sources: 1, embedded: 0 });
+  const expectedFingerprint = corpusFingerprint([{ relativePath: "handbook.md", contentHash: createHash("sha256").update(await readFile(handbook)).digest("hex") }]);
+  expect(await tomato.collectionFingerprint("work")).toBe(expectedFingerprint);
+  expect(expectedFingerprint).toMatch(/^[0-9a-f]{64}$/);
 
   // hybrid requested, embeddings missing → keyword fallback
   const search = await tomato.search("계약 해지", { collections: ["work"], mode: "hybrid" });
