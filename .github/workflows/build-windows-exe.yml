@@ -2,6 +2,8 @@ name: Build Windows Installer
 
 on:
   push:
+    branches:
+      - "v3.0"
     tags:
       - "v*"
   workflow_dispatch:
@@ -30,7 +32,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
@@ -63,6 +65,11 @@ jobs:
           npm pkg set version="$version"
           node -e "console.log('package.json version =', require('./package.json').version)"
 
+      - name: Set v3.0 bench version
+        if: github.ref == 'refs/heads/v3.0'
+        shell: bash
+        run: npm pkg set version="3.0.0-bench.${GITHUB_RUN_NUMBER}"
+
       - name: Restore Windows signing cert (optional)
         shell: pwsh
         env:
@@ -82,7 +89,7 @@ jobs:
         # 이 산출물이 있어야 electron-builder가 asar 패키징을 제대로 수행한다.
         run: npm run build
 
-      - name: Package and publish to GitHub Release
+      - name: Package Windows installer and publish tagged releases
         # 이 repo 가 public 이므로:
         # - 업로드: 워크플로우 기본 GITHUB_TOKEN 으로 이 repo 에 release 생성/업로드 가능.
         # - 다운로드(자동 업데이트): 익명으로 public asset 에 접근 → 앱에 토큰 불필요.
@@ -93,7 +100,7 @@ jobs:
           $maxAttempts = 3
           for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
             Write-Host "electron-builder attempt $attempt of $maxAttempts"
-            npx electron-builder --win --publish always
+            npx electron-builder --win --publish $env:PUBLISH_MODE
             if ($LASTEXITCODE -eq 0) {
               exit 0
             }
@@ -111,6 +118,7 @@ jobs:
           ELECTRON_BUILDER_CACHE: ${{ github.workspace }}\.cache\electron-builder
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          PUBLISH_MODE: ${{ startsWith(github.ref, 'refs/tags/v') && 'always' || 'never' }}
 
       - name: List build outputs
         shell: pwsh
