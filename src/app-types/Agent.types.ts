@@ -126,7 +126,6 @@ export interface KetchupEAgentAPI {
   deleteMemory(id: string): Promise<void>;
 
   getModelSettings(): Promise<{ baseURL: string; modelAlias: string; hasApiKey: boolean }>;
-  /** modelAlias may be empty: the gateway's first listed model is used. */
   setModelSettings(settings: { baseURL: string; modelAlias: string; apiKey?: string }): Promise<void>;
   listModels(): Promise<string[]>;
   testModelConnection(): Promise<{ ok: boolean; models: string[]; resolvedAlias: string }>;

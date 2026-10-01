@@ -51,8 +51,7 @@ export type RuntimeOptions = {
   emitCollectionsChanged: () => void;
 };
 
-/** Model client that reads the current settings on every call so the settings screen takes effect immediately.
- *  The gateway is already wired to its upstream model, so an empty alias resolves to the first model it lists. */
+/** Model client that reads the current settings on every call so the settings screen takes effect immediately. */
 function settingsBackedModelClient(settings: () => ModelSettings, resolvedAlias: () => Promise<string>): ModelClient {
   const client = async () => {
     const current = settings();

@@ -31,7 +31,14 @@ export const useCollections = (api: KetchupEAgentAPI | null, workspaceId: string
   }, [api, refresh]);
 
   const remove = useCallback(async (name: string) => { await api?.removeCollection(name); await refresh(); }, [api, refresh]);
-  const sync = useCallback(async (name: string) => { await api?.syncCollection(name); await refresh(); }, [api, refresh]);
+  const sync = useCallback(async (name: string) => {
+    try {
+      await api?.syncCollection(name);
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }, [api, refresh]);
   const setActive = useCallback(async (name: string, active: boolean) => { await api?.setCollectionActive(workspaceId, name, active); await refresh(); }, [api, workspaceId, refresh]);
 
   return { collections, error, add, remove, sync, setActive };

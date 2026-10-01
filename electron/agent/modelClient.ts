@@ -17,6 +17,7 @@ import {
 import { buildAnswerMessages, buildPolicyMessages, buildVerifyMessages } from "./policy.ts";
 
 export const DEFAULT_LITELLM_BASE_URL = "https://centinels.ml2-alpha.com/v1/";
+export const DEFAULT_LITELLM_MODEL_ALIAS = "loki";
 
 /** Accepts a bare domain, a URL, or a URL with /v1; returns `https://host[/path]/v1/`. */
 export function normalizeBaseURL(input: string): string {

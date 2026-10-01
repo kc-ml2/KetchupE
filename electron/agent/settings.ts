@@ -1,9 +1,8 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { safeStorage } from "electron";
-import { DEFAULT_LITELLM_BASE_URL, normalizeBaseURL } from "./modelClient.ts";
+import { DEFAULT_LITELLM_BASE_URL, DEFAULT_LITELLM_MODEL_ALIAS, normalizeBaseURL } from "./modelClient.ts";
 
-/** modelAlias is optional: empty means "first model the gateway lists". */
 export type ModelSettings = { baseURL: string; modelAlias: string; apiKey?: string };
 type StoredSettings = { baseURL: string; modelAlias?: string; apiKeyEncrypted?: string };
 
@@ -43,7 +42,7 @@ const env = (name: string): string | undefined => process.env[name]?.trim() || u
 
 /** Dev: env vars win. Packaged: settings file with the key encrypted by safeStorage. The key never reaches the renderer or traces. */
 export function loadModelSettings(userData: string): ModelSettings {
-  let stored: StoredSettings = { baseURL: DEFAULT_LITELLM_BASE_URL, modelAlias: "" };
+  let stored: StoredSettings = { baseURL: DEFAULT_LITELLM_BASE_URL, modelAlias: DEFAULT_LITELLM_MODEL_ALIAS };
   try {
     stored = { ...stored, ...(JSON.parse(readFileSync(join(userData, FILE_NAME), "utf8")) as StoredSettings) };
   } catch {
@@ -59,7 +58,7 @@ export function loadModelSettings(userData: string): ModelSettings {
   }
   return {
     baseURL: normalizeBaseURL(env("LITELLM_BASE_URL") ?? stored.baseURL),
-    modelAlias: env("LITELLM_MODEL_ALIAS") ?? stored.modelAlias ?? "",
+    modelAlias: env("LITELLM_MODEL_ALIAS") ?? (stored.modelAlias?.trim() || DEFAULT_LITELLM_MODEL_ALIAS),
     apiKey: env("LITELLM_API_KEY") ?? apiKey,
   };
 }

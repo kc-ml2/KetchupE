@@ -151,7 +151,7 @@ export class CollectionWatchers {
     try {
       const report = await this.tomato.call("sync", [entry.collection.name], { timeoutMs: TOMATO_LONG_CALL_TIMEOUT_MS });
       entry.state.lastReport = report;
-      if (report.failed.length) entry.state.lastError = `${report.failed.length}개 파일 처리 실패 (${basename(report.failed[0].path)}: ${report.failed[0].error})`;
+      if (report.failed.length) entry.state.lastError = `파싱/인덱싱 실패: ${basename(report.failed[0].path)} — ${report.failed[0].error}${report.failed.length > 1 ? ` (외 ${report.failed.length - 1}개)` : ""}`;
       entry.state.syncing = false;
       this.emit(entry);
       const embedding = await this.embed(entry);
@@ -181,7 +181,8 @@ export class CollectionWatchers {
       return { ...report, durationMs: Date.now() - started };
     } catch (error) {
       // Keyword search keeps working; hybrid becomes available after the next successful embed.
-      entry.state.lastError = `embedding 실패: ${error instanceof Error ? error.message : String(error)}`;
+      const embeddingError = `embedding 실패: ${error instanceof Error ? error.message : String(error)}`;
+      entry.state.lastError = entry.state.lastError ? `${entry.state.lastError} · ${embeddingError}` : embeddingError;
       return undefined;
     } finally {
       this.emit(entry);

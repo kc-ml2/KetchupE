@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { KetchupEAgentAPI } from "@app-types/Agent.types";
 
-/** LiteLLM is already wired to its upstream model: only the domain and key are required. */
 const ModelSettingsForm = ({
   api,
 }: {
@@ -53,17 +52,17 @@ const ModelSettingsForm = ({
     "w-full px-2 py-1.5 text-sm rounded border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#0F0F0F] text-[#18181B] dark:text-[#FAFAFA]";
   return (
     <form onSubmit={save} className="flex flex-col gap-3 text-sm">
-      {/* <label className="flex flex-col gap-1">
+      <label className="flex flex-col gap-1">
         <span className="text-xs text-[#71717A]">LiteLLM 도메인</span>
         <input value={baseURL} onChange={(event) => setBaseURL(event.target.value)} placeholder="centinels.ml2-alpha.com" className={field} />
       </label>
       <label className="flex flex-col gap-1">
         <span className="text-xs text-[#71717A]">API key {hasApiKey ? "(저장됨, 변경 시에만 입력)" : "(필수)"}</span>
         <input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} className={field} autoComplete="off" />
-      </label> */}
+      </label>
       <label className="flex flex-col gap-1">
         <span className="text-xs text-[#71717A]">
-          모델 (선택, 비우면 서버의 첫 번째 모델)
+          모델 (기본: loki)
         </span>
         {models.length ? (
           <select
@@ -71,7 +70,6 @@ const ModelSettingsForm = ({
             onChange={(event) => setModelAlias(event.target.value)}
             className={field}
           >
-            <option value="">자동 ({models[0]})</option>
             {models.map((model) => (
               <option key={model} value={model}>
                 {model}
@@ -82,7 +80,7 @@ const ModelSettingsForm = ({
           <input
             value={modelAlias}
             onChange={(event) => setModelAlias(event.target.value)}
-            placeholder="자동"
+            placeholder="loki"
             className={field}
           />
         )}

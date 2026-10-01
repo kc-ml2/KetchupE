@@ -10,6 +10,7 @@
     "dev:electron": "vite",
     "build": "tsc -b && vite build",
     "build:electron": "tsc -b && vite build && electron-builder",
+    "build:electron:win": "npm install --include=optional --os=win32 --cpu=x64 && npm run build && electron-builder --win --x64",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",

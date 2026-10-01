@@ -24,4 +24,10 @@ it("lets a non-empty env var override the saved alias", () => {
   expect(loadModelSettings(userData).modelAlias).toBe("claude-opus-5");
 });
 
+it("uses loki when no model alias is configured", () => {
+  const emptyUserData = mkdtempSync(join(tmpdir(), "ketchupe-settings-empty-"));
+  expect(loadModelSettings(emptyUserData).modelAlias).toBe("loki");
+  rmSync(emptyUserData, { recursive: true, force: true });
+});
+
 process.on("exit", () => rmSync(userData, { recursive: true, force: true }));

@@ -456,8 +456,7 @@ const AgentPage = (): React.JSX.Element => {
                 모델 연결
               </h3>
               <p className="mb-3 text-[11px] leading-relaxed text-[#71717A]">
-                LiteLLM 게이트웨이와 사용할 모델을 지정합니다. 비워두면 서버가
-                제공하는 첫 번째 모델을 씁니다.
+                LiteLLM 게이트웨이와 사용할 모델을 지정합니다. 기본 모델은 loki입니다.
               </p>
               <ModelSettingsForm api={api} />
             </div>

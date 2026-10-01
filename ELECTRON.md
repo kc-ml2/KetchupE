@@ -163,6 +163,10 @@ API 서버 주소는 GitHub 저장소의 **Settings → Secrets and variables �
 # macOS에서 실행 → .dmg, .zip
 # Windows에서 실행 → .exe
 npm run build:electron
+
+# macOS/Linux에서 Windows x64용으로 교차 빌드
+# (Windows용 sharp/canvas 바이너리를 먼저 설치)
+npm run build:electron:win
 ```
 
 코드 서명은 선택 사항이며, CI에서 GitHub Secrets `WINDOWS_CERT_BASE64`,
@@ -204,6 +208,7 @@ if (window.electronAPI) {
 | `npm run dev:electron`   | Electron 개발 모드 실행    |
 | `npm run build`          | 웹용 프로덕션 빌드         |
 | `npm run build:electron` | Electron 앱 빌드 및 패키징 |
+| `npm run build:electron:win` | Windows x64 앱 교차 빌드 |
 
 ## ❓ 문제 해결
 
