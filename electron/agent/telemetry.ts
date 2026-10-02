@@ -68,7 +68,9 @@ const redactSensitiveText = (value: string) => value
   .replace(/\b(?:sk|pk)-[A-Za-z0-9_-]{12,}\b/gu, "[SECRET]")
   .replace(/\bBearer\s+[A-Za-z0-9._~-]+/giu, "Bearer [SECRET]");
 export const traceIdFor = (runId: string) => runId.replace(/-/g, "").padEnd(32, "0").slice(0, 32);
-const spanIdFor = (runId: string, seq: number) => createHash("sha256").update(`${runId}:${seq}`).digest("hex").slice(0, 16);
+const spanIdFor = (runId: string, seq: number | string) => createHash("sha256").update(`${runId}:${seq}`).digest("hex").slice(0, 16);
+
+const firstTokenIso = (event: TraceEvent) => event.payload.ttftMs === undefined ? undefined : new Date(Date.parse(event.startedAt) + Number(event.payload.ttftMs)).toISOString();
 
 export type RunSummaryRow = { id: string; thread_id: string; goal: string; status: string; error_code: string | null; created_at: string; finished_at: string | null };
 
@@ -304,11 +306,31 @@ export function buildRunTrace(
           ...traceAttributes(),
           ...attr("langfuse.observation.model.name", event.payload.modelAlias === undefined ? undefined : String(event.payload.modelAlias)),
           ...attr("langfuse.observation.usage_details", JSON.stringify({ input: usage.input, output: usage.output, total: usage.input + usage.output })),
+          ...attr("langfuse.observation.completion_start_time", firstTokenIso(event)),
+          ...attr("langfuse.observation.metadata.ttftMs", event.payload.ttftMs === undefined ? undefined : Number(event.payload.ttftMs)),
+          ...attr("langfuse.observation.metadata.cachedPromptTokens", event.payload.cachedPromptTokens === undefined ? undefined : Number(event.payload.cachedPromptTokens)),
           ...attr("langfuse.observation.metadata.purpose", String(event.payload.purpose)),
           ...attr("langfuse.observation.metadata.finishReason", event.payload.finishReason === undefined ? undefined : String(event.payload.finishReason)),
         ],
       });
     }
+  }
+
+  // User-perceived wait: from the message that (re)started the run to the first answer token, policy and search included.
+  const answerCall = modelCalls.find((event) => event.payload.purpose === "answer" && event.payload.ttftMs !== undefined);
+  const firstTokenAt = answerCall && firstTokenIso(answerCall);
+  if (firstTokenAt) {
+    const resumed = events.filter((event) => event.type === "interaction.recorded" && event.payload.kind === "clarification_answered").at(-1);
+    spans.push({
+      traceId,
+      spanId: spanIdFor(runId, "ttft"),
+      parentSpanId: rootSpanId,
+      name: "agent.time_to_first_token",
+      kind: 1,
+      startTimeUnixNano: nanos(resumed?.startedAt ?? run.created_at),
+      endTimeUnixNano: nanos(firstTokenAt),
+      attributes: [...attr("langfuse.observation.type", "span"), ...traceAttributes()],
+    });
   }
 
   const scores: Score[] = terminal

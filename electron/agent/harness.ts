@@ -292,7 +292,7 @@ export class Harness {
     const seq = run.trace.record("model.started", stage, { purpose, modelAlias: configuredAlias });
     const result = await withTimeout(call(), run.deadline - Date.now(), "MODEL_TIMEOUT", run.controller.signal);
     const last = this.options.model.lastCall;
-    const usage = last?.purpose === purpose ? { modelAlias: last.modelAlias, promptTokens: last.promptTokens, completionTokens: last.completionTokens, finishReason: last.finishReason } : {};
+    const usage = last?.purpose === purpose ? { modelAlias: last.modelAlias, promptTokens: last.promptTokens, cachedPromptTokens: last.cachedPromptTokens, completionTokens: last.completionTokens, finishReason: last.finishReason, ttftMs: last.ttftMs } : {};
     run.trace.record("model.completed", stage, { purpose, latencyMs: Date.now() - startedAt, ...usage }, { parentSeq: seq, startedAt });
     return result;
   }

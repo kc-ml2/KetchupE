@@ -66,8 +66,12 @@ export type ModelCallInfo = {
   modelAlias: string;
   latencyMs: number;
   promptTokens: number;
+  /** Prompt tokens the gateway served from its prefix cache; 0 also when the gateway does not report it. */
+  cachedPromptTokens?: number;
   completionTokens: number;
   finishReason: string;
+  /** Request start to the first streamed text; streaming calls only. */
+  ttftMs?: number;
 };
 
 /** System-prompt overrides: the harness surface that benchmarks vary per promptVersion. Undefined = the built-in prompt. */
@@ -140,6 +144,7 @@ export function createLiteLLMClient(options: LiteLLMClientOptions): ModelClient 
         modelAlias: profile.modelAlias,
         latencyMs: Date.now() - startedAt,
         promptTokens: result.usage.inputTokens ?? 0,
+        cachedPromptTokens: result.usage.inputTokenDetails.cacheReadTokens,
         completionTokens: result.usage.outputTokens ?? 0,
         finishReason: result.finishReason,
       });
@@ -193,15 +198,21 @@ export function createLiteLLMClient(options: LiteLLMClientOptions): ModelClient 
           prompt: messages.prompt,
           abortSignal: signal,
         });
-        for await (const text of result.textStream) yield { type: "text_delta", text };
+        let ttftMs: number | undefined;
+        for await (const text of result.textStream) {
+          if (text) ttftMs ??= Date.now() - startedAt;
+          yield { type: "text_delta", text };
+        }
         const usage = await result.usage;
         const info: ModelCallInfo = {
           purpose: "answer",
           modelAlias: profile.modelAlias,
           latencyMs: Date.now() - startedAt,
           promptTokens: usage.inputTokens ?? 0,
+          cachedPromptTokens: usage.inputTokenDetails.cacheReadTokens,
           completionTokens: usage.outputTokens ?? 0,
           finishReason: await result.finishReason,
+          ttftMs,
         };
         report(info);
         yield { type: "completed", promptTokens: info.promptTokens, completionTokens: info.completionTokens };
@@ -227,7 +238,7 @@ export function createFixtureClient(script: FixtureScript): ModelClient {
   const completions = Array.isArray(script.complete) ? [...script.complete] : undefined;
   const self: ModelClient = {} as ModelClient;
   const report = (purpose: ModelCallPurpose) => {
-    self.lastCall = { purpose, modelAlias: "fixture", latencyMs: 0, promptTokens: 0, completionTokens: 0, finishReason: "stop" };
+    self.lastCall = { purpose, modelAlias: "fixture", latencyMs: 0, promptTokens: 0, completionTokens: 0, finishReason: "stop", ...(purpose === "answer" ? { ttftMs: 0 } : {}) };
     script.onCall?.(self.lastCall);
   };
   return Object.assign(self, {

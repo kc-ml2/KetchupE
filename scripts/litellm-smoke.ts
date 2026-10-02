@@ -1,8 +1,8 @@
 // Phase 0 compatibility check against the real LiteLLM gateway.
 // Usage: LITELLM_API_KEY=... [LITELLM_BASE_URL=domain] [LITELLM_MODEL_ALIAS=...] node scripts/litellm-smoke.ts
-import { createLiteLLMClient, resolveModelAlias } from "../electron/agent/modelClient.ts";
+import { createLiteLLMClient, resolveModelAlias, type ModelCallInfo } from "../electron/agent/modelClient.ts";
 import { validateDecision, type PolicyState } from "../electron/agent/contracts.ts";
-import { DEFAULT_POLICY_PROFILE } from "../electron/agent/policy.ts";
+import { DEFAULT_POLICY_PROFILE, POLICY_SYSTEM } from "../electron/agent/policy.ts";
 
 const baseURL = process.env.LITELLM_BASE_URL ?? "https://centinels.ml2-alpha.com/v1/";
 const apiKey = process.env.LITELLM_API_KEY;
@@ -69,6 +69,18 @@ let sawUsage = false;
 const usageClient = createLiteLLMClient({ baseURL, apiKey, onCall: (info) => { sawUsage ||= info.promptTokens > 0; } });
 await Array.fromAsync(usageClient.streamAnswer({ userGoal: "hi", context: "", evidence: [] }, profile, new AbortController().signal));
 results.usage = sawUsage;
+
+// 5. prefix cache probe (informational): the same policy prompt twice behind a fresh nonce, so call 1 is cold and call 2 can hit.
+// A hit shows as cachedPromptTokens > 0 (if the gateway reports it) or a clearly faster second call.
+const probeCalls: ModelCallInfo[] = [];
+const probeClient = createLiteLLMClient({ baseURL, apiKey, onCall: (info) => probeCalls.push(info), prompts: { policySystem: `probe ${Date.now()}\n${POLICY_SYSTEM}` } });
+try {
+  await probeClient.decide(state, profile, new AbortController().signal);
+  await probeClient.decide(state, profile, new AbortController().signal);
+} catch (error) {
+  console.log("5 prefix cache probe failed:", error);
+}
+console.log("5 prefix cache:", probeCalls.map(({ latencyMs, promptTokens, cachedPromptTokens }) => ({ latencyMs, promptTokens, cachedPromptTokens })));
 
 console.log(results);
 process.exit(Object.values(results).every(Boolean) ? 0 : 1);

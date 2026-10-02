@@ -82,7 +82,12 @@ describe("telemetry", () => {
     const spans = (built!.payload as { resourceSpans: Array<{ scopeSpans: Array<{ spans: Array<{ name: string; traceId: string; spanId: string; parentSpanId?: string; attributes: Array<{ key: string; value: Record<string, unknown> }> }> }> }> }).resourceSpans[0].scopeSpans[0].spans;
     expect(built!.traceId).toMatch(/^[0-9a-f]{32}$/);
     expect(spans.every((span) => span.traceId === built!.traceId && /^[0-9a-f]{16}$/.test(span.spanId))).toBe(true);
-    expect(spans.map((span) => span.name)).toEqual(["agent.run", "policy.step.1", "policy.step.2", "model.policy", "tool.search_local_docs", "model.policy", "model.answer"]);
+    expect(spans.map((span) => span.name)).toEqual(["agent.run", "policy.step.1", "policy.step.2", "model.policy", "tool.search_local_docs", "model.policy", "model.answer", "agent.time_to_first_token"]);
+    const generation = spans.find((span) => span.name === "model.answer");
+    const firstToken = generation?.attributes.find((item) => item.key === "langfuse.observation.completion_start_time")?.value as { stringValue: string };
+    const wait = spans.at(-1) as unknown as { startTimeUnixNano: string; endTimeUnixNano: string };
+    expect(wait.endTimeUnixNano).toBe(`${Date.parse(firstToken.stringValue) * 1_000_000}`);
+    expect(Number(wait.endTimeUnixNano)).toBeGreaterThanOrEqual(Number(wait.startTimeUnixNano));
     const root = spans[0];
     const value = (key: string) => root.attributes.find((item) => item.key === key)?.value;
     expect(value("langfuse.user.id")).toEqual({ stringValue: "install:test" });

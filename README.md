@@ -82,6 +82,8 @@ PORT=4318
 npm run telemetry:gateway
 ```
 
+Langfuse를 셀프호스팅(v4)으로 옮길 때는 gateway의 `LANGFUSE_HOST`와 키 두 개만 바꿉니다. Desktop 빌드는 `KETCHUPE_OTLP_ENDPOINT`만 알기 때문에 다시 배포하지 않습니다.
+
 전송하는 trace는 다음과 같습니다.
 
 | Trace/observation | 내용 |
@@ -89,7 +91,8 @@ npm run telemetry:gateway
 | `agent.run` | 상태, release, variant, profile SHA, corpus snapshot, 최종 결과 |
 | `policy.step.N` | state, action, reason code, confidence, evidence sufficiency, budget, outcome |
 | `tool.*` | 검색 방식, rank/evidence, cache, latency, 오류 코드 |
-| `model.*` | purpose, model alias, token, latency, finish reason |
+| `model.*` | purpose, model alias, token(cache 적중분 포함), latency, finish reason, `model.answer`의 첫 토큰 시각 |
+| `agent.time_to_first_token` | 사용자 메시지부터 답변 첫 토큰까지의 대기(policy·검색 포함) |
 | `index.sync` / `embed.batch` | collection 동기화와 embedding 집계 |
 | `feedback.*` | `runtime/*`, `agent/*`, `user/*` evaluator 값 |
 
