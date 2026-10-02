@@ -317,10 +317,11 @@ app.on("before-quit", (event) => {
   isQuitting = true;
   stopPeriodicUpdateChecks();
   if (agentRuntime) {
-    // Flush queued telemetry once, then quit for real.
+    // Flush queued telemetry once, then leave for real. exit(), not quit(): a second quit() can still be cancelled
+    // while windows close (e.g. the renderer was killed first), which left the app in the tray with a closed database.
     event.preventDefault();
     const runtime = agentRuntime;
     agentRuntime = null;
-    void runtime.stop().finally(() => app.quit());
+    void runtime.stop().finally(() => app.exit());
   }
 });
