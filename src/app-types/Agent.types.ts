@@ -125,7 +125,7 @@ export interface KetchupEAgentAPI {
   confirmMemory(id: string): Promise<void>;
   deleteMemory(id: string): Promise<void>;
 
-  getModelSettings(): Promise<{ baseURL: string; modelAlias: string; hasApiKey: boolean }>;
+  getModelSettings(): Promise<{ baseURL: string; modelAlias: string; hasApiKey: boolean; configurable: boolean }>;
   setModelSettings(settings: { baseURL: string; modelAlias: string; apiKey?: string }): Promise<void>;
   listModels(): Promise<string[]>;
   testModelConnection(): Promise<{ ok: boolean; models: string[]; resolvedAlias: string }>;

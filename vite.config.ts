@@ -5,13 +5,16 @@ import electron from "vite-plugin-electron";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const telemetryDefine = Object.fromEntries([
+  const mainProcessEnv = Object.fromEntries([
     "KETCHUPE_OTLP_ENDPOINT",
     "KETCHUPE_OTLP_TOKEN",
     "KETCHUPE_TELEMETRY_CONTENT_MODE",
     "KETCHUPE_ENVIRONMENT",
     "KETCHUPE_TENANT_ID",
     "KETCHUPE_VARIANT",
+    "LITELLM_BASE_URL",
+    "LITELLM_API_KEY",
+    "LITELLM_MODEL_ALIAS",
   ].map((key) => [`process.env.${key}`, JSON.stringify(env[key] ?? "")]));
   return {
     plugins: [
@@ -22,7 +25,7 @@ export default defineConfig(({ mode }) => {
         // Main process entry file
         entry: "electron/main.ts",
         vite: {
-          define: telemetryDefine,
+          define: mainProcessEnv,
           build: {
             outDir: "dist-electron",
             rollupOptions: {

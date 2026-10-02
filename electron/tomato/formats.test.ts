@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Document, Packer, Paragraph, HeadingLevel, Table, TableCell, TableRow } from "docx";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { Tomato } from "./tomato.ts";
+import { parseSource, Tomato } from "./tomato.ts";
 
 let temporary: string;
 let tomato: Tomato;
@@ -50,4 +50,9 @@ it("indexes DOCX through KorDoc with breadcrumb and searches TXT", async () => {
   expect(table.results[0]?.relativePath).toBe("travel.docx");
   const txt = await tomato.search("삼천만원", { collections: ["formats"], mode: "keyword" });
   expect(txt.results[0]?.relativePath).toBe("notes.txt");
+});
+
+it("replaces KorDoc's generic parse failure with an actionable format reason", async () => {
+  await expect(parseSource("broken.pdf", Buffer.from("%PDF-1.7 broken"), "broken", "off"))
+    .rejects.toThrow("PDF 문서 구조를 해석하지 못했습니다");
 });

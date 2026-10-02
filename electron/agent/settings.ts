@@ -37,10 +37,7 @@ export function loadTelemetrySettings(): TelemetrySettings {
   };
 }
 
-/** An env var present but empty (`LITELLM_MODEL_ALIAS=` in .env) means "unset", not "override with empty". */
-const env = (name: string): string | undefined => process.env[name]?.trim() || undefined;
-
-/** Dev: env vars win. Packaged: settings file with the key encrypted by safeStorage. The key never reaches the renderer or traces. */
+/** Dev env and official build values win; saved settings are the fallback. The key never reaches the renderer or traces. */
 export function loadModelSettings(userData: string): ModelSettings {
   let stored: StoredSettings = { baseURL: DEFAULT_LITELLM_BASE_URL, modelAlias: DEFAULT_LITELLM_MODEL_ALIAS };
   try {
@@ -56,10 +53,13 @@ export function loadModelSettings(userData: string): ModelSettings {
       apiKey = undefined;
     }
   }
+  const baseURL = process.env.LITELLM_BASE_URL?.trim() || undefined;
+  const modelAlias = process.env.LITELLM_MODEL_ALIAS?.trim() || undefined;
+  const packagedApiKey = process.env.LITELLM_API_KEY?.trim() || undefined;
   return {
-    baseURL: normalizeBaseURL(env("LITELLM_BASE_URL") ?? stored.baseURL),
-    modelAlias: env("LITELLM_MODEL_ALIAS") ?? (stored.modelAlias?.trim() || DEFAULT_LITELLM_MODEL_ALIAS),
-    apiKey: env("LITELLM_API_KEY") ?? apiKey,
+    baseURL: normalizeBaseURL(baseURL ?? stored.baseURL),
+    modelAlias: modelAlias ?? (stored.modelAlias?.trim() || DEFAULT_LITELLM_MODEL_ALIAS),
+    apiKey: packagedApiKey ?? apiKey,
   };
 }
 

@@ -1337,7 +1337,12 @@ export async function parseSource(path: string, buffer: Buffer, contentHash: str
     removeHeaderFooter: true,
     filePath: path,
   });
-  if (!result.success) throw new Error(`${result.code ?? "PARSE_ERROR"}: ${result.error}`);
+  if (!result.success) {
+    const reason = result.code === "PARSE_ERROR" && result.error === "문서 처리 중 오류가 발생했습니다"
+      ? `${extension.slice(1).toUpperCase()} 문서 구조를 해석하지 못했습니다. 파일이 손상되었거나 현재 지원하지 않는 저장 방식일 수 있습니다.`
+      : result.error;
+    throw new Error(`${result.code ?? "PARSE_ERROR"}: ${reason}`);
+  }
   const articles = parser.articleHeadings ?? DEFAULT_PARSER_OPTIONS.articleHeadings;
   return {
     schemaVersion: SCHEMA_VERSION,

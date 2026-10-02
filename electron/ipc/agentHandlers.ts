@@ -1,4 +1,4 @@
-import { ipcMain, shell } from "electron";
+import { app, ipcMain, shell } from "electron";
 import type { InteractionKind, MemoryInput, StartRunInput } from "../../src/app-types/Agent.types.ts";
 import type { AnchorChoiceResumeContent, CanvasEditOp, StartCanvasInput } from "../../src/app-types/CanvasEdit.types.ts";
 import type { AgentRuntime } from "../agent/runtime.ts";
@@ -67,7 +67,7 @@ export function registerAgentHandlers(runtime: AgentRuntime): void {
 
   ipcMain.handle("agent:getModelSettings", () => {
     const settings = runtime.settings();
-    return { baseURL: settings.baseURL, modelAlias: settings.modelAlias, hasApiKey: Boolean(settings.apiKey) };
+    return { baseURL: settings.baseURL, modelAlias: settings.modelAlias, hasApiKey: Boolean(settings.apiKey), configurable: !app.isPackaged };
   });
   ipcMain.handle("agent:listModels", () => runtime.listModels());
   ipcMain.handle("agent:testModelConnection", async () => {

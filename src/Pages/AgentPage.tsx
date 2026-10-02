@@ -56,6 +56,7 @@ const AgentPage = (): React.JSX.Element => {
   const collectionsState = useCollections(api, WORKSPACE_ID);
   const memoriesState = useMemories(api, WORKSPACE_ID);
   const [tab, setTab] = useState<PanelTab>("context");
+  const [modelConfigurable, setModelConfigurable] = useState(false);
   const [input, setInput] = useState("");
   const [memoryEnabled, setMemoryEnabled] = useState(true);
   const [memoryStatus, setMemoryStatus] = useState<string | null>(null);
@@ -67,6 +68,12 @@ const AgentPage = (): React.JSX.Element => {
   useEffect(() => {
     void api?.getWorkspace().then((workspace) => {
       setMemoryEnabled(workspace.memoryEnabled);
+    });
+  }, [api]);
+
+  useEffect(() => {
+    void api?.getModelSettings().then((settings) => {
+      setModelConfigurable(settings.configurable);
     });
   }, [api]);
 
@@ -372,7 +379,7 @@ const AgentPage = (): React.JSX.Element => {
             [
               ["collections", LuFolderSearch, "폴더"],
               ["context", LuLayers, "컨텍스트"],
-              ["model", LuSettings, "모델"],
+              ...(modelConfigurable ? [["model", LuSettings, "모델"]] as const : []),
             ] as const
           ).map(([key, Icon, label]) => (
             <button
@@ -449,7 +456,7 @@ const AgentPage = (): React.JSX.Element => {
               </section>
             </div>
           )}
-          {tab === "model" && (
+          {modelConfigurable && tab === "model" && (
             <div role="tabpanel">
               <h3 className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-[#18181B] dark:text-[#FAFAFA]">
                 <LuSettings className="h-4 w-4" />
