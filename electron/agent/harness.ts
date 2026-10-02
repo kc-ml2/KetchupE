@@ -14,7 +14,7 @@ import {
 } from "./contracts.ts";
 import { selectContext } from "./context.ts";
 import type { ModelCallInfo, ModelClient } from "./modelClient.ts";
-import { alwaysSearchDecision, derivePolicySignals, profileFingerprint } from "./policy.ts";
+import { alwaysSearchDecision, derivePolicySignals, gatedDecision, profileFingerprint } from "./policy.ts";
 import { appendMessage, createRun, findOpenRun, getRun, getThread, setRunStatus } from "./store.ts";
 import { chunkToEvidence, normalizeQuery, resultToEvidence, withTimeout, type EvidenceSource, type SearchTools } from "./tools.ts";
 import { readTrace, TraceWriter } from "./trace.ts";
@@ -299,12 +299,18 @@ export class Harness {
 
   private async decide(run: RunContext): Promise<PolicyDecision> {
     const { policy } = this.options.profiles;
-    if (policy.strategy === "always-search" && !(this.options.tools.maru && /maru|마루/iu.test(run.state.userGoal))) {
+    const wantsMaru = Boolean(this.options.tools.maru) && /maru|마루/iu.test(run.state.userGoal);
+    if (policy.strategy === "always-search" && !wantsMaru) {
       const raw = alwaysSearchDecision(run.state, policy.version);
       const validation = validateDecision(raw, run.state, policy.allowedActions);
       if (validation.ok) return validation.decision;
       if (validation.code === "BUDGET_EXCEEDED") return this.coerce(run, raw);
       throw new AgentError(validation.code, validation.reason);
+    }
+    if (policy.strategy === "gated" && !wantsMaru) {
+      const fast = gatedDecision(run.state, policy.version);
+      const validation = fast && validateDecision(fast, run.state, policy.allowedActions);
+      if (validation?.ok) return validation.decision;
     }
 
     let lastReason = "";

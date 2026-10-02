@@ -442,7 +442,7 @@ type PolicyTransition = {
 
 type PolicyProfile = {
   version: string;
-  strategy: "llm" | "always-search";
+  strategy: "llm" | "always-search" | "gated";
   allowedActions: PolicyAction[];
   modelAlias: string;
   promptVersion: string;

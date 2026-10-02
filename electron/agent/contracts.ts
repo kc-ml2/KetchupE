@@ -23,7 +23,7 @@ export class AgentError extends Error {
 export const POLICY_ACTIONS = ["SEARCH", "ASK", "VERIFY", "ANSWER", "STOP"] as const;
 export type PolicyAction = (typeof POLICY_ACTIONS)[number];
 
-export const POLICY_STRATEGIES = ["llm", "always-search"] as const;
+export const POLICY_STRATEGIES = ["llm", "always-search", "gated"] as const;
 export type PolicyStrategy = (typeof POLICY_STRATEGIES)[number];
 
 export const REASON_CODES = [

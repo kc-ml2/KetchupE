@@ -235,14 +235,15 @@ evidence:
 
 `reasonCode`는 왜 그 행동을 골랐는지를 9개 중 하나로 고정한다: `NO_RETRIEVAL_NEEDED`, `MISSING_EVIDENCE`, `QUERY_REWRITE`, `NEED_NEIGHBORS`, `MISSING_USER_INPUT`, `CONFLICTING_EVIDENCE`, `ENOUGH_EVIDENCE`, `UNSUPPORTED`, `BUDGET_LIMIT`. 자유 서술 대신 고정 코드를 쓰는 이유는 나중에 집계·비교가 가능해야 하기 때문이고, chain-of-thought를 저장하지 않기 위해서이기도 하다.
 
-### 5.3 Policy 두 종류, 그리고 행동 막기
+### 5.3 Policy 세 종류, 그리고 행동 막기
 
 | `strategy` | 동작 |
 | --- | --- |
 | `llm` | 모델에게 물어본다 (기본) |
 | `always-search` | 모델을 **안 쓰고** 규칙대로: 검색 1회 → 근거 있으면 ANSWER, 없으면 STOP ([`alwaysSearchDecision`](electron/agent/policy.ts)) |
+| `gated` | 모델 없이 정할 수 있는 step만 규칙으로: 새 질문의 첫 검색, hybrid 1위 근거에 두 랭커가 동의할 때의 ANSWER. 나머지는 `llm`과 같다 ([`gatedDecision`](electron/agent/policy.ts)) |
 
-두 번째는 비교용 기준선이다. "머리를 쓰는 게 정말 이득인가"를 재려면 머리를 안 쓰는 버전과 비교해야 한다.
+`always-search`는 비교용 기준선이고, `gated`는 policy 호출 지연을 줄이는 실험 arm이다(임계값은 bench 보정 전). "머리를 쓰는 게 정말 이득인가"를 재려면 머리를 안 쓰는 버전과 비교해야 한다.
 
 profile의 `allowedActions`에서 `ASK`를 빼면 policy가 `ASK`를 골라도 harness가 거부한다. 외부 benchmark가 이 계약을 이용해 action ablation을 구성한다.
 
@@ -279,6 +280,7 @@ while (true):
 
 ```text
 strategy = "always-search" → alwaysSearchDecision()      # 규칙 기반 baseline, 모델 없이
+strategy = "gated"         → gatedDecision()가 결정하면 사용, undefined면 아래 llm 경로
 strategy = "llm"           → 최대 2회 시도
      model.decide() → validateDecision()
        ok            → 사용
@@ -583,7 +585,7 @@ fs.watch(root, {recursive:true})
 - **사용자/CLI export는 없다.** 평가 데이터는 관리자가 Langfuse에서 받는다.
 - **중앙 수집**: [telemetry.ts](electron/agent/telemetry.ts)가 `agent.run`, `index.sync`, `embed.batch`, feedback evaluator span을 서비스 소유 OTLP gateway 한 곳으로 보낸다. Langfuse secret은 [telemetry-gateway.ts](scripts/telemetry-gateway.ts)만 보유한다.
 - **Content mode**: `ops`는 텍스트/ID를 설치별 HMAC 처리, `redacted_eval`은 이메일·전화번호·secret을 마스킹, `internal_full`은 사내 승인 corpus용이다. 사용자가 변경하지 않는다.
-- **A/B**: `POLICY_VARIANTS`([policy.ts](electron/agent/policy.ts))에 `adaptive-v1`(기본)과 `always-search-v1`이 있고, install id의 sha256으로 **결정적으로** 배정된다. 한 설치는 한 arm에 고정되고 프로세스 수명 동안 바뀌지 않는다.
+- **A/B**: `POLICY_VARIANTS`([policy.ts](electron/agent/policy.ts))에 `adaptive-v1`(기본), `always-search-v1`, `gated-v1`이 있고, install id의 sha256으로 **결정적으로** 배정된다. 한 설치는 한 arm에 고정되고 프로세스 수명 동안 바뀌지 않는다.
 - API key는 `safeStorage`로 암호화되어 userData에 저장되고 renderer·trace·profile 어디에도 나가지 않는다.
 
 ---

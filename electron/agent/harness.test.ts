@@ -10,7 +10,7 @@ import type { PolicyDecision, PolicyProfile, PolicyState } from "./contracts.ts"
 import { Harness } from "./harness.ts";
 import { addMemory, confirmMemory, proposeMemory } from "./memory.ts";
 import { createFixtureClient, type FixtureScript } from "./modelClient.ts";
-import { ANSWER_PROMPT_VERSION, DEFAULT_POLICY_PROFILE } from "./policy.ts";
+import { ANSWER_PROMPT_VERSION, DEFAULT_POLICY_PROFILE, gatedDecision } from "./policy.ts";
 import { createThread, deleteThread, ensureWorkspace, getRun, listThreads, loadThread } from "./store.ts";
 import { tomatoTools, type SearchTools } from "./tools.ts";
 import { readTrace, transitions } from "./trace.ts";
@@ -119,6 +119,23 @@ describe("harness", () => {
     expect(getRun(db, handle.runId).status).toBe("completed");
     expect(transitions(db, handle.runId).map((transition) => transition.decision.action)).toEqual(["SEARCH", "ANSWER"]);
     expect(calls).toEqual(["answer"]);
+  });
+
+  it("gated policy searches without the model and asks it only when the evidence gate does not pass", async () => {
+    const thread = createThread(db, workspace.id);
+    const calls: string[] = [];
+    const profile: PolicyProfile = { ...DEFAULT_POLICY_PROFILE, strategy: "gated" };
+    const handle = harness({ decide: [answer], answer: "정산합니다 [[e1]]", onCall: (call) => calls.push(call.purpose) }, [], profile)
+      .startRun({ workspaceId: workspace.id, threadId: thread.id, text: "연차 정산" });
+    await handle.done;
+
+    expect(getRun(db, handle.runId).status).toBe("completed");
+    expect(transitions(db, handle.runId).map((transition) => transition.decision.action)).toEqual(["SEARCH", "ANSWER"]);
+    expect(calls).toEqual(["policy", "answer"]); // one keyword hit is below the gate, so the model decides step 2
+
+    const strong: PolicyState = { ...transitions(db, handle.runId)[1].state, lastObservation: { kind: "search", resultIds: ["e1"], effectiveMode: "hybrid", latencyMs: 1 }, signals: { evidenceCount: 3, uniqueSourceCount: 1, topEvidenceScore: 2 / 61 } };
+    expect(gatedDecision(strong, "gated-1")?.action).toBe("ANSWER");
+    expect(gatedDecision({ ...strong, signals: { evidenceCount: 3, uniqueSourceCount: 1, topEvidenceScore: 1 / 61 } }, "gated-1")).toBeUndefined();
   });
 
   it("calls MARU and gives its result to answer generation", async () => {

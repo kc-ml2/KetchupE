@@ -23,6 +23,7 @@ export const DEFAULT_POLICY_PROFILE: PolicyProfile = {
 export const POLICY_VARIANTS: Record<string, PolicyProfile> = {
   "always-search-v1": { ...DEFAULT_POLICY_PROFILE, version: "always-search-1", strategy: "always-search", allowedActions: ["SEARCH", "ANSWER", "STOP"] },
   "adaptive-v1": DEFAULT_POLICY_PROFILE,
+  "gated-v1": { ...DEFAULT_POLICY_PROFILE, version: "gated-1", strategy: "gated" },
 };
 export const DEFAULT_VARIANT = "adaptive-v1";
 
@@ -50,6 +51,41 @@ export function alwaysSearchDecision(state: PolicyState, policyVersion: string):
       policyVersion,
     };
   }
+  return {
+    action: "ANSWER",
+    taskDifficulty: 1,
+    predictedSuccess: 0.5,
+    evidenceSufficiency: 0.5,
+    reasonCode: "ENOUGH_EVIDENCE",
+    policyVersion,
+  };
+}
+
+// ponytail: rank-agreement heuristic, not calibrated relevance. Tomato hybrid scores are RRF (1/(60+rank) per ranker),
+// so this means "first in one ranker and top-3 in the other". Calibrate against the benchmark before promoting gated-v1.
+const GATE_MIN_HYBRID_TOP_SCORE = 1 / 61 + 1 / 63;
+const GATE_MIN_EVIDENCE = 3;
+
+/** Decides the steps that need no model call; undefined hands the step to the LLM policy. */
+export function gatedDecision(state: PolicyState, policyVersion: string): PolicyDecision | undefined {
+  const isFreshQuestion = state.previousDecisions.length === 0 && state.recentMessages.length === 0;
+  if (isFreshQuestion && state.activeCollections.length > 0) {
+    return {
+      action: "SEARCH",
+      taskDifficulty: 1,
+      predictedSuccess: 0.5,
+      evidenceSufficiency: 0,
+      reasonCode: "MISSING_EVIDENCE",
+      search: { tool: "search_local_docs", query: state.userGoal },
+      policyVersion,
+    };
+  }
+  const signals = state.signals ?? derivePolicySignals(state);
+  const hasAgreedTopResult = state.lastObservation?.kind === "search"
+    && state.lastObservation.effectiveMode === "hybrid"
+    && signals.evidenceCount >= GATE_MIN_EVIDENCE
+    && signals.topEvidenceScore >= GATE_MIN_HYBRID_TOP_SCORE;
+  if (!hasAgreedTopResult) return undefined;
   return {
     action: "ANSWER",
     taskDifficulty: 1,
