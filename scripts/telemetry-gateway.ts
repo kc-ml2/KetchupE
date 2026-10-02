@@ -9,7 +9,7 @@ const MAX_STRING_CHARS = 16_000;
 const redactString = (value: string) => value
   .slice(0, MAX_STRING_CHARS)
   .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, "[EMAIL]")
-  .replace(/(?:\+?82[- ]?)?0?1[016789][ -]?\d{3,4}[ -]?\d{4}/gu, "[PHONE]")
+  .replace(/(?<!\d)(?:\+?82[- ]?)?0?1[016789][ -]?\d{3,4}[ -]?\d{4}(?!\d)/gu, "[PHONE]")
   .replace(/\b(?:sk|pk)-[A-Za-z0-9_-]{12,}\b/gu, "[SECRET]")
   .replace(/\bBearer\s+[A-Za-z0-9._~-]+/giu, "Bearer [SECRET]")
   .replace(/\b[A-Z]:\\(?:[^\\\s"'<>]+\\)*[^\\\s"'<>]*/giu, "[PATH]")

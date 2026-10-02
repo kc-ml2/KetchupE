@@ -64,7 +64,7 @@ const nanos = (iso: string, plusMs = 0) => `${(Date.parse(iso) + plusMs) * 1_000
 const hmac = (key: string, value: string) => `hmac-sha256:${createHmac("sha256", key).update(value).digest("hex").slice(0, 32)}`;
 const redactSensitiveText = (value: string) => value
   .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, "[EMAIL]")
-  .replace(/(?:\+?82[- ]?)?0?1[016789][ -]?\d{3,4}[ -]?\d{4}/gu, "[PHONE]")
+  .replace(/(?<!\d)(?:\+?82[- ]?)?0?1[016789][ -]?\d{3,4}[ -]?\d{4}(?!\d)/gu, "[PHONE]")
   .replace(/\b(?:sk|pk)-[A-Za-z0-9_-]{12,}\b/gu, "[SECRET]")
   .replace(/\bBearer\s+[A-Za-z0-9._~-]+/giu, "Bearer [SECRET]");
 export const traceIdFor = (runId: string) => runId.replace(/-/g, "").padEnd(32, "0").slice(0, 32);

@@ -12,4 +12,9 @@ describe("telemetry gateway", () => {
       apiKey: "[SECRET]",
     });
   });
+
+  it("keeps OTLP nanosecond timestamps, which contain phone-shaped digit runs", () => {
+    const span = { startTimeUnixNano: "1790920781563000000", endTimeUnixNano: "1790920781587000000", traceId: "f7c0e6a78e4d46e08d6a70fbb404c612" };
+    expect(sanitizeTelemetry(span)).toEqual(span);
+  });
 });
