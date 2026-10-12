@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { createFixtureClient } from "./modelClient.ts";
 import { DEFAULT_POLICY_PROFILE } from "./policy.ts";
-import { looksLikeAuthoring, routeMessage } from "./router.ts";
+import { CHAT_ROUTE, DOC_ROUTE, looksLikeAuthoring, routeMessage } from "./router.ts";
 
 const signal = new AbortController().signal;
 
@@ -20,5 +20,16 @@ describe("router", () => {
     expect(await routeMessage(createFixtureClient({ decide: [], complete: ["doc"] }), DEFAULT_POLICY_PROFILE, "A사와 용역 계약서 작성해줘", signal)).toBe("doc");
     expect(await routeMessage(createFixtureClient({ decide: [], complete: ["chat"] }), DEFAULT_POLICY_PROFILE, "계약서 작성 절차가 어떻게 돼?", signal)).toBe("chat");
     expect(await routeMessage(createFixtureClient({ decide: [] }), DEFAULT_POLICY_PROFILE, "워크숍 기안서 만들어줘", signal)).toBe("doc");
+  });
+
+  it("routes registered skills using only matching candidates and validates the model's ID", async () => {
+    const routes = [CHAT_ROUTE, DOC_ROUTE, { id: "summary", description: "문서를 요약한다", matches: (text: string) => text.includes("요약") }];
+    let prompt = "";
+    const model = createFixtureClient({ decide: [], complete: (input) => { prompt = input; return "summary"; } });
+    expect(await routeMessage(model, DEFAULT_POLICY_PROFILE, "이 문서를 요약해줘", signal, routes)).toBe("summary");
+    expect(prompt).toContain("- summary:");
+    expect(prompt).not.toContain("- doc:");
+    expect(await routeMessage(createFixtureClient({ decide: [], complete: ["unknown"] }), DEFAULT_POLICY_PROFILE, "문서를 요약해줘", signal, routes)).toBe("summary");
+    expect(await routeMessage(createFixtureClient({ decide: [] }), DEFAULT_POLICY_PROFILE, "안녕하세요", signal, routes)).toBe("chat");
   });
 });

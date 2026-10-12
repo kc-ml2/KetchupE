@@ -5,19 +5,20 @@ import { CollectionWatchers } from "../collectionWatchers.ts";
 import { openAgentDb } from "../db/openAgentDb.ts";
 import { PIPELINE_PROFILE, type Collection } from "../tomato/tomato.ts";
 import { TomatoClient } from "../tomato/tomatoClient.ts";
-import { AgentError } from "./contracts.ts";
 import { Harness } from "./harness.ts";
 import { CanvasFlow } from "./canvas/flow.ts";
-import { routeMessage } from "./router.ts";
+import { CHAT_ROUTE, DOC_ROUTE, routeMessage } from "./router.ts";
 import type { StartRunInput, StartRunResult } from "../../src/app-types/Agent.types.ts";
-import { findOpenRun } from "./store.ts";
-import { createLiteLLMClient, listModels, resolveModelAlias, type ModelClient } from "./modelClient.ts";
+import { WorkflowDispatcher } from "./workflows.ts";
+import { tomatoTools } from "./tools.ts";
+import { settingsBackedModelClient } from "./liveModelClient.ts";
+import { listModels, resolveModelAlias } from "./modelClient.ts";
 import { ANSWER_PROMPT_VERSION, assignVariant, POLICY_VARIANTS } from "./policy.ts";
 import { loadModelSettings, loadTelemetrySettings, saveModelSettings, type ModelSettings } from "./settings.ts";
 import { interactionScore, LangfuseExporter, loadInstallId } from "./telemetry.ts";
 import type { InteractionKind } from "../../src/app-types/Agent.types.ts";
 import { ensureWorkspace, inactiveCollections } from "./store.ts";
-import { MaruClient } from "./maru.ts";
+import { DEFAULT_MARU_ENDPOINT, MaruClient } from "./maru.ts";
 
 export const DEFAULT_RETRIEVAL = { mode: "hybrid", topK: 8 } as const;
 
@@ -25,10 +26,11 @@ export type AgentRuntime = {
   db: DatabaseSync;
   tomato: TomatoClient;
   watchers: CollectionWatchers;
-  harness: Harness;
   canvas: CanvasFlow;
-  /** Routes a new message to the agent harness or the canvas flow; resumes an ASK-waiting agent run. */
+  /** Routes new messages to registered workflows; replies resume their persisted owner. */
   startMessage: (input: StartRunInput) => Promise<StartRunResult>;
+  resumeRun: (runId: string, text: string) => void;
+  cancelRun: (runId: string) => void;
   collections: () => Collection[];
   refreshCollections: () => Promise<Collection[]>;
   collectionSummaries: (workspaceId: string) => Promise<CollectionSummary[]>;
@@ -50,41 +52,6 @@ export type RuntimeOptions = {
   emitAgentEvent: (event: AgentStreamEvent) => void;
   emitCollectionsChanged: () => void;
 };
-
-/** Model client that reads the current settings on every call so the settings screen takes effect immediately. */
-function settingsBackedModelClient(settings: () => ModelSettings, resolvedAlias: () => Promise<string>): ModelClient {
-  const client = async () => {
-    const current = settings();
-    if (!current.apiKey) throw new AgentError("MODEL_AUTH", "LiteLLM 도메인과 API key를 설정에서 입력하세요.");
-    return { client: createLiteLLMClient({ baseURL: current.baseURL, apiKey: current.apiKey }), modelAlias: await resolvedAlias() };
-  };
-  const self: ModelClient = {
-    decide: async (state, profile, signal) => {
-      const { client: live, modelAlias } = await client();
-      const decision = await live.decide(state, { ...profile, modelAlias }, signal);
-      self.lastCall = live.lastCall;
-      return decision;
-    },
-    verify: async (input, profile, signal) => {
-      const { client: live, modelAlias } = await client();
-      const result = await live.verify(input, { ...profile, modelAlias }, signal);
-      self.lastCall = live.lastCall;
-      return result;
-    },
-    async *streamAnswer(input, profile, signal) {
-      const { client: live, modelAlias } = await client();
-      yield* live.streamAnswer(input, { ...profile, modelAlias }, signal);
-      self.lastCall = live.lastCall;
-    },
-    async complete(input, profile, signal) {
-      const { client: live, modelAlias } = await client();
-      const text = await live.complete(input, { ...profile, modelAlias }, signal);
-      self.lastCall = live.lastCall;
-      return text;
-    },
-  };
-  return self;
-}
 
 export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
   const db = openAgentDb(join(options.userData, "agent.sqlite"));
@@ -119,15 +86,24 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
     void refreshFingerprint(result.collection);
   });
   const harnessModel = settingsBackedModelClient(() => current, resolvedModelAlias);
+  const activeCollections = (workspaceId: string) => {
+    const inactive = inactiveCollections(db, workspaceId);
+    return collections.map((collection) => collection.name).filter((name) => !inactive.has(name));
+  };
+  const onRunSettled = (runId: string) => telemetry.exportRun(db, runId);
   const maruToken = process.env.MARU_API_TOKEN?.trim();
-  const maru = maruToken ? new MaruClient(maruToken, options.appVersion, join(options.userData, "mcp-cache", "maru"), tomato) : undefined;
+  const maru = maruToken ? new MaruClient(
+    maruToken,
+    options.appVersion,
+    join(options.userData, "mcp-cache", "maru"),
+    tomato,
+    new URL(process.env.MARU_MCP_ENDPOINT?.trim() || DEFAULT_MARU_ENDPOINT.href),
+  ) : undefined;
   const harness = new Harness({
     db,
     model: harnessModel,
     tools: {
-      search: (query, names) => tomato.search(query, { collections: names, mode: DEFAULT_RETRIEVAL.mode, limit: DEFAULT_RETRIEVAL.topK }),
-      neighbors: (chunkId, before, after) => tomato.getNeighbors(chunkId, before, after),
-      sourceChunks: (sourceId) => tomato.getSourceChunks(sourceId),
+      ...tomatoTools(tomato, DEFAULT_RETRIEVAL),
       ...(maru ? { maru } : {}),
     },
     profiles: {
@@ -135,13 +111,10 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
       policy: { ...policyProfile, modelAlias: current.modelAlias || "gateway-default" },
       answer: { modelAlias: current.modelAlias || "gateway-default", promptVersion: ANSWER_PROMPT_VERSION },
     },
-    activeCollections: (workspaceId) => {
-      const inactive = inactiveCollections(db, workspaceId);
-      return collections.map((collection) => collection.name).filter((name) => !inactive.has(name));
-    },
+    activeCollections,
     emit: options.emitAgentEvent,
     runMetadata: () => ({ variant, appVersion: options.appVersion, installId, corpusFingerprints: { ...corpusFingerprints } }),
-    onRunSettled: (runId) => telemetry.exportRun(db, runId),
+    onRunSettled,
   });
   telemetry.appSession(variant);
 
@@ -155,13 +128,32 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
       getSourceChunks: (sourceId) => tomato.getSourceChunks(sourceId),
     },
     profile: { ...policyProfile, modelAlias: current.modelAlias || "gateway-default" },
-    activeCollections: (workspaceId) => {
-      const inactive = inactiveCollections(db, workspaceId);
-      return collections.map((collection) => collection.name).filter((name) => !inactive.has(name));
-    },
+    activeCollections,
     emit: options.emitAgentEvent,
-    onRunSettled: (runId) => telemetry.exportRun(db, runId),
+    onRunSettled,
   });
+
+  const workflows = new WorkflowDispatcher(db, [
+    {
+      ...CHAT_ROUTE,
+      kind: "agent",
+      start: (input) => harness.startRun(input),
+      resume: (runId, text) => harness.resumeRun(runId, text),
+      cancel: (runId) => harness.cancelRun(runId),
+    },
+    {
+      ...DOC_ROUTE,
+      kind: "canvas",
+      start: (input) => canvas.start({ workspaceId: input.workspaceId, threadId: input.threadId, instruction: input.text }),
+      cancel: (runId) => canvas.cancel(runId),
+    },
+  ], (text, routes) => routeMessage(
+    harnessModel,
+    { ...policyProfile, modelAlias: current.modelAlias || "gateway-default" },
+    text,
+    AbortSignal.timeout(policyProfile.runTimeoutMs),
+    routes,
+  ), onRunSettled);
 
   const refreshCollections = async () => {
     collections = await tomato.call("listCollections", []);
@@ -182,18 +174,10 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
     db,
     tomato,
     watchers,
-    harness,
     canvas,
-    async startMessage(input) {
-      const open = findOpenRun(db, input.threadId);
-      const forced = input.mode === "doc" ? "doc" : input.mode === "chat" ? "chat" : undefined;
-      const route = open ? "chat" : forced ?? (await routeMessage(harnessModel, { ...policyProfile, modelAlias: current.modelAlias || "gateway-default" }, input.text, new AbortController().signal));
-      const result = route === "doc"
-        ? { runId: canvas.start({ workspaceId: input.workspaceId, threadId: input.threadId, instruction: input.text }).runId, kind: "canvas" as const }
-        : { runId: harness.startRun(input).runId, kind: "agent" as const };
-      telemetry.exportRun(db, result.runId); // queues a marker so a crash can be exported after restart
-      return result;
-    },
+    startMessage: (input) => workflows.start(input),
+    resumeRun: (runId, text) => { workflows.resume(runId, text); },
+    cancelRun: (runId) => workflows.cancel(runId),
     collections: () => collections,
     refreshCollections,
     settings: () => current,

@@ -66,13 +66,17 @@ export function normalizeQuery(query: string): string {
 
 export async function withTimeout<T>(promise: Promise<T>, ms: number, code: AgentErrorCode, signal?: AbortSignal): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new AgentError(code, `timed out after ${ms}ms`)), ms);
-    signal?.addEventListener("abort", () => reject(new AgentError("CANCELLED", "cancelled")), { once: true });
+    onAbort = () => reject(new AgentError("CANCELLED", "cancelled"));
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
   });
   try {
-    return await Promise.race([promise, timeout]);
+    return await Promise.race(signal?.aborted ? [timeout, promise] : [promise, timeout]);
   } finally {
     clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener("abort", onAbort);
   }
 }

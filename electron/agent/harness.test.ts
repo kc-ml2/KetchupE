@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AgentStreamEvent } from "../../src/app-types/Agent.types.ts";
 import { openAgentDb } from "../db/openAgentDb.ts";
 import { PIPELINE_PROFILE, Tomato } from "../tomato/tomato.ts";
-import type { PolicyDecision, PolicyProfile, PolicyState } from "./contracts.ts";
+import { AgentError, type PolicyDecision, type PolicyProfile, type PolicyState } from "./contracts.ts";
 import { Harness } from "./harness.ts";
 import { addMemory, confirmMemory, proposeMemory } from "./memory.ts";
 import { createFixtureClient, type FixtureScript } from "./modelClient.ts";
@@ -49,6 +49,38 @@ afterAll(async () => {
 });
 
 describe("harness", () => {
+  it("allows one schema repair while counting both attempts against the model budget", async () => {
+    let attempts = 0;
+    const thread = createThread(db, workspace.id);
+    const handle = harness({ decide: () => {
+      attempts += 1;
+      if (attempts === 1) throw new AgentError("INVALID_DECISION", "invalid policy schema");
+      return answer;
+    }, answer: "안녕하세요" }).startRun({ workspaceId: workspace.id, threadId: thread.id, text: "인사해줘" });
+    await handle.done;
+    expect(attempts).toBe(2);
+    expect(getRun(db, handle.runId).status).toBe("completed");
+    expect(readTrace(db, handle.runId).filter((event) => event.type === "model.started")).toHaveLength(3);
+    expect(readTrace(db, handle.runId).filter((event) => event.type === "model.completed")).toHaveLength(3);
+    expect(readTrace(db, handle.runId).find((event) => event.type === "model.completed")?.payload).toMatchObject({ code: "INVALID_DECISION", promptTokens: 0 });
+    expect(readTrace(db, handle.runId).filter((event) => event.type === "policy.decided")[0].payload).toMatchObject({ invalid: true, attempt: 1 });
+  });
+
+  it("cancels an ASK-waiting run and emits a fresh event without deleting its messages", async () => {
+    const events: AgentStreamEvent[] = [];
+    const thread = createThread(db, workspace.id);
+    const instance = harness({ decide: [{ ...base, action: "ASK", reasonCode: "MISSING_USER_INPUT", question: "고용 형태는?" }] }, events);
+    const handle = instance.startRun({ workspaceId: workspace.id, threadId: thread.id, text: "연차 정산" });
+    await handle.done;
+    const lastSeq = events.at(-1)!.seq;
+    instance.cancelRun(handle.runId);
+    expect(getRun(db, handle.runId).status).toBe("cancelled");
+    expect(events.at(-1)).toMatchObject({ type: "failed", payload: { code: "CANCELLED" } });
+    expect(events.at(-1)!.seq).toBeGreaterThan(lastSeq);
+    expect(loadThread(db, thread.id).messages).toHaveLength(2);
+    expect(() => deleteThread(db, thread.id)).not.toThrow();
+  });
+
   it("SEARCH → ANSWER with validated citation and trace", async () => {
     const events: AgentStreamEvent[] = [];
     const thread = createThread(db, workspace.id);

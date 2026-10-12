@@ -41,9 +41,11 @@ export type AgentStreamEvent = {
   payload: unknown;
 };
 
-/** mode: auto = route chat/doc from the message (default), chat/doc = force. */
-export type StartRunInput = { threadId: string; workspaceId: string; text: string; mode?: "auto" | "chat" | "doc" };
-export type StartRunResult = { runId: string; kind: "agent" | "canvas" };
+/** auto (default) routes the message; any other mode selects a registered workflow ID. */
+export type StartRunInput = { threadId: string; workspaceId: string; text: string; mode?: string };
+/** Persisted workflow kind; built-ins are agent and canvas. */
+export type RunKind = string;
+export type StartRunResult = { runId: string; kind: RunKind };
 
 export type CollectionSummary = {
   name: string;
@@ -102,7 +104,7 @@ export interface KetchupEAgentAPI {
   loadThread(threadId: string, beforeMessageId?: string, limit?: number): Promise<MessagePage>;
   renameThread(threadId: string, title: string): Promise<void>;
   deleteThread(threadId: string): Promise<void>;
-  openRun(threadId: string): Promise<{ runId: string; status: RunStatus; kind: "agent" | "canvas" } | null>;
+  openRun(threadId: string): Promise<{ runId: string; status: RunStatus; kind: RunKind } | null>;
 
   startRun(input: StartRunInput): Promise<StartRunResult>;
   resumeRun(runId: string, text: string): Promise<void>;

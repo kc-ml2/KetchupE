@@ -18,6 +18,14 @@ function fakeApi() {
 }
 
 describe("useAgentRun", () => {
+  it("reattaches to a registered text workflow", async () => {
+    const { api } = fakeApi();
+    vi.mocked(api.openRun).mockResolvedValue({ runId: "summary-1", status: "running", kind: "summary" });
+    const { result } = renderHook(() => useAgentRun(api, "thread-summary", () => undefined));
+    await act(async () => { await Promise.resolve(); });
+    expect(result.current.view).toMatchObject({ runId: "summary-1", isRunning: true });
+  });
+
   it("streams text deltas and keeps the completed payload visible until messages reload", () => {
     const { api, emit } = fakeApi();
     const onSettled = vi.fn();

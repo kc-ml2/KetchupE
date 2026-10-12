@@ -76,7 +76,7 @@ export const useAgentRun = (api: KetchupEAgentAPI | null, threadId: string | nul
     if (!api || !threadId) return;
     let cancelled = false;
     void api.openRun(threadId).then((open) => {
-      if (cancelled || open?.kind !== "agent") return;
+      if (cancelled || !open || open.kind === "canvas") return;
       bind(open.runId);
       setView((current) => open.status === "waiting_user"
         ? { ...current, runId: open.runId, waitingQuestion: "" }

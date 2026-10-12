@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import type { AppliedContext, CitationSummary, InteractionKind, MessagePage, MessageRecord, RunStatus, ThreadSummary, WorkspaceSummary } from "../../src/app-types/Agent.types.ts";
+import type { AppliedContext, CitationSummary, InteractionKind, MessagePage, MessageRecord, RunKind, RunStatus, ThreadSummary, WorkspaceSummary } from "../../src/app-types/Agent.types.ts";
 
 export const DEFAULT_WORKSPACE_ID = "default";
 export const THREAD_TITLE_MAX_CHARS = 40;
@@ -134,7 +134,7 @@ export function appendMessage(db: DatabaseSync, input: { threadId: string; runId
   return { id, threadId: input.threadId, runId: input.runId, role: input.role, content: input.content, citations: [], appliedContext, createdAt: at };
 }
 
-export type RunKind = "agent" | "canvas";
+export type { RunKind } from "../../src/app-types/Agent.types.ts";
 
 export type RunRecord = {
   id: string;

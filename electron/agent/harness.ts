@@ -19,6 +19,7 @@ import { appendMessage, createRun, findOpenRun, getRun, getThread, setRunStatus 
 import { chunkToEvidence, normalizeQuery, resultToEvidence, withTimeout, type EvidenceSource, type SearchTools } from "./tools.ts";
 import { readTrace, TraceWriter } from "./trace.ts";
 import { stripInvalidCitations, validateCitations } from "./verify.ts";
+import { cancelWaitingRun, type RunHandle } from "./runLifecycle.ts";
 
 export type AnswerProfile = { modelAlias: string; promptVersion: string };
 export type HarnessProfiles = { retrieval: Record<string, unknown>; policy: PolicyProfile; answer: AnswerProfile };
@@ -38,7 +39,7 @@ export type HarnessOptions = {
   onRunSettled?: (runId: string, status: RunStatus) => void;
 };
 
-export type RunHandle = { runId: string; done: Promise<void> };
+export type { RunHandle } from "./runLifecycle.ts";
 
 type RunContext = {
   runId: string;
@@ -66,6 +67,7 @@ export class Harness {
   private readonly limits: HarnessLimits;
   private readonly fingerprints: { retrieval: string; policy: string; answer: string };
   private readonly running = new Map<string, RunContext>();
+  private readonly pausedSeqs = new Map<string, number>();
   private readonly options: HarnessOptions;
 
   constructor(options: HarnessOptions) {
@@ -81,8 +83,10 @@ export class Harness {
   startRun(input: { workspaceId: string; threadId: string; text: string }): RunHandle {
     const { db } = this.options;
     const thread = getThread(db, input.threadId);
+    if (thread.workspaceId !== input.workspaceId) throw new AgentError("INTERNAL", "대화의 작업 공간이 일치하지 않습니다.");
+    if (!input.text.trim()) throw new AgentError("INTERNAL", "요청 내용을 입력하세요.");
     const open = findOpenRun(db, input.threadId);
-    if (open?.kind === "canvas") throw new AgentError("INTERNAL", "이 대화는 문서 작성 중입니다. 캔버스를 확정하거나 닫은 뒤 질문하세요.");
+    if (open && open.kind !== "agent") throw new AgentError("INTERNAL", "이 대화에 다른 작업이 진행 중입니다.");
     if (open?.status === "waiting_user") return this.resumeRun(open.id, input.text);
     if (open) throw new AgentError("INTERNAL", "a run is already in progress for this thread");
 
@@ -126,7 +130,8 @@ export class Harness {
   resumeRun(runId: string, text: string): RunHandle {
     const { db } = this.options;
     const record = getRun(db, runId);
-    if (record.status !== "waiting_user") throw new AgentError("INTERNAL", `run ${runId} is not waiting for the user`);
+    if (record.kind !== "agent" || record.status !== "waiting_user") throw new AgentError("INTERNAL", `run ${runId} is not waiting for an agent reply`);
+    if (!text.trim()) throw new AgentError("INTERNAL", "응답 내용을 입력하세요.");
     const decided = readTrace(db, runId).filter((event) => event.type === "policy.decided").at(-1);
     const started = readTrace(db, runId).find((event) => event.type === "run.started");
     if (!decided || !started) throw new AgentError("INTERNAL", "cannot resume without a recorded decision");
@@ -163,7 +168,15 @@ export class Harness {
   }
 
   cancelRun(runId: string): void {
-    this.running.get(runId)?.controller.abort();
+    const run = this.running.get(runId);
+    if (run) {
+      run.controller.abort();
+    } else if (cancelWaitingRun(this.options.db, runId, "agent")) {
+      const seq = (this.pausedSeqs.get(runId) ?? 0) + 1;
+      this.pausedSeqs.delete(runId);
+      this.options.emit?.({ runId, seq, type: "failed", payload: { code: "CANCELLED", message: "cancelled" } });
+      this.notifySettled(runId, "cancelled");
+    }
   }
 
   private createContext(runId: string, threadId: string, workspaceId: string, state: PolicyState, contextText: string): RunContext {
@@ -181,6 +194,7 @@ export class Harness {
       seq: 0,
     };
     this.running.set(runId, run);
+    this.pausedSeqs.delete(runId);
     return run;
   }
 
@@ -268,8 +282,13 @@ export class Harness {
 
   private settle(run: RunContext, status: RunStatus): void {
     this.running.delete(run.runId);
+    if (status === "waiting_user") this.pausedSeqs.set(run.runId, run.seq);
+    this.notifySettled(run.runId, status);
+  }
+
+  private notifySettled(runId: string, status: RunStatus): void {
     try {
-      this.options.onRunSettled?.(run.runId, status);
+      this.options.onRunSettled?.(runId, status);
     } catch (error) {
       console.warn("[harness] onRunSettled failed:", error);
     }
@@ -290,11 +309,18 @@ export class Harness {
     const stage = purpose === "policy" ? "policy" : purpose === "verify" ? "verification" : "generation";
     const configuredAlias = purpose === "answer" ? this.options.profiles.answer.modelAlias : this.options.profiles.policy.modelAlias;
     const seq = run.trace.record("model.started", stage, { purpose, modelAlias: configuredAlias });
-    const result = await withTimeout(call(), run.deadline - Date.now(), "MODEL_TIMEOUT", run.controller.signal);
-    const last = this.options.model.lastCall;
-    const usage = last?.purpose === purpose ? { modelAlias: last.modelAlias, promptTokens: last.promptTokens, cachedPromptTokens: last.cachedPromptTokens, completionTokens: last.completionTokens, finishReason: last.finishReason, ttftMs: last.ttftMs } : {};
-    run.trace.record("model.completed", stage, { purpose, latencyMs: Date.now() - startedAt, ...usage }, { parentSeq: seq, startedAt });
-    return result;
+    const previous = this.options.model.lastCallFor ? this.options.model.lastCallFor(run.controller.signal) : this.options.model.lastCall;
+    let code: string | undefined;
+    try {
+      return await withTimeout(call(), run.deadline - Date.now(), "MODEL_TIMEOUT", run.controller.signal);
+    } catch (error) {
+      code = error instanceof AgentError ? error.code : "INTERNAL";
+      throw error;
+    } finally {
+      const last = this.options.model.lastCallFor ? this.options.model.lastCallFor(run.controller.signal) : this.options.model.lastCall;
+      const usage = last && last !== previous && last.purpose === purpose ? { modelAlias: last.modelAlias, promptTokens: last.promptTokens, cachedPromptTokens: last.cachedPromptTokens, completionTokens: last.completionTokens, finishReason: last.finishReason, ttftMs: last.ttftMs } : {};
+      run.trace.record("model.completed", stage, { purpose, latencyMs: Date.now() - startedAt, ...usage, ...(code ? { code } : {}) }, { parentSeq: seq, startedAt });
+    }
   }
 
   private async decide(run: RunContext): Promise<PolicyDecision> {
@@ -316,7 +342,15 @@ export class Harness {
     let lastReason = "";
     for (let attempt = 1; attempt <= MAX_DECIDE_ATTEMPTS; attempt += 1) {
       if (run.state.remaining.modelCalls <= 0) break;
-      const raw = await this.callModel(run, "policy", () => this.options.model.decide(run.state, this.options.profiles.policy, run.controller.signal));
+      let raw: PolicyDecision;
+      try {
+        raw = await this.callModel(run, "policy", () => this.options.model.decide(run.state, this.options.profiles.policy, run.controller.signal));
+      } catch (error) {
+        if (!(error instanceof AgentError) || error.code !== "INVALID_DECISION") throw error;
+        lastReason = error.message;
+        run.trace.record("policy.decided", "policy", { invalid: true, code: error.code, reason: lastReason, attempt });
+        continue;
+      }
       const validation = validateDecision(raw, run.state, policy.allowedActions);
       if (validation.ok) {
         const decision = validation.decision;

@@ -38,11 +38,10 @@ export function registerAgentHandlers(runtime: AgentRuntime): void {
 
   ipcMain.handle("agent:startRun", (_event, input: StartRunInput) => runtime.startMessage(input));
   ipcMain.handle("agent:resumeRun", (_event, runId: string, text: string) => {
-    runtime.harness.resumeRun(runId, text);
+    runtime.resumeRun(runId, text);
   });
   ipcMain.handle("agent:cancelRun", (_event, runId: string) => {
-    runtime.harness.cancelRun(runId);
-    runtime.canvas.cancel(runId);
+    runtime.cancelRun(runId);
   });
   ipcMain.handle("agent:recordInteraction", (_event, runId: string, kind: InteractionKind) => {
     recordInteraction(db, runId, kind);

@@ -11,6 +11,7 @@ import type { ModelClient } from "../modelClient.ts";
 import { appendMessage, createRun, findOpenRun, getRun, getThread, setRunStatus } from "../store.ts";
 import { withTimeout } from "../tools.ts";
 import { readTrace, TraceWriter } from "../trace.ts";
+import { cancelWaitingRun, type RunHandle } from "../runLifecycle.ts";
 import { DEFAULT_DOC_LABEL, getPreset, matchPresetByKeyword, matchPresetId, presetChoicesText, type DocPreset } from "./presets.ts";
 import { blockEditPrompt, CANVAS_PROMPT_VERSION, classifyPrompt, draftPrompt, parseJsonObject } from "./prompts.ts";
 import {
@@ -67,7 +68,7 @@ export type CanvasFlowOptions = {
   draftGuidance?: string;
 };
 
-export type CanvasHandle = { runId: string; done: Promise<void> };
+export type CanvasHandle = RunHandle;
 
 const GROUND_TOP_K = 8;
 const MAX_ANCHOR_CANDIDATES = 5;
@@ -139,6 +140,8 @@ export class CanvasFlow {
   start(input: StartCanvasInput): CanvasHandle {
     const { db } = this.options;
     const thread = getThread(db, input.threadId);
+    if (thread.workspaceId !== input.workspaceId) throw new AgentError("INTERNAL", "대화의 작업 공간이 일치하지 않습니다.");
+    if (!input.instruction.trim()) throw new AgentError("INTERNAL", "요청 내용을 입력하세요.");
     if (findOpenRun(db, thread.id)) throw new AgentError("INTERNAL", "이 대화에 진행 중인 작업이 있습니다.");
     const instruction = input.instruction.trim();
     const runId = createRun(db, { threadId: thread.id, goal: instruction, retrievalProfile: "canvas", policyProfile: CANVAS_PROMPT_VERSION, answerProfile: CANVAS_PROMPT_VERSION, kind: "canvas" });
@@ -263,7 +266,13 @@ export class CanvasFlow {
   }
 
   cancel(runId: string): void {
-    this.controllers.get(runId)?.abort();
+    const controller = this.controllers.get(runId);
+    if (controller) {
+      controller.abort();
+    } else if (cancelWaitingRun(this.options.db, runId, "canvas")) {
+      this.emit(runId, "failed", { code: "CANCELLED", message: "cancelled" });
+      this.settle(runId, "cancelled");
+    }
   }
 
   /** Current canvas + interrupt for a run, used by the renderer to restore state. */
@@ -301,6 +310,7 @@ export class CanvasFlow {
   }
 
   private settle(runId: string, status: RunStatus): void {
+    if (status !== "waiting_user") this.seqs.delete(runId);
     try {
       this.options.onRunSettled?.(runId, status);
     } catch (error) {
@@ -318,7 +328,7 @@ export class CanvasFlow {
     const startedAt = Date.now();
     const seq = trace.record("model.started", "generation", { purpose: "canvas", modelAlias: this.options.profile.modelAlias });
     const text = await withTimeout(this.options.model.complete({ prompt, purpose: "canvas" }, this.options.profile, signal), LIMITS.runTimeoutMs, "MODEL_TIMEOUT", signal);
-    const last = this.options.model.lastCall;
+    const last = this.options.model.lastCallFor ? this.options.model.lastCallFor(signal) : this.options.model.lastCall;
     trace.record("model.completed", "generation", { purpose: "canvas", latencyMs: Date.now() - startedAt, modelAlias: last?.modelAlias, promptTokens: last?.promptTokens, completionTokens: last?.completionTokens, finishReason: last?.finishReason }, { parentSeq: seq, startedAt });
     return text;
   }

@@ -63,6 +63,21 @@ afterAll(async () => {
 });
 
 describe("canvas flow", () => {
+  it("cancels a waiting canvas, preserving its draft and rejecting later edits", async () => {
+    const thread = createThread(db, workspace.id);
+    const instance = flow([draftJson("초안")]);
+    const handle = instance.start({ workspaceId: workspace.id, threadId: thread.id, instruction: "초안 작성", canvasType: "generic" });
+    await handle.done;
+    expect(getRun(db, handle.runId).status).toBe("waiting_user");
+    const lastSeq = events.filter((event) => event.runId === handle.runId).at(-1)!.seq;
+    instance.cancel(handle.runId);
+    expect(getRun(db, handle.runId).status).toBe("cancelled");
+    expect(findCanvasByRun(db, handle.runId)).toBeDefined();
+    expect(events.at(-1)).toMatchObject({ runId: handle.runId, type: "failed", payload: { code: "CANCELLED" } });
+    expect(events.at(-1)!.seq).toBeGreaterThan(lastSeq);
+    expect(() => instance.applyEdit(handle.runId, { op: "finalize" })).toThrow("편집을 기다리는");
+  });
+
   it("ranks template candidates by bigram relevance", () => {
     expect(anchorRelevance("A사와 용역 계약서 작성", "표준 용역계약서.md")).toBeGreaterThan(anchorRelevance("A사와 용역 계약서 작성", "표준 위탁계약서.md"));
   });
