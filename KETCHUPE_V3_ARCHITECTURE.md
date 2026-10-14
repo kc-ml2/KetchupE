@@ -1434,3 +1434,17 @@ Source self-check는 GitHub HEAD에서 받은 실제 authorization/filesystem/do
 앱은 `.env`의 `MARU_API_TOKEN`과 선택적 `MARU_MCP_ENDPOINT`를 읽는다. endpoint 기본값은 current onboarding의 주소이고 runtime과 `probe:maru`가 공유한다. `npm run probe:maru`로 reconnect·initialize·tools/list·browse_storage를 확인한 뒤 앱을 시작한다. probe는 30초 제한과 두 read 도구 allowlist를 사용하고 credential·signed URL을 로그에서 제거한다.
 
 앞선 설명에서 snapshot의 team-scoped 도구와 현재 server의 두 도구를 함께 제시해 연결 안내가 혼동될 수 있었다. 현재 설정에는 onboarding의 두 도구만 사용한다. 본 프로젝트의 Canvas는 로컬 작성 기능이며 MARU의 예전 chat/REST API를 호출하는 경로가 아니다.
+
+## 24. Trolley MCP 연결
+
+[Trolley onboarding](https://trolley.ml2-alpha.com/onboarding.md)의 endpoint `https://trolley.ml2-alpha.com/mcp/`에 Streamable HTTP + Bearer API key로 연결한다. MARU와 별개의 McpConnection을 사용하며 `.env`의 `TROLLEY_API_KEY`를 사용자가 직접 입력한다. 키는 renderer, prompt, trace, Git에 저장하지 않는다. `TROLLEY_MCP_ENDPOINT`는 runtime과 `probe:trolley`가 동일하게 읽고 기본 endpoint의 trailing slash를 유지한다.
+
+연결 확인은 `get_my_capabilities`의 인증된 성공 응답을 기준으로 한다. 키가 없으면 adapter를 생성하지 않고 CLI는 설정 안내와 exit 2로 끝낸다. endpoint의 401이나 onboarding을 읽은 사실을 연결 성공으로 표시하지 않는다. 키 입력 전에는 실서버 capabilities 성공 여부가 미검증 상태다.
+
+현재 노출한 범위는 `get_my_capabilities`, `list_operations` 조회다. Operation 목록 요청에서도 capabilities를 먼저 확인한다. MCP의 tool schema가 인수를 검사하고 기존 harness의 SEARCH budget·timeout·observation·error handling을 사용한다. `trolleyAvailable`은 start/resume 때 현재 설정으로 구성하며 항상 검색/gated policy도 Trolley를 요청한 경우 local retrieval로 대체하지 않는다. prompt 변경은 policy-5/grounded-answer-5로 versioning한다.
+
+Trolley의 역할·group/Target 권한은 서버의 인증된 principal이 결정한다. 빈 Operation 목록은 admin 여부의 증명이 아니다. Operation 실행·직접 SQL·관리자 write는 이 연결 단계에서 노출하지 않는다. 향후 실행을 추가할 때 최신 list_operations의 input_schema와 실제 사용자 요청에 연결해야 하며 caller identity를 임의 email 인수로 대체하지 않는다.
+
+결과는 untrusted context로 전달하고 공통 sanitizer가 credential·URL·깊이·문자/배열 규모를 제한한다. 20개를 넘는 배열은 omitted_items를 표시하므로 전체 목록으로 해석하지 않는다. Trolley raw 결과와 파생 답변은 중앙 telemetry에서 제외하며 tool 종류·사용 가능 여부·budget/latency 같은 관측 계약은 유지한다.
+
+로컬 검증은 adapter capabilities 선행, 거부/잘못된 응답/비허용 tool, redaction/목록 생략, 미설정·search budget 계약, 세 policy 전략의 Trolley 경로, telemetry 내용 제외다. API key 입력과 사용자 확인 후 `npm run probe:trolley`로 실제 인증 연결을 검증한다.

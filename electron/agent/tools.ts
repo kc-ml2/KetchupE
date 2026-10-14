@@ -1,5 +1,6 @@
 import { AgentError, EVIDENCE_SNIPPET_MAX_CHARS, type AgentErrorCode, type Evidence, type ExternalDocumentRef, type Locator } from "./contracts.ts";
 import type { ChunkRecord, IngestedSource, SearchMode, SearchResult, Tomato, TomatoSearch } from "../tomato/tomato.ts";
+import type { TrolleyDiscoveryTool } from "./trolley.ts";
 
 export type ExternalCallResult = { summary: string; documents: ExternalDocumentRef[] };
 
@@ -8,6 +9,7 @@ export interface SearchTools {
   search(query: string, collections: string[]): Promise<TomatoSearch>;
   neighbors(chunkId: string, before: number, after: number): Promise<ChunkRecord[]>;
   sourceChunks(sourceId: string): Promise<ChunkRecord[]>;
+  trolley?: { call(tool: TrolleyDiscoveryTool, signal: AbortSignal): Promise<ExternalCallResult> };
   maru?: {
     call(tool: "browse_storage" | "find_storage", args: Record<string, unknown>, signal: AbortSignal): Promise<ExternalCallResult>;
     readDocument(document: ExternalDocumentRef, signal: AbortSignal): Promise<IngestedSource>;

@@ -91,6 +91,7 @@ electron/
 │   ├── router.ts               등록된 실행기의 후보 판별 + 라우팅
 │   ├── settings.ts             model(safeStorage) + 서비스 telemetry 환경 설정
 │   ├── runtime.ts              위 전부를 조립하는 곳
+│   ├── trolley.ts              Trolley MCP capabilities·Operation 목록 조회 (Bearer API key)
 │   └── canvas/                 문서 작성 플로우(flow/tree/store/prompts/presets)
 ├── db/{schema.ts, openAgentDb.ts}
 ├── tomato/                     검색 엔진 (tomato.ts, embedding.ts, text.ts, tomatoClient.ts)

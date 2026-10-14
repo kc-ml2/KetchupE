@@ -6,7 +6,8 @@ import { z } from "zod";
 import type { IngestedSource } from "../tomato/tomato.ts";
 import type { TomatoClient } from "../tomato/tomatoClient.ts";
 import { AgentError, type ExternalDocumentRef } from "./contracts.ts";
-import { McpConnection } from "./mcp.ts";
+import { McpConnection, sanitizeMcpResult as sanitizeMaruResult } from "./mcp.ts";
+export { sanitizeMcpResult as sanitizeMaruResult } from "./mcp.ts";
 import type { ExternalCallResult } from "./tools.ts";
 
 export const DEFAULT_MARU_ENDPOINT = new URL("https://maru.ml2-alpha.com/mcp");
@@ -213,16 +214,6 @@ function toDocumentRef(item: MaruResult): ExternalDocumentRef {
 
 function refId(storageId: string, path: string): string {
   return createHash("sha256").update(`maru\u0000${storageId}\u0000${path}`).digest("hex").slice(0, 16);
-}
-
-export function sanitizeMaruResult(value: unknown, depth = 0): unknown {
-  if (depth > 5) return "[nested data omitted]";
-  if (typeof value === "string") return value.replace(/https?:\/\/\S+/giu, "[URL omitted]").slice(0, 800);
-  if (Array.isArray(value)) return value.slice(0, 20).map((item) => sanitizeMaruResult(item, depth + 1));
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
-    .filter(([key]) => !/(?:url|token|secret|authorization)/iu.test(key))
-    .map(([key, nested]) => [key, sanitizeMaruResult(nested, depth + 1)]));
 }
 
 async function cachedFileMatches(path: string, expectedSize?: number): Promise<boolean> {

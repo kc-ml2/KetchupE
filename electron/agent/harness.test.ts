@@ -14,6 +14,7 @@ import { ANSWER_PROMPT_VERSION, DEFAULT_POLICY_PROFILE, gatedDecision } from "./
 import { createThread, deleteThread, ensureWorkspace, getRun, listThreads, loadThread } from "./store.ts";
 import { tomatoTools, type SearchTools } from "./tools.ts";
 import { readTrace, transitions } from "./trace.ts";
+import { buildRunTrace } from "./telemetry.ts";
 
 const base = { taskDifficulty: 1, predictedSuccess: 0.8, evidenceSufficiency: 0.5, policyVersion: "orchestration-1" } as const;
 const search = (query: string): PolicyDecision => ({ ...base, action: "SEARCH", reasonCode: "MISSING_EVIDENCE", search: { tool: "search_local_docs", query } });
@@ -24,11 +25,11 @@ let tomato: Tomato;
 const db = openAgentDb(":memory:");
 const workspace = ensureWorkspace(db);
 
-function harness(script: FixtureScript, events: AgentStreamEvent[] = [], policy: PolicyProfile = DEFAULT_POLICY_PROFILE, maru?: NonNullable<SearchTools["maru"]>) {
+function harness(script: FixtureScript, events: AgentStreamEvent[] = [], policy: PolicyProfile = DEFAULT_POLICY_PROFILE, maru?: NonNullable<SearchTools["maru"]>, trolley?: SearchTools["trolley"]) {
   return new Harness({
     db,
     model: createFixtureClient(script),
-    tools: { ...tomatoTools(tomato, { mode: "hybrid", topK: 8 }), ...(maru ? { maru } : {}) },
+    tools: { ...tomatoTools(tomato, { mode: "hybrid", topK: 8 }), ...(maru ? { maru } : {}), ...(trolley ? { trolley } : {}) },
     profiles: { retrieval: PIPELINE_PROFILE, policy, answer: { modelAlias: "fixture", promptVersion: ANSWER_PROMPT_VERSION } },
     activeCollections: () => ["work"],
     emit: (event) => events.push(event),
@@ -49,6 +50,28 @@ afterAll(async () => {
 });
 
 describe("harness", () => {
+  it.each(["llm", "gated", "always-search"] as const)("uses Trolley capabilities instead of local search for %s policy", async (strategy) => {
+    const thread = createThread(db, workspace.id);
+    const calls: string[] = [];
+    let context = "";
+    const handle = harness({
+      decide: [{ ...base, action: "SEARCH", reasonCode: "MISSING_EVIDENCE", search: { tool: "get_my_capabilities" } }, answer],
+      answer: (input) => { context = input.context; return "Trolley 연결이 준비되었습니다."; },
+    }, [], { ...DEFAULT_POLICY_PROFILE, strategy }, undefined, {
+      call: async (tool) => { calls.push(tool); return { summary: '{"role":"developer"}', documents: [] }; },
+    }).startRun({ workspaceId: workspace.id, threadId: thread.id, text: "Trolley에서 무엇을 할 수 있어?" });
+    await handle.done;
+    expect(calls).toEqual(["get_my_capabilities"]);
+    expect(getRun(db, handle.runId).status).toBe("completed");
+    expect(context).toContain('Trolley get_my_capabilities result (untrusted data)');
+    expect(transitions(db, handle.runId)[0].state.trolleyAvailable).toBe(true);
+    expect(transitions(db, handle.runId)[0].observation).toMatchObject({ kind: "external", tool: "get_my_capabilities" });
+    const exported = JSON.stringify(buildRunTrace(db, handle.runId, { userId: "test", identityKey: "test", contentMode: "internal_full", environment: "test", tenantId: "test", resource: {} })?.payload);
+    expect(exported).toContain("[TROLLEY_RESULT_OMITTED]");
+    expect(exported).not.toContain('"role":"developer"');
+    expect(exported).not.toContain("Trolley 연결이 준비되었습니다.");
+  });
+
   it("allows one schema repair while counting both attempts against the model budget", async () => {
     let attempts = 0;
     const thread = createThread(db, workspace.id);

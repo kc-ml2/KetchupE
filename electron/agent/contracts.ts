@@ -77,7 +77,7 @@ export type ExternalDocumentRef = {
 
 export type Observation =
   | { kind: "search"; resultIds: string[]; effectiveMode: "keyword" | "semantic" | "hybrid"; latencyMs: number }
-  | { kind: "external"; tool: "browse_storage" | "find_storage"; result: string; latencyMs: number }
+  | { kind: "external"; tool: "browse_storage" | "find_storage" | "get_my_capabilities" | "list_operations"; result: string; latencyMs: number }
   | { kind: "user"; messageId: string }
   | { kind: "verification"; supported: boolean; missingClaims: string[]; confidence: number }
   | { kind: "tool_error"; code: AgentErrorCode };
@@ -97,6 +97,7 @@ export type PolicyState = {
   selectedMemories: SelectedMemory[];
   activeCollections: string[];
   maruAvailable?: boolean;
+  trolleyAvailable?: boolean;
   externalDocuments?: ExternalDocumentRef[];
   recentMessages: Array<{ role: "user" | "assistant"; content: string }>;
   evidence: Evidence[];
@@ -144,6 +145,8 @@ const searchDecision = z.discriminatedUnion("tool", [
   z.object({ tool: z.literal("browse_storage"), arguments: browseStorageArguments }),
   z.object({ tool: z.literal("find_storage"), arguments: findStorageArguments }),
   z.object({ tool: z.literal("read_external_document"), ref_id: z.string(), query: z.string().optional() }),
+  z.object({ tool: z.literal("get_my_capabilities") }),
+  z.object({ tool: z.literal("list_operations") }),
 ]);
 
 export const PolicyDecisionSchema = z.object({
@@ -301,6 +304,9 @@ export function validateDecision(raw: unknown, state: PolicyState, allowedAction
         if (!state.externalDocuments?.some((document) => document.refId === refId)) {
           return invalid("read_external_document requires a known ref_id");
         }
+      }
+      if ((decision.search.tool === "get_my_capabilities" || decision.search.tool === "list_operations") && !state.trolleyAvailable) {
+        return invalid("Trolley is not configured");
       }
       break;
     }

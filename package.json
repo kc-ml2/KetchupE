@@ -20,6 +20,7 @@
     "typecheck:electron": "tsc -p tsconfig.electron.json",
     "smoke:litellm": "vite-node scripts/litellm-smoke.ts",
     "probe:maru": "vite-node scripts/maru-probe.ts",
+    "probe:trolley": "vite-node scripts/trolley-probe.ts",
     "telemetry:gateway": "vite-node scripts/telemetry-gateway.ts"
   },
   "build": {

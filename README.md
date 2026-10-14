@@ -74,6 +74,24 @@ npm run dev
 
 ## 런타임
 
+### Trolley MCP 연결
+
+[Trolley onboarding](https://trolley.ml2-alpha.com/onboarding.md)에 따라 Streamable HTTP와 Bearer API key를 사용합니다. Git에서 제외된 로컬 `.env`에 아래 항목을 준비했습니다. **키는 채팅으로 보내지 말고 파일에 직접 입력하세요.** `Bearer` 접두어는 넣지 않습니다.
+
+```dotenv
+TROLLEY_API_KEY=
+TROLLEY_MCP_ENDPOINT=https://trolley.ml2-alpha.com/mcp/
+```
+
+```bash
+npm run probe:trolley
+npm run dev
+```
+
+키를 넣은 뒤 `probe:trolley`가 `get_my_capabilities`에 성공해야 인증 연결이 확인된 것입니다. endpoint 접근이나 인증 없는 401만으로 연결 성공을 주장하지 않습니다. 앱에서 "Trolley에서 지금 무엇을 할 수 있어?" 또는 "Trolley의 가능한 Operation 목록을 보여줘"라고 요청할 수 있습니다. 키를 비우면 Trolley 도구는 활성화되지 않으며 키 변경 후 앱을 재시작합니다.
+
+현재 연결 범위는 `get_my_capabilities`와 `list_operations` 조회입니다. 목록 조회 전 capabilities를 확인하고 server 결과를 untrusted context로 취급하며 기존 step/search/time budget과 trace를 적용합니다. Operation `execute`, 직접 SQL, 관리자 도구는 이번 연결에 포함하지 않습니다. 역할과 실제 접근 권한은 서버가 인증된 사용자에 대해 검사하며 빈 Operation 목록으로 역할을 추정하지 않습니다. API key와 capability URL은 진단·모델 context에서 제외하고 Trolley 결과와 파생 답변은 중앙 telemetry에서 제외합니다.
+
 ```text
 등록 폴더
   → Tomato utility process: parse / chunk / embed / FTS5 + vector search
@@ -200,6 +218,7 @@ src/
 scripts/
 ├── litellm-smoke.ts
 ├── maru-probe.ts            MCP 인증·도구·storage 연결 확인
+├── trolley-probe.ts         Bearer API key로 capabilities 연결 확인
 └── telemetry-gateway.ts
 ```
 
@@ -211,7 +230,7 @@ npm run typecheck:electron
 npm run build
 ```
 
-회귀 테스트는 세 번째 workflow 등록·라우팅·소유자별 재개/취소, 동시 시작 방지, waiting_user 취소, UI 재연결, timeout listener 정리, 동시 모델 사용량과 실패 trace, schema fallback·HTTP 재시도 차단, telemetry Retry-After 및 gateway 오류, MARU의 cache 재사용 전 권한 확인과 진단 redaction을 포함합니다. 최종 실행 결과는 전체 테스트 **103개 통과**, Electron typecheck·변경 TypeScript 파일 lint·production build 통과입니다.
+회귀 테스트는 세 번째 workflow 등록·라우팅·소유자별 재개/취소, 동시 시작 방지, waiting_user 취소, UI 재연결, timeout listener 정리, 동시 모델 사용량과 실패 trace, schema fallback·HTTP 재시도 차단, telemetry Retry-After 및 gateway 오류, MARU의 cache 재사용 전 권한 확인과 진단 redaction을 포함합니다. Trolley는 capabilities 선행·조회 allowlist·키 미설정 상태·policy 전략별 external 실행·중앙 telemetry 제외·목록 생략 표시를 검증합니다. 최종 실행 결과는 전체 테스트 **111개 통과**, Electron typecheck·변경 TypeScript 파일 lint·production build 통과입니다.
 
 실제 MARU MCP에서는 정상 token 연결·도구 목록·storage 5개 조회, 인증 누락·오류 token의 401, 존재하지 않는 storage 거부를 확인했습니다. 두 번째 사용자 token을 이용한 타 팀 접근, 운영 권한 회수 뒤 local history/resume/citation 차단, 대규모 부하/SLO와 signed installer는 아직 검증하지 않았습니다. 이는 local fixture 통과와 구분해야 합니다.
 

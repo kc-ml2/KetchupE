@@ -109,7 +109,7 @@ export function buildRunTrace(
 
   const transitions = events.filter((event) => event.type === "policy.decided" && event.payload.transition);
   const decisions = transitions.map((event) => (event.payload.transition as PolicyTransition).decision);
-  const usedMaru = transitions.some((event) => {
+  const usedExternal = transitions.some((event) => {
     const transition = event.payload.transition as PolicyTransition;
     return transition.observation?.kind === "external"
       || transition.decision.search?.tool === "browse_storage"
@@ -163,7 +163,7 @@ export function buildRunTrace(
     score: item.score,
   }));
   const exportObservation = (observation: PolicyTransition["observation"]) => observation?.kind === "external"
-    ? { kind: observation.kind, tool: observation.tool, latencyMs: observation.latencyMs, result: "[MARU_RESULT_OMITTED]" }
+    ? { kind: observation.kind, tool: observation.tool, latencyMs: observation.latencyMs, result: observation.tool === "get_my_capabilities" || observation.tool === "list_operations" ? "[TROLLEY_RESULT_OMITTED]" : "[MARU_RESULT_OMITTED]" }
     : observation?.kind === "verification"
       ? { ...observation, missingClaims: observation.missingClaims.map((claim) => text(claim)) }
       : observation?.kind === "user"
@@ -175,6 +175,7 @@ export function buildRunTrace(
     recentMessages: state.recentMessages.map((message) => ({ ...message, content: text(message.content) })),
     activeCollections: state.activeCollections.map((name) => text(name)),
     maruAvailable: state.maruAvailable,
+    trolleyAvailable: state.trolleyAvailable,
     evidence: exportEvidence(state.evidence),
     signals: state.signals,
     previousDecisions: state.previousDecisions,
@@ -189,7 +190,7 @@ export function buildRunTrace(
         ? { tool: decision.search.tool, arguments: "[MARU_ARGUMENTS_OMITTED]" }
         : decision.search.tool === "read_external_document"
           ? { tool: decision.search.tool, ref_id: id(decision.search.ref_id), query: text(decision.search.query) }
-        : { ...decision.search, query: text(decision.search.query) },
+        : { ...decision.search, ...("query" in decision.search ? { query: text(decision.search.query) } : {}) },
     question: text(decision.question),
     claimsToVerify: decision.claimsToVerify?.map((claim) => text(claim)),
     stopReason: text(decision.stopReason),
@@ -207,7 +208,7 @@ export function buildRunTrace(
         ...attr("langfuse.observation.type", "agent"),
         ...traceAttributes(),
         ...attr("langfuse.observation.input", text(run.goal)),
-        ...attr("langfuse.observation.output", usedMaru ? undefined : text(answer?.content)),
+        ...attr("langfuse.observation.output", usedExternal ? undefined : text(answer?.content)),
         ...attr("langfuse.trace.metadata.status", run.status),
         ...attr("langfuse.trace.metadata.errorCode", run.error_code ?? undefined),
         ...attr("langfuse.trace.metadata.actions", actions.join(">")),

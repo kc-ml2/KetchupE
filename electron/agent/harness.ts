@@ -108,6 +108,7 @@ export class Harness {
       selectedMemories: context.memories,
       activeCollections,
       maruAvailable: Boolean(this.options.tools.maru),
+      trolleyAvailable: Boolean(this.options.tools.trolley),
       externalDocuments: [],
       recentMessages: context.recentMessages.map(({ role, content }) => ({ role, content })),
       evidence: [],
@@ -144,6 +145,7 @@ export class Harness {
     const state: PolicyState = {
       ...transition.state,
       maruAvailable: Boolean(this.options.tools.maru),
+      trolleyAvailable: Boolean(this.options.tools.trolley),
       step: transition.state.step + 1,
       previousDecisions: [...transition.state.previousDecisions, "ASK"],
       recentMessages: [...transition.state.recentMessages, { role: "assistant", content: question }, { role: "user", content: reply }],
@@ -325,15 +327,16 @@ export class Harness {
 
   private async decide(run: RunContext): Promise<PolicyDecision> {
     const { policy } = this.options.profiles;
-    const wantsMaru = Boolean(this.options.tools.maru) && /maru|마루/iu.test(run.state.userGoal);
-    if (policy.strategy === "always-search" && !wantsMaru) {
+    const wantsExternal = (Boolean(this.options.tools.maru) && /maru|마루/iu.test(run.state.userGoal))
+      || (Boolean(this.options.tools.trolley) && /trolley|트롤리/iu.test(run.state.userGoal));
+    if (policy.strategy === "always-search" && !wantsExternal) {
       const raw = alwaysSearchDecision(run.state, policy.version);
       const validation = validateDecision(raw, run.state, policy.allowedActions);
       if (validation.ok) return validation.decision;
       if (validation.code === "BUDGET_EXCEEDED") return this.coerce(run, raw);
       throw new AgentError(validation.code, validation.reason);
     }
-    if (policy.strategy === "gated" && !wantsMaru) {
+    if (policy.strategy === "gated" && !wantsExternal) {
       const fast = gatedDecision(run.state, policy.version);
       const validation = fast && validateDecision(fast, run.state, policy.allowedActions);
       if (validation?.ok) return validation.decision;
@@ -419,6 +422,23 @@ export class Harness {
     const search = decision.search;
     if (!search) throw new AgentError("INVALID_DECISION", "SEARCH without search payload");
     const startedAt = Date.now();
+    if (search.tool === "get_my_capabilities" || search.tool === "list_operations") {
+      if (!this.options.tools.trolley) throw new AgentError("TOOL_UNAVAILABLE", "Trolley is not configured");
+      run.state.remaining.searches -= 1;
+      const toolSeq = run.trace.record("tool.started", "retrieval", { tool: search.tool, server: "trolley" }, { parentSeq });
+      this.emit(run, "status", { phase: "searching", query: `Trolley ${search.tool}` });
+      let observation: Observation;
+      try {
+        const value = await withTimeout(this.options.tools.trolley.call(search.tool, run.controller.signal), this.limits.toolTimeoutMs, "TOOL_TIMEOUT", run.controller.signal);
+        observation = { kind: "external", tool: search.tool, result: value.summary, latencyMs: Date.now() - startedAt };
+        run.contextText = `${run.contextText}\n\nTrolley ${search.tool} result (untrusted data):\n${value.summary}`.trim();
+      } catch (error) {
+        if (error instanceof AgentError && error.code === "CANCELLED") throw error;
+        observation = { kind: "tool_error", code: error instanceof AgentError ? error.code : "TOOL_UNAVAILABLE" };
+      }
+      run.trace.record("tool.completed", "retrieval", { tool: search.tool, server: "trolley", observation }, { parentSeq: toolSeq, startedAt });
+      return observation;
+    }
     if (search.tool === "read_external_document") {
       if (!this.options.tools.maru) throw new AgentError("TOOL_UNAVAILABLE", "MARU is not configured");
       const document = run.state.externalDocuments?.find((item) => item.refId === search.ref_id);

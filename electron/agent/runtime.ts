@@ -19,6 +19,7 @@ import { interactionScore, LangfuseExporter, loadInstallId } from "./telemetry.t
 import type { InteractionKind } from "../../src/app-types/Agent.types.ts";
 import { ensureWorkspace, inactiveCollections } from "./store.ts";
 import { DEFAULT_MARU_ENDPOINT, MaruClient } from "./maru.ts";
+import { DEFAULT_TROLLEY_ENDPOINT, TrolleyClient } from "./trolley.ts";
 
 export const DEFAULT_RETRIEVAL = { mode: "hybrid", topK: 8 } as const;
 
@@ -92,6 +93,12 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
   };
   const onRunSettled = (runId: string) => telemetry.exportRun(db, runId);
   const maruToken = process.env.MARU_API_TOKEN?.trim();
+  const trolleyKey = process.env.TROLLEY_API_KEY?.trim();
+  const trolley = trolleyKey ? new TrolleyClient(
+    trolleyKey,
+    options.appVersion,
+    new URL(process.env.TROLLEY_MCP_ENDPOINT?.trim() || DEFAULT_TROLLEY_ENDPOINT.href),
+  ) : undefined;
   const maru = maruToken ? new MaruClient(
     maruToken,
     options.appVersion,
@@ -105,6 +112,7 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
     tools: {
       ...tomatoTools(tomato, DEFAULT_RETRIEVAL),
       ...(maru ? { maru } : {}),
+      ...(trolley ? { trolley } : {}),
     },
     profiles: {
       retrieval: { ...PIPELINE_PROFILE, ...DEFAULT_RETRIEVAL },
@@ -212,6 +220,7 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
     stop: async () => {
       watchers.stop();
       await maru?.close();
+      await trolley?.close();
       tomato.stop();
       await telemetry.stop();
       db.close();
