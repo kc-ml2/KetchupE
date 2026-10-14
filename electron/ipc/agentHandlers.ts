@@ -3,7 +3,7 @@ import type { InteractionKind, MemoryInput, StartRunInput } from "../../src/app-
 import type { AnchorChoiceResumeContent, CanvasEditOp, StartCanvasInput } from "../../src/app-types/CanvasEdit.types.ts";
 import type { AgentRuntime } from "../agent/runtime.ts";
 import { addMemory, confirmMemory, deleteMemory, listMemories, setMemoryPinned, updateMemory } from "../agent/memory.ts";
-import { createThread, deleteThread, findOpenRun, getWorkspace, listThreads, loadThread, recordInteraction, renameThread, setMemoryEnabled, DEFAULT_WORKSPACE_ID } from "../agent/store.ts";
+import { getRunAction, createThread, deleteThread, findOpenRun, getWorkspace, listThreads, loadThread, recordInteraction, renameThread, setMemoryEnabled, DEFAULT_WORKSPACE_ID } from "../agent/store.ts";
 
 export function registerAgentHandlers(runtime: AgentRuntime): void {
   const { db } = runtime;
@@ -18,7 +18,7 @@ export function registerAgentHandlers(runtime: AgentRuntime): void {
   ipcMain.handle("agent:deleteThread", (_event, threadId: string) => deleteThread(db, threadId));
   ipcMain.handle("agent:openRun", (_event, threadId: string) => {
     const run = findOpenRun(db, threadId);
-    return run ? { runId: run.id, status: run.status, kind: run.kind } : null;
+    return run ? { runId: run.id, status: run.status, kind: run.kind, action: getRunAction(db, run.id) } : null;
   });
 
   ipcMain.handle("canvas:start", (_event, input: StartCanvasInput) => ({ runId: runtime.canvas.start(input).runId }));

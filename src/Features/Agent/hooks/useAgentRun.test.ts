@@ -70,3 +70,23 @@ describe("useAgentRun", () => {
     expect(result.current.view).toMatchObject({ runId: "run-live", isRunning: true, phase: "deciding" });
   });
 });
+
+it("restores pending file selection and clears it when the workflow finishes", async () => {
+  const { api, emit } = fakeApi();
+  const action = { id: "a1", type: "work_sources" as const, title: "자료 선택", question: "파일을 지정하세요" };
+  vi.mocked(api.openRun).mockResolvedValue({ runId: "local", status: "waiting_user", kind: "daily_cash", action });
+  const { result } = renderHook(() => useAgentRun(api, "thread", () => undefined));
+  await act(async () => { await Promise.resolve(); });
+  expect(result.current.view).toMatchObject({ action, waitingQuestion: action.question, isRunning: false });
+  emit({ runId: "local", seq: 5, type: "completed", payload: { text: "준비 완료" } });
+  expect(result.current.view).toMatchObject({ action: null, waitingQuestion: null, isRunning: false });
+  act(() => result.current.attach("new", action));
+  expect(result.current.view).toMatchObject({ action, isRunning: false });
+});
+
+it("does not show a running spinner for an unavailable tool", () => {
+  const { api } = fakeApi();
+  const { result } = renderHook(() => useAgentRun(api, "thread", () => undefined));
+  act(() => result.current.attach("not-ready", undefined, "abstained"));
+  expect(result.current.view).toMatchObject({ isRunning: false, phase: null });
+});

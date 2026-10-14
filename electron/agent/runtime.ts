@@ -1,3 +1,10 @@
+import { BusinessFlow } from "../business/flow.ts";
+import { businessTools } from "../business/registry.ts";
+import { executeBusinessJob } from "../business/workerClient.ts";
+import { readWorkbookJob } from "../work/reader.ts";
+import { createHash } from "node:crypto";
+import { dirname } from "node:path";
+import { WorkSourcesFlow, WORK_SOURCES_ROUTE } from "./workSourcesFlow.ts";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import type { AgentStreamEvent, CollectionSummary } from "../../src/app-types/Agent.types.ts";
@@ -17,7 +24,7 @@ import { ANSWER_PROMPT_VERSION, assignVariant, POLICY_VARIANTS } from "./policy.
 import { loadModelSettings, loadTelemetrySettings, saveModelSettings, type ModelSettings } from "./settings.ts";
 import { interactionScore, LangfuseExporter, loadInstallId } from "./telemetry.ts";
 import type { InteractionKind } from "../../src/app-types/Agent.types.ts";
-import { ensureWorkspace, inactiveCollections } from "./store.ts";
+import { ensureWorkspace, inactiveCollections, recentMessages, getRunAction } from "./store.ts";
 import { DEFAULT_MARU_ENDPOINT, MaruClient } from "./maru.ts";
 import { DEFAULT_TROLLEY_ENDPOINT, TrolleyClient } from "./trolley.ts";
 
@@ -28,6 +35,8 @@ export type AgentRuntime = {
   tomato: TomatoClient;
   watchers: CollectionWatchers;
   canvas: CanvasFlow;
+  workSourcesFlow: WorkSourcesFlow;
+  businessFlow: BusinessFlow;
   /** Routes new messages to registered workflows; replies resume their persisted owner. */
   startMessage: (input: StartRunInput) => Promise<StartRunResult>;
   resumeRun: (runId: string, text: string) => void;
@@ -141,6 +150,10 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
     onRunSettled,
   });
 
+  const workSourcesFlow = new WorkSourcesFlow(db, options.emitAgentEvent);
+  const businessFlow = new BusinessFlow(db, businessTools.map((tool) => ({ ...tool, execute: ({ signal, ...input }) => executeBusinessJob(join(dirname(options.workerPath), "business.worker.js"), { toolId: tool.id, version: tool.version, input }, signal) })), join(options.userData, "business-output"), options.emitAgentEvent, async (bytes) => {
+    await readWorkbookJob(join(dirname(options.workerPath), "workbook.worker.js"), { bytes: Buffer.from(bytes), fingerprint: createHash("sha256").update(bytes).digest("hex"), action: { kind: "inspect" } });
+  });
   const workflows = new WorkflowDispatcher(db, [
     {
       ...CHAT_ROUTE,
@@ -155,12 +168,24 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
       start: (input) => canvas.start({ workspaceId: input.workspaceId, threadId: input.threadId, instruction: input.text }),
       cancel: (runId) => canvas.cancel(runId),
     },
-  ], (text, routes) => routeMessage(
+    ...([WORK_SOURCES_ROUTE] as const).map((route) => ({
+      ...route, kind: route.id,
+      start: (input: StartRunInput) => workSourcesFlow.start(input, route.id as "work_sources" | "daily_cash"),
+      resume: (runId: string, text: string) => workSourcesFlow.resume(runId, text),
+      cancel: (runId: string) => workSourcesFlow.cancel(runId),
+    })),
+    ...businessFlow.workflows().map((workflow) => ({ ...workflow,
+      // Preserve resumability for input requests created before the business-tool runner shipped.
+      resume: (id: string, text: string) => getRunAction(db, id)?.type === "work_sources" ? workSourcesFlow.resume(id, text) : workflow.resume!(id, text),
+      cancel: (id: string) => getRunAction(db, id)?.type === "work_sources" ? workSourcesFlow.cancel(id) : workflow.cancel(id),
+    })),
+  ], (text, routes, input) => routeMessage(
     harnessModel,
     { ...policyProfile, modelAlias: current.modelAlias || "gateway-default" },
     text,
     AbortSignal.timeout(policyProfile.runTimeoutMs),
     routes,
+    { recentUserMessages: recentMessages(db, input.threadId, 6).filter((message) => message.role === "user").map((message) => message.content.slice(0, 2000)) },
   ), onRunSettled);
 
   const refreshCollections = async () => {
@@ -183,6 +208,8 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
     tomato,
     watchers,
     canvas,
+    workSourcesFlow,
+    businessFlow,
     startMessage: (input) => workflows.start(input),
     resumeRun: (runId, text) => { workflows.resume(runId, text); },
     cancelRun: (runId) => workflows.cancel(runId),
@@ -218,6 +245,7 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
       });
     },
     stop: async () => {
+      await businessFlow.stop();
       watchers.stop();
       await maru?.close();
       await trolley?.close();

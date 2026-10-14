@@ -94,6 +94,7 @@ export function buildRunTrace(
   if (!run) return undefined;
   const events = readTrace(db, runId);
   const started = events.find((event) => event.type === "run.started");
+  if (started?.payload.localOnly === true) return undefined;
   const answer = db.prepare("SELECT content FROM messages WHERE run_id = ? AND role = 'assistant' ORDER BY rowid DESC LIMIT 1").get(runId) as { content: string } | undefined;
   const text = (value: string | undefined) => value === undefined
     ? undefined

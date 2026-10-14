@@ -138,7 +138,7 @@ const AgentMessages = ({ messages, streamingText, streamingRunId, streamingCitat
     )}
     {!streamingText && progressText && (
       <div className="flex justify-start">
-        <div className="max-w-[80%] px-4 py-2.5 rounded-2xl text-sm bg-[#F4F4F5] dark:bg-[#1F1F1F] text-[#71717A] animate-pulse">
+        <div className="max-w-[80%] px-4 py-2.5 rounded-2xl text-sm border border-[#D4D4D8] dark:border-[#52525B] bg-transparent text-[#71717A] animate-pulse">
           {progressText}
         </div>
       </div>

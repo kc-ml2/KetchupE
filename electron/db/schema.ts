@@ -1,4 +1,17 @@
 export const AGENT_SCHEMA = `
+CREATE TABLE IF NOT EXISTS work_sources (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  path TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL CHECK (kind IN ('file', 'folder'))
+);
+CREATE TABLE IF NOT EXISTS source_profiles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  mapping TEXT NOT NULL,
+  verified_fingerprint TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS workspaces (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -33,6 +46,11 @@ CREATE TABLE IF NOT EXISTS runs (
   finished_at TEXT
 );
 CREATE INDEX IF NOT EXISTS runs_thread_status ON runs(thread_id, status);
+CREATE TABLE IF NOT EXISTS run_actions (
+  run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  selection TEXT
+);
 CREATE UNIQUE INDEX IF NOT EXISTS runs_one_open_per_thread ON runs(thread_id) WHERE status IN ('running', 'waiting_user');
 CREATE TABLE IF NOT EXISTS messages (
   id TEXT PRIMARY KEY,
@@ -76,6 +94,17 @@ CREATE TABLE IF NOT EXISTS citations (
   title TEXT NOT NULL,
   locator TEXT NOT NULL,
   PRIMARY KEY (run_id, evidence_id)
+);
+CREATE TABLE IF NOT EXISTS business_jobs (
+  run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+  payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS business_artifacts (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  fingerprint TEXT NOT NULL,
+  audit TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS canvases (
   id TEXT PRIMARY KEY,

@@ -1,7 +1,7 @@
 # KetchupE v3.0 코드 가이드
 
 - 대상: 이 저장소를 처음 여는 사람
-- 기준: `v3.0` 브랜치 작업 트리 (2026-10-12)
+- 기준: `v3.0` 브랜치 작업 트리 (2026-10-14)
 - 설계 의도와 "왜"는 [KETCHUPE_V3_ARCHITECTURE.md](KETCHUPE_V3_ARCHITECTURE.md)에 있다. 이 문서는 **실제 코드가 어떻게 생겼고 지금 어디까지 됐는지**를 설명한다.
 
 ---
@@ -88,25 +88,28 @@ electron/
 │   ├── verify.ts               [[eN]] 인용 결정적 검증/복구
 │   ├── trace.ts                TraceWriter + transition 복원
 │   ├── telemetry.ts            서비스 소유 OTLP + evaluator span + outbox
-│   ├── router.ts               등록된 실행기의 후보 판별 + 라우팅
+│   ├── router.ts               등록된 실행기 전체에서 의미 기반 선택 (description·examples·requiredInputs)
 │   ├── settings.ts             model(safeStorage) + 서비스 telemetry 환경 설정
 │   ├── runtime.ts              위 전부를 조립하는 곳
 │   ├── trolley.ts              Trolley MCP capabilities·Operation 목록 조회 (Bearer API key)
+│   ├── workSourcesFlow.ts      업무 자료 연결·추출 매핑 검증 실행기 (work_sources)
 │   └── canvas/                 문서 작성 플로우(flow/tree/store/prompts/presets)
 ├── db/{schema.ts, openAgentDb.ts}
 ├── tomato/                     검색 엔진 (tomato.ts, embedding.ts, text.ts, tomatoClient.ts)
-├── workers/tomato.worker.ts    utilityProcess 진입점
+├── work/                       업무 자료: sources(연결·읽기 범위), mapping(헤더 기반 열 매핑·추출), profiles, reader
+├── business/                   업무 Tool: contracts, flow(BusinessFlow), registry, workerClient, dailyCash, bankDaily(테스트)
+├── workers/                    utilityProcess 진입점: tomato / workbook(엑셀 읽기) / business(Tool 실행)
 ├── collectionWatchers.ts       fs.watch → debounce → single-flight sync
-└── ipc/{agentHandlers.ts, collectionHandlers.ts}
+└── ipc/{agentHandlers.ts, collectionHandlers.ts, workSourceHandlers.ts}
 
 src/
 ├── Pages/AgentPage.tsx         유일한 페이지 (얇게 유지)
 ├── Features/Agent/
 │   ├── hooks/                  useAgentRun, useCanvasRun, useThreadMessages, useCollections, useMemories
-│   └── components/             AgentMessages, CanvasPanel, CollectionPanel, MemoryPanel, 설정 폼
+│   └── components/             AgentMessages, CanvasPanel, CollectionPanel, MemoryPanel, WorkSourcePanel, BusinessToolPanel, 설정 폼
 ├── Features/Sidebar/           thread 목록
 ├── Contexts/ThreadsProvider    sidebar ↔ page가 공유하는 thread 목록
-└── app-types/                  Agent.types.ts, Canvas.types.ts, CanvasEdit.types.ts
+└── app-types/                  Agent.types.ts, Canvas.types.ts, CanvasEdit.types.ts, WorkSource.types.ts, BusinessTool.types.ts
 ```
 
 **읽는 순서 추천**: `contracts.ts` → `harness.ts` → `policy.ts` → `tools.ts` + `tomato.ts`(search 부분만) → `store.ts` → `runtime.ts`. 이 6개면 제품의 90%다.
@@ -133,6 +136,8 @@ Workspace (기본 1개, 활성 collection + 저장 컨텍스트 on/off)
 | Run | `runs` | 첫 user 메시지 → `ANSWER`/`STOP`/실패. 상태: running/waiting_user/completed/abstained/failed/cancelled |
 | Message | `messages` | 발화마다. thread + run에 연결. assistant 발화는 `applied_context`로 실제 사용한 저장 컨텍스트 snapshot을 보존 |
 | Step | `trace_events(type='policy.decided')` | 별도 테이블 없음. payload가 곧 `PolicyTransition` |
+
+업무 실행기용 테이블: `run_actions`(waiting run의 구조화 입력 요청 1건), `work_sources`·`source_profiles`(연결한 파일/폴더 경로와 검증된 추출 매핑), `business_jobs`(Tool ID·버전·확정 입력·원천 해시·checkpoint), `business_artifacts`(검증 통과한 결과 파일의 해시와 audit).
 
 **한 thread에 열린 run은 최대 하나**. DB가 강제한다:
 
@@ -628,6 +633,9 @@ npm test               # 전체 vitest (renderer 훅/컴포넌트 포함)
 npm run typecheck:electron
 
 LITELLM_API_KEY=... npm run smoke:litellm   # SSE/tool call/abort/usage 4항목 확인 + prefix cache probe(참고용)
+npm run probe:maru     # MARU MCP 인증·도구·storage 확인
+npm run probe:trolley  # Trolley MCP get_my_capabilities 확인 (TROLLEY_API_KEY 필요)
+npx vite-node scripts/bank-fixture.ts fixtures   # bank_daily 샘플 거래내역 재생성
 ```
 
 현재 오른쪽 sidebar는 **컨텍스트 / 폴더** 두 패널이다. **폴더**에서 검색 폴더를 등록하고 질문한다. 모델 연결은 `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL_ALIAS` 환경 변수 또는 기존 user-data 설정을 사용한다. 중앙 telemetry endpoint/content mode는 공식 빌드 환경에서 고정되며 설정 IPC/form이 없다.
@@ -649,15 +657,17 @@ LITELLM_API_KEY=... npm run smoke:litellm   # SSE/tool call/abort/usage 4항목 
 | 6 Golden data | **외부 benchmark repository로 분리** | 이 저장소는 OTLP 수집 계약만 제공한다. runner·dataset·importer·promotion은 외부 저장소에서 구현·운영 |
 | 모니터링 (추가) | 완료 / 운영 provision 대기 | 강제 OTLP gateway + HMAC/redaction + agent/index/feedback trace + outbox. 실제 gateway domain/TLS/Langfuse project는 운영 설정 필요 |
 | 캔버스 (추가) | 완료 | classify→anchor→ground→draft→edit→finalize, 버전 트리 undo/redo |
+| Excel 업무 Tool (추가) | 공통 흐름 완료 / **실업무 미구현** | BusinessFlow·입력 화면·worker 실행·검증 후 결과 저장. `daily_cash`는 규칙 확인 전 비활성, `bank_daily`는 테스트용 |
+| 외부 MCP (추가) | 조회만 | MARU storage 조회·문서 읽기, Trolley capabilities·Operation 목록. 실행·쓰기 없음 |
 | 7 설치본 | **설정만** | native 모듈 external/asarUnpack, mac arm64+x64 매트릭스. signing/notarization credential과 fresh-install smoke 미완 |
 
 의도적으로 **하지 않은** 것들(스펙상 범위 밖):
 
-- `DELEGATE` action, multi-agent, MCP — 외부 benchmark에서 병목이 확인된 뒤에 추가
+- `DELEGATE` action, multi-agent — 외부 benchmark에서 병목이 확인된 뒤에 추가 (MCP는 MARU·Trolley 조회만 연결됨)
 - 파일 수정·shell·browser 같은 부작용 있는 tool
 - 자동 대화 요약, semantic memory 인덱스, 사용자 미승인 memory 자동 확정
 - 온라인 학습 / 자동 프롬프트 배포
-- MARU, 팀 문서, 인증·권한 (v3에서 제거됨)
+- 팀 문서, 인증·권한 (v3에서 제거됨. MARU는 MCP 조회로만 다시 연결됨)
 
 알려진 단순화(코드에 `ponytail:` 주석으로 표시):
 
@@ -675,9 +685,10 @@ LITELLM_API_KEY=... npm run smoke:litellm   # SSE/tool call/abort/usage 4항목 
 | 예산(step/search/timeout) | [contracts.ts `LIMITS`](electron/agent/contracts.ts) + profile JSON |
 | policy/answer/verify 프롬프트 | [policy.ts](electron/agent/policy.ts) — 바꾸면 `promptVersion`도 올릴 것 |
 | 새 action 추가 | `POLICY_ACTIONS` → `validateDecision` 케이스 → `harness.loop` switch → profile `allowedActions` |
-| 새 기능/workflow 추가 | 기능별 실행기 → `runtime.ts` 등록 배열의 `id/kind/description/matches/start/cancel/resume`; 새 표현·구조화 입력이면 기능별 IPC/UI |
+| 새 기능/workflow 추가 | 기능별 실행기 → `runtime.ts` 등록 배열의 `id/kind/description/examples/requiredInputs/start/cancel/resume`; 새 표현·구조화 입력이면 기능별 IPC/UI |
+| 새 Excel 업무 | `electron/business/<업무>.ts`에 `BusinessTool` 작성 → [business/registry.ts](electron/business/registry.ts) 등록. 라우터·IPC·UI 수정 불필요. [docs/BUSINESS_TOOLS.md](docs/BUSINESS_TOOLS.md) |
 | 인용 형식 | [verify.ts `CITATION_PATTERN`](electron/agent/verify.ts) + [AgentMessages.tsx `CITATION`](src/Features/Agent/components/AgentMessages.tsx) (두 군데가 같아야 한다) |
-| 새 IPC 추가 | [preload.js](electron/preload.js) + [agentHandlers.ts](electron/ipc/agentHandlers.ts) + [Agent.types.ts](src/app-types/Agent.types.ts) |
+| 새 IPC 추가 | [preload.js](electron/preload.js) + [agentHandlers.ts](electron/ipc/agentHandlers.ts) + [Agent.types.ts](src/app-types/Agent.types.ts) (업무 자료·Tool은 [workSourceHandlers.ts](electron/ipc/workSourceHandlers.ts) + WorkSource/BusinessTool types) |
 | DB 스키마 | [db/schema.ts](electron/db/schema.ts) (`CREATE TABLE IF NOT EXISTS` + `openAgentDb`의 ALTER 패턴) |
 | 오른쪽 컨텍스트/폴더 탭 | [AgentPage.tsx](src/Pages/AgentPage.tsx) |
 | 기억 CRUD·선택 | [MemoryPanel.tsx](src/Features/Agent/components/MemoryPanel.tsx) + [memory.ts](electron/agent/memory.ts) + [context.ts](electron/agent/context.ts) |

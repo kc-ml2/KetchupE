@@ -4,6 +4,7 @@ import { AgentError } from "./contracts.ts";
 import type { WorkflowRoute } from "./router.ts";
 import { findOpenRun, getRun, getThread } from "./store.ts";
 import type { RunHandle } from "./runLifecycle.ts";
+import { getRunAction } from "./store.ts";
 
 export type WorkflowHandle = RunHandle;
 
@@ -23,7 +24,7 @@ export class WorkflowDispatcher {
   constructor(
     private readonly db: DatabaseSync,
     workflows: readonly AgentWorkflow[],
-    private readonly route: (text: string, routes: readonly WorkflowRoute[]) => Promise<string>,
+    private readonly route: (text: string, routes: readonly WorkflowRoute[], input: StartRunInput) => Promise<string>,
     private readonly onStarted?: (runId: string) => void,
   ) {
     for (const workflow of workflows) {
@@ -46,18 +47,20 @@ export class WorkflowDispatcher {
       const open = findOpenRun(this.db, thread.id);
       if (open) {
         const handle = this.resume(open.id, input.text);
-        return { runId: handle.runId, kind: open.kind };
+        const action = getRunAction(this.db, handle.runId);
+        return { runId: handle.runId, kind: open.kind, ...(action ? { action } : {}) };
       }
       const id = input.mode && input.mode !== "auto"
         ? input.mode
-        : await this.route(input.text, [...this.byId.values()]);
+        : await this.route(input.text, [...this.byId.values()], input);
       const workflow = this.byId.get(id);
       if (!workflow) throw new AgentError("INTERNAL", `unknown workflow: ${id}`);
       // Routing awaits a model call; another entry point may have started a run meanwhile.
       if (findOpenRun(this.db, thread.id)) throw new AgentError("INTERNAL", "이 대화에 진행 중인 작업이 있습니다.");
       const handle = workflow.start(input);
       this.onStarted?.(handle.runId);
-      return { runId: handle.runId, kind: workflow.kind };
+      const action = getRunAction(this.db, handle.runId);
+      return { runId: handle.runId, kind: workflow.kind, ...(action ? { action } : {}), ...(getRun(this.db, handle.runId).status === "abstained" ? { status: "abstained" as const } : {}) };
     } finally {
       this.starting.delete(thread.id);
     }

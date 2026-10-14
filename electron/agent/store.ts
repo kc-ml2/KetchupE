@@ -1,3 +1,4 @@
+import type { RunAction } from "../../src/app-types/Agent.types.ts";
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import type { AppliedContext, CitationSummary, InteractionKind, MessagePage, MessageRecord, RunKind, RunStatus, ThreadSummary, WorkspaceSummary } from "../../src/app-types/Agent.types.ts";
@@ -183,4 +184,9 @@ export function setRunStatus(db: DatabaseSync, runId: string, status: RunStatus,
 export function recordInteraction(db: DatabaseSync, runId: string, kind: InteractionKind, metadata?: Record<string, unknown>): void {
   db.prepare("INSERT INTO interaction_events (run_id, kind, created_at, metadata) VALUES (?, ?, ?, ?)")
     .run(runId, kind, now(), metadata ? JSON.stringify(metadata) : null);
+}
+
+export function getRunAction(db: DatabaseSync, runId: string): RunAction | undefined {
+  const row = db.prepare("SELECT action FROM run_actions JOIN runs ON runs.id = run_actions.run_id WHERE run_id = ? AND runs.status = 'waiting_user'").get(runId) as { action: string } | undefined;
+  return row ? JSON.parse(row.action) as RunAction : undefined;
 }

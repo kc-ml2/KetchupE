@@ -106,11 +106,27 @@ npm run dev
 
 ### 새 기능 등록
 
-[runtime.ts](electron/agent/runtime.ts)의 등록 배열에 고유 `id`, DB에 저장할 `kind`, `description`, 후보 판별 `matches()`와 `start`·`cancel`·선택적 `resume`을 연결합니다. `mode: "auto"`는 자동 라우팅, 다른 mode는 등록 ID를 직접 선택합니다. 텍스트 기반 기능은 기존 대화 UI와 이벤트를 사용하고, 구조화된 입력·새 표현은 기능별 IPC/UI를 추가합니다.
+[runtime.ts](electron/agent/runtime.ts)의 등록 배열에 고유 `id`, DB에 저장할 `kind`, `description`, 선택적 `examples`·`requiredInputs`와 `start`·`cancel`·선택적 `resume`을 연결합니다. `mode: "auto"`는 자동 라우팅, 다른 mode는 등록 ID를 직접 선택합니다. 텍스트 기반 기능은 기존 대화 UI와 이벤트를 사용하고, 구조화된 입력·새 표현은 기능별 IPC/UI를 추가합니다.
 
 공통 dispatcher는 입력·workspace·중복 실행을 검사하고 저장된 kind의 소유자에게 재개·취소를 전달합니다. 실행기는 자체 policy, budget, tool scope, 영속 상태와 trace를 담당합니다. 외부 SKILL.md 실행이나 동적 플러그인 로딩은 지원하지 않습니다. 자세한 계약은 [아키텍처 §21](KETCHUPE_V3_ARCHITECTURE.md#21-기능-확장을-위한-실행-경계-2026-10-12)을 보세요.
 
 ## 데이터 경계
+
+### 로컬 업무 자료와 추출 매핑 (2026-10-14)
+
+대화에 **“ERP 엑셀을 연결해줘”** 라고 요청하면 자료 선택 화면이 열립니다. PC의 XLSX 파일 여러 개 또는 폴더를 선택합니다. 이 연결은 RAG 검색 폴더와 별개이며 현재 기본 로컬 작업 공간에서 사용합니다. 원본을 업로드·복사·수정하지 않고, 경로와 추출 설정만 SQLite에 저장합니다. 연결 해제는 원본을 삭제하지 않습니다. 미리보기 데이터는 모델·telemetry로 전송하지 않습니다.
+
+1. 연결된 자료와 작업 파일을 선택합니다. 폴더에는 하위 폴더의 XLSX가 표시됩니다. 후보 중 최신 파일을 임의로 선택하지 않습니다.
+2. 시트, 헤더 행, 데이터 시작·종료 행을 지정하고 **원본 다시 읽기**로 확인합니다.
+3. 계좌번호·거래일·입출금액 등의 업무 항목에 실제 열 이름을 연결합니다. 거래 행의 번호를 하드코딩하지 않고 헤더로 열을 찾으므로 열 순서 변경에 대응합니다. 같은 이름의 헤더가 중복되면 중단합니다.
+4. 필요한 행 조건을 지정하고 **추출 검증**을 실행합니다. 지정 범위 전체를 검사하며, 화면에는 결과 20행과 오류 100건까지 표시합니다. 출처 시트·셀을 유지하고 빈 값과 0을 구분합니다.
+5. 대상 행이 있고 오류가 없으면 이름을 붙여 매핑을 저장합니다. 다음 파일에서 불러와 다시 검증할 수 있습니다. 날짜 조건은 현재 명시적으로 지정한 값이므로 다음 날짜 작업에서는 갱신해야 합니다.
+
+구현: `electron/work/sources.ts`(선택 범위 확인·파일 읽기), `mapping.ts`(열 매핑·형 변환·행 조건), `profiles.ts`(버전 검사·설정 저장), `workbook.worker.ts`(격리된 엑셀 읽기), `WorkSourcePanel.tsx`(설정·검증 화면). ExcelJS 4.4.0을 사용하며 XLSX를 직접 읽습니다. 수식 캐시를 확정된 금융 데이터로 사용하지 않고, 수식·오류·하이퍼링크와 병합 셀의 암묵적 이어 채우기는 추출 오류로 표시합니다. 원본 해시가 달라지면 다시 읽고 검증해야 합니다. 원본 사본을 보관하지 않으므로 수정 전 파일의 재현은 보장하지 않습니다.
+
+파일당 20MB, 시트 100개, 시트당 100,000행·500열을 상한으로 두고 한 번에 한 파일을 별도 utility process에서 읽습니다(30초 제한). 폴더 탐색은 최대 깊이 10, 항목 10,000개, 파일 500개 미만으로 제한하며 심볼릭 링크·숨김 파일·Excel 잠금 파일은 제외합니다.
+
+현재 완료 범위는 **자연어 업무 선택 → 원천 자료 연결·매핑 설정·추출 검증 → 이 자료로 계속**입니다. 입력 대기는 로컬 DB에 저장되어 재접속 후 이어갈 수 있습니다. 일일자금일보는 아래 업무 Tool 실행 경로로 분리했으며 실제 업무 로직 구현 전에는 구현 대기 상태를 안내합니다. 전체 정규화 데이터의 업무 저장, 거래처 조인·잔액 대사·외화 계산·고정 양식 출력은 아직 연결하지 않았습니다. 실제 ERP 원천 자료와 담당자 수작업 결과를 확인한 뒤 업무 계약을 정하고 추가합니다. 기존 RAG/Canvas 라우팅 동작은 유지합니다.
 
 | 데이터 | 위치와 역할 |
 | --- | --- |
@@ -203,7 +219,9 @@ KetchupE의 책임은 `ketchupe-trajectory-v2` observation을 안정적으로 �
 electron/
 ├── agent/                  runtime, workflows, router, Harness, context, trace, telemetry, canvas
 ├── tomato/                 parser, chunker, embedding, local retrieval
-├── workers/                Tomato utility process entry
+├── work/                   로컬 업무 자료 연결, XLSX 읽기·열 매핑·추출 프로필
+├── business/               업무 Tool 계약, BusinessFlow(입력·실행·검증·결과), registry, Tool 구현
+├── workers/                Tomato·workbook·business utility process entry
 ├── db/                     SQLite schema/open
 ├── ipc/                    main-process handlers
 └── collectionWatchers.ts   folder watch, sync, embedding orchestration
@@ -219,7 +237,11 @@ scripts/
 ├── litellm-smoke.ts
 ├── maru-probe.ts            MCP 인증·도구·storage 연결 확인
 ├── trolley-probe.ts         Bearer API key로 capabilities 연결 확인
+├── bank-fixture.ts          bank_daily 테스트용 은행 거래내역 샘플 XLSX 생성
 └── telemetry-gateway.ts
+
+fixtures/                    bank_daily 샘플 거래내역(계좌별 2개)과 2026-10-14 예상 결과
+docs/BUSINESS_TOOLS.md       업무 Tool 연결 가이드와 호출 예시
 ```
 
 ## 검증
@@ -237,3 +259,23 @@ npm run build
 ## License
 
 MIT
+
+### 자연어 워크플로 실행
+
+입력창의 별도 모드 버튼 없이 등록된 `description`, `examples`, `requiredInputs`를 모델에 제공해 실행기를 선택합니다. 키워드 일치가 없는 기능도 후보에 포함합니다. `$doc`, `$daily_cash`, `$work_sources`로 명시 지정도 가능합니다. 모델 오류나 알 수 없는 ID 응답은 다른 업무를 임의 실행하지 않고 재요청을 안내합니다. 자연어 선택에는 모델 호출 1회가 추가됩니다.
+
+기능 추가는 `WorkflowRoute` 메타데이터와 `start/resume/cancel` 실행기를 `runtime.ts`의 registry에 등록합니다. UI 버튼이나 라우터 조건문은 추가하지 않습니다. 새 입력 형태가 필요하면 해당 입력 UI는 구현해야 합니다. 외부 SKILL.md를 설치해 임의 코드를 실행하는 기능은 지원하지 않습니다. 업무 자료는 로컬에서 검증하며, 사용자 요청과 최근 사용자 대화는 라우팅 모델에 전달됩니다.
+
+### 완성 Excel을 생성하는 업무 Tool
+
+`electron/business/registry.ts`에 등록된 업무는 자연어로 선택되고, `BusinessFlow`가 선언된 file/date/text 입력을 받아 utility process에서 실행합니다. 추가 질문과 조회값 checkpoint를 저장하고 재시작 후 이어갈 수 있습니다. Tool 버전·원천 해시·기준 정보를 고정하며, 업무 검사와 XLSX 검증을 통과한 파일만 저장·표시합니다. 취소·시간 초과·오류가 나면 완료 파일을 전달하지 않습니다.
+
+일일자금일보의 실제 계산은 담당자 확인 전이므로 비활성입니다. [연결 가이드와 Tool 예시](docs/BUSINESS_TOOLS.md)에 따라 `dailyCash.ts`의 입력 정의·실행 코드·버전을 완성하고 구현 대기 표시를 제거하면 기존 Agent 경로에서 실행됩니다. 사용자가 매핑을 편집하는 과정은 필요하지 않습니다.
+
+파일 입력은 항목 아래의 **파일 선택…/파일 추가…** 버튼이나 이미 연결된 자료 목록에서 고릅니다. `multiple: true`인 항목은 여러 파일을 받습니다(Tool에는 항상 배열로 전달). 같은 파일을 한 항목에 두 번 넣으면 실행 전에 거부합니다.
+
+**테스트용 `bank_daily` (일일 입출금 정리, `0.2.0-test`)**: 은행 거래내역 XLSX(계좌별 여러 파일)에서 기준일의 수입·지출을 계좌별·합계로 정리합니다. 셀 좌표가 아니라 헤더 이름(거래일시·적요·내용·출금액·입금액·잔액)으로 열을 찾고, 계좌별 잔액 연속성이 끊기거나 파일 간 같은 거래가 있으면 결과를 만들지 않습니다. 원화 정수 금액만 지원합니다. 업무 흐름 확인용이므로 배포 전 registry에서 제외합니다.
+
+```bash
+npx vite-node scripts/bank-fixture.ts fixtures   # 샘플 거래내역 재생성
+```

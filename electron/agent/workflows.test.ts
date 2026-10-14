@@ -32,7 +32,7 @@ describe("workflow dispatcher", () => {
     const result = await dispatcher.start(input("summary"));
     expect(result.kind).toBe("summary");
     expect(getRun(db, result.runId).kind).toBe("summary");
-    expect(route.mock.calls[0]).toHaveLength(2);
+    expect(route.mock.calls[0]).toHaveLength(3);
     expect(started).toHaveBeenCalledWith(result.runId);
     dispatcher.cancel(result.runId);
     expect(flows[2].cancel).toHaveBeenCalledWith(result.runId);

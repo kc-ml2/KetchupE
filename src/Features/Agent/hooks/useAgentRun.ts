@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AgentStreamEvent, AppliedContext, CitationSummary, KetchupEAgentAPI } from "@app-types/Agent.types";
+import type { RunStatus, RunAction, AgentStreamEvent, AppliedContext, CitationSummary, KetchupEAgentAPI } from "@app-types/Agent.types";
 
 export type RunView = {
   runId: string | null;
+  action?: RunAction | null;
   phase: string | null;
   streamingText: string;
   citations: CitationSummary[];
@@ -33,16 +34,17 @@ export const reduceRunEvent = (current: RunView, event: AgentStreamEvent): RunVi
   const payload = event.payload as Record<string, unknown>;
   switch (event.type) {
     case "status":
-      return { ...current, phase: String(payload.phase ?? "") };
+      return { ...current, isRunning: true, action: null, waitingQuestion: null, phase: String(payload.phase ?? "") };
     case "text_delta":
       return { ...current, streamingText: current.streamingText + String(payload.text ?? "") };
     case "citation":
       return { ...current, citations: [...current.citations, payload as unknown as CitationSummary] };
     case "ask_user":
-      return { ...current, isRunning: false, phase: null, waitingQuestion: String(payload.question ?? "") };
+      return { ...current, isRunning: false, phase: null, waitingQuestion: String(payload.question ?? ""), action: payload.action as RunAction | undefined };
     case "completed":
       return {
         ...current,
+        action: null, waitingQuestion: null,
         isRunning: false,
         phase: null,
         streamingText: String(payload.text ?? current.streamingText),
@@ -50,7 +52,7 @@ export const reduceRunEvent = (current: RunView, event: AgentStreamEvent): RunVi
         appliedContext: payload.appliedContext && typeof payload.appliedContext === "object" ? payload.appliedContext as AppliedContext : current.appliedContext,
       };
     case "failed":
-      return { ...current, isRunning: false, phase: null, streamingText: "", error: `${String(payload.code)}: ${String(payload.message ?? "")}` };
+      return { ...current, isRunning: false, phase: null, streamingText: "", action: null, waitingQuestion: null, error: `${String(payload.code)}: ${String(payload.message ?? "")}` };
     default:
       return current;
   }
@@ -79,7 +81,7 @@ export const useAgentRun = (api: KetchupEAgentAPI | null, threadId: string | nul
       if (cancelled || !open || open.kind === "canvas") return;
       bind(open.runId);
       setView((current) => open.status === "waiting_user"
-        ? { ...current, runId: open.runId, waitingQuestion: "" }
+        ? { ...current, runId: open.runId, waitingQuestion: open.action?.question ?? "", action: open.action }
         : { ...current, runId: open.runId, isRunning: true, phase: "deciding" });
     });
     return () => {
@@ -99,9 +101,9 @@ export const useAgentRun = (api: KetchupEAgentAPI | null, threadId: string | nul
 
   /** Binds this hook to a run the page just started. */
   const attach = useCallback(
-    (runId: string) => {
+    (runId: string, action?: RunAction, status?: RunStatus) => {
       bind(runId);
-      setView({ ...initial, runId, isRunning: true, phase: "deciding" });
+      setView({ ...initial, runId, action, waitingQuestion: action?.question ?? null, isRunning: !action && status !== "abstained", phase: action || status === "abstained" ? null : "deciding" });
     },
     [bind],
   );
@@ -111,10 +113,11 @@ export const useAgentRun = (api: KetchupEAgentAPI | null, threadId: string | nul
       if (!api || !view.runId || view.waitingQuestion === null) return false;
       bind(view.runId);
       setView({ ...initial, runId: view.runId, isRunning: true, phase: "deciding" });
-      await api.resumeRun(view.runId, text);
+      try { await api.resumeRun(view.runId, text); }
+      catch (cause) { setView({ ...view, error: String(cause) }); return false; }
       return true;
     },
-    [api, view.runId, view.waitingQuestion, bind],
+    [api, view, bind],
   );
 
   const cancel = useCallback(async () => {
