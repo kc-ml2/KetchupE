@@ -227,11 +227,11 @@ electron/
 └── collectionWatchers.ts   folder watch, sync, embedding orchestration
 
 src/
-├── Pages/AgentPage.tsx
-├── Features/Agent/
-├── Features/Sidebar/
+├── Pages/AgentPage.tsx     왼쪽 탭(홈/설정/업무/파일/컨텍스트)에 따라 채팅 또는 전체 폭 패널
+├── Features/Agent/         채팅·Canvas·업무 Tool 패널(WorkflowLauncher, BusinessToolPanel)
+├── Features/Sidebar/       NavRail(탭 레일), thread 목록
 ├── Contexts/ThreadsProvider.tsx
-└── app-types/
+└── app-types/              Navigation.types.ts 포함
 
 scripts/
 ├── litellm-smoke.ts

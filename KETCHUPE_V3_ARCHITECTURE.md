@@ -677,7 +677,7 @@ type AppliedContext = {
 
 ### 10.1 Renderer 패널 경계
 
-오른쪽 sidebar의 컨텍스트 패널은 응답 방식과 업무 정보를 하나의 durable memory 목록으로 관리한다. 폴더 패널은 Tomato collection 등록·활성화·동기화·해제를 담당한다. 가운데 질문 입력은 현재 thread/run에만 적용된다.
+왼쪽 탭 레일이 홈(채팅)·설정·업무·파일 업로드·컨텍스트 화면을 전환한다. 컨텍스트 탭은 응답 방식과 업무 정보를 하나의 durable memory 목록으로 관리하고, 파일 업로드 탭은 Tomato collection 등록·활성화·동기화·해제를 담당한다. 업무 탭은 등록된 workflow를 버튼으로 노출하고 새 대화에서 시작한다. 가운데 질문 입력은 현재 thread/run에만 적용된다.
 
 ## 11. Trajectory와 사용자 interaction
 

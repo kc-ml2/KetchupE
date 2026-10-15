@@ -1,7 +1,7 @@
 # KetchupE v3.0 코드 가이드
 
 - 대상: 이 저장소를 처음 여는 사람
-- 기준: `v3.0` 브랜치 작업 트리 (2026-10-14)
+- 기준: `v3.0` 브랜치 작업 트리 (2026-10-15)
 - 설계 의도와 "왜"는 [KETCHUPE_V3_ARCHITECTURE.md](KETCHUPE_V3_ARCHITECTURE.md)에 있다. 이 문서는 **실제 코드가 어떻게 생겼고 지금 어디까지 됐는지**를 설명한다.
 
 ---
@@ -103,13 +103,13 @@ electron/
 └── ipc/{agentHandlers.ts, collectionHandlers.ts, workSourceHandlers.ts}
 
 src/
-├── Pages/AgentPage.tsx         유일한 페이지 (얇게 유지)
+├── Pages/AgentPage.tsx         유일한 페이지. 왼쪽 탭(홈/설정/업무/파일/컨텍스트)에 따라 채팅 또는 전체 폭 패널을 보여준다
 ├── Features/Agent/
 │   ├── hooks/                  useAgentRun, useCanvasRun, useThreadMessages, useCollections, useMemories
-│   └── components/             AgentMessages, CanvasPanel, CollectionPanel, MemoryPanel, WorkSourcePanel, BusinessToolPanel, 설정 폼
-├── Features/Sidebar/           thread 목록
+│   └── components/             AgentMessages, CanvasPanel, CollectionPanel, MemoryPanel, WorkSourcePanel, BusinessToolPanel, WorkflowLauncher, 설정 폼
+├── Features/Sidebar/           NavRail(탭 레일), thread 목록
 ├── Contexts/ThreadsProvider    sidebar ↔ page가 공유하는 thread 목록
-└── app-types/                  Agent.types.ts, Canvas.types.ts, CanvasEdit.types.ts, WorkSource.types.ts, BusinessTool.types.ts
+└── app-types/                  Agent.types.ts, Canvas.types.ts, CanvasEdit.types.ts, WorkSource.types.ts, BusinessTool.types.ts, Navigation.types.ts
 ```
 
 **읽는 순서 추천**: `contracts.ts` → `harness.ts` → `policy.ts` → `tools.ts` + `tomato.ts`(search 부분만) → `store.ts` → `runtime.ts`. 이 6개면 제품의 90%다.
@@ -538,14 +538,17 @@ UI에 보이는 50개 페이지와 모델에 보내는 12개는 **별개 기준*
 
 ### 7.5 현재 화면의 컨텍스트 경계
 
-오른쪽 sidebar는 의도가 다른 두 패널만 노출한다.
+맨 왼쪽 탭 레일(NavRail)이 화면을 고른다. 홈은 채팅이고 나머지는 채팅을 숨기고 전체 폭 패널을 보여준다. 대화 선택·새 질문·업무 시작 등 라우트가 바뀌면 홈으로 돌아온다.
 
-| 패널 | 역할 |
+| 탭 | 역할 |
 | --- | --- |
+| **홈** | thread 목록 + 채팅/Canvas |
+| **설정** | 모델 연결(배포판에서 고정이면 안내만) |
+| **업무** | 등록된 workflow 버튼(WorkflowLauncher). 누르면 새 대화에서 해당 workflow를 시작 |
+| **파일 업로드** | Tomato가 검색할 local collection 등록·활성화·수동 동기화·등록 해제와 색인 상태 확인 |
 | **컨텍스트** | 응답 방식과 업무 정보의 추가·수정·삭제·pin·전체 on/off |
-| **폴더** | Tomato가 검색할 local collection 등록·활성화·수동 동기화·등록 해제와 색인 상태 확인 |
 
-상단의 “현재 작업 한 줄” 입력은 제거했다. 가운데 입력창의 질문은 현재 thread/run에만 적용되고, 지속적으로 적용할 내용은 컨텍스트 패널에서 명시적으로 저장한다.
+오른쪽 sidebar와 상단의 “현재 작업 한 줄” 입력은 없다. 가운데 입력창의 질문은 현재 thread/run에만 적용되고, 지속적으로 적용할 내용은 컨텍스트 탭에서 명시적으로 저장한다.
 
 ---
 
@@ -638,7 +641,7 @@ npm run probe:trolley  # Trolley MCP get_my_capabilities 확인 (TROLLEY_API_KEY
 npx vite-node scripts/bank-fixture.ts fixtures   # bank_daily 샘플 거래내역 재생성
 ```
 
-현재 오른쪽 sidebar는 **컨텍스트 / 폴더** 두 패널이다. **폴더**에서 검색 폴더를 등록하고 질문한다. 모델 연결은 `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL_ALIAS` 환경 변수 또는 기존 user-data 설정을 사용한다. 중앙 telemetry endpoint/content mode는 공식 빌드 환경에서 고정되며 설정 IPC/form이 없다.
+화면은 왼쪽 탭 레일의 **홈 / 설정 / 업무 / 파일 업로드 / 컨텍스트**로 전환한다. **파일 업로드**에서 검색 폴더를 등록하고 홈에서 질문한다. 모델 연결은 `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL_ALIAS` 환경 변수 또는 기존 user-data 설정을 사용한다. 중앙 telemetry endpoint/content mode는 공식 빌드 환경에서 고정되며 설정 IPC/form이 없다.
 
 ---
 
@@ -690,7 +693,7 @@ npx vite-node scripts/bank-fixture.ts fixtures   # bank_daily 샘플 거래내�
 | 인용 형식 | [verify.ts `CITATION_PATTERN`](electron/agent/verify.ts) + [AgentMessages.tsx `CITATION`](src/Features/Agent/components/AgentMessages.tsx) (두 군데가 같아야 한다) |
 | 새 IPC 추가 | [preload.js](electron/preload.js) + [agentHandlers.ts](electron/ipc/agentHandlers.ts) + [Agent.types.ts](src/app-types/Agent.types.ts) (업무 자료·Tool은 [workSourceHandlers.ts](electron/ipc/workSourceHandlers.ts) + WorkSource/BusinessTool types) |
 | DB 스키마 | [db/schema.ts](electron/db/schema.ts) (`CREATE TABLE IF NOT EXISTS` + `openAgentDb`의 ALTER 패턴) |
-| 오른쪽 컨텍스트/폴더 탭 | [AgentPage.tsx](src/Pages/AgentPage.tsx) |
+| 왼쪽 탭 레일·탭별 패널 | [NavRail.tsx](src/Features/Sidebar/components/NavRail.tsx), [AgentPage.tsx](src/Pages/AgentPage.tsx) |
 | 기억 CRUD·선택 | [MemoryPanel.tsx](src/Features/Agent/components/MemoryPanel.tsx) + [memory.ts](electron/agent/memory.ts) + [context.ts](electron/agent/context.ts) |
 | 답변 아래 인용·적용 컨텍스트 | [AgentMessages.tsx](src/Features/Agent/components/AgentMessages.tsx) + [store.ts](electron/agent/store.ts) |
 | 새 문서 종류(canvas preset) | [canvas/presets.ts](electron/agent/canvas/presets.ts) |

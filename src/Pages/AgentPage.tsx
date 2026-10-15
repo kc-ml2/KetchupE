@@ -1,6 +1,6 @@
 import BusinessToolPanel, { BusinessArtifacts } from "@Features/Agent/components/BusinessToolPanel";
 import { useContext, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { IoSend } from "react-icons/io5";
 import { FaStopCircle } from "react-icons/fa";
 import {
@@ -8,10 +8,12 @@ import {
   LuCirclePause,
   LuFileText,
   LuFolderSearch,
-  LuLayers,
   LuSettings,
 } from "react-icons/lu";
 import Sidebar from "@Features/Sidebar/components/Sidebar";
+import NavRail from "@Features/Sidebar/components/NavRail";
+import WorkflowLauncher from "@Features/Agent/components/WorkflowLauncher";
+import type { AppTab } from "@app-types/Navigation.types";
 import { useAgentApi } from "@Features/Agent/hooks/useAgentApi";
 import { useThreadMessages } from "@Features/Agent/hooks/useThreadMessages";
 import {
@@ -36,11 +38,18 @@ import ModelSettingsForm from "@Features/Agent/components/ModelSettingsForm";
 import WorkSourcePanel from "@Features/Agent/components/WorkSourcePanel";
 // import { guideCopy } from "@config/guideCopy";
 
-type PanelTab = "context" | "collections" | "model";
+const TAB_TITLES: Record<AppTab, string> = {
+  home: "케찹이",
+  settings: "모델 설정",
+  work: "업무",
+  upload: "파일 업로드",
+  context: "컨텍스트",
+};
 
 const AgentPage = (): React.JSX.Element => {
   const api = useAgentApi();
   const navigate = useNavigate();
+  const location = useLocation();
   const { threadId } = useParams<{ threadId: string }>();
   const selectedId = threadId ?? null;
   const { createThread } = useContext(ThreadsContext) as ThreadsContextType;
@@ -58,7 +67,7 @@ const AgentPage = (): React.JSX.Element => {
   const canvas = canvasRun.view;
   const collectionsState = useCollections(api, WORKSPACE_ID);
   const memoriesState = useMemories(api, WORKSPACE_ID);
-  const [tab, setTab] = useState<PanelTab>("context");
+  const [tab, setTab] = useState<AppTab>("home");
   const [modelConfigurable, setModelConfigurable] = useState(false);
   const [input, setInput] = useState("");
   const [memoryEnabled, setMemoryEnabled] = useState(true);
@@ -79,6 +88,11 @@ const AgentPage = (): React.JSX.Element => {
       setModelConfigurable(settings.configurable);
     });
   }, [api]);
+
+  // Any navigation (thread pick, 새 질문, workflow start) brings the chat screen back.
+  useEffect(() => {
+    setTab("home");
+  }, [location.key]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -125,22 +139,30 @@ const AgentPage = (): React.JSX.Element => {
       await resume(text);
       return;
     }
+    setInput("");
+    await startRequest(text, "auto", selectedId);
+  };
+
+  /** mode "auto" lets registered workflow descriptions pick the route; any other mode is a workflow ID. */
+  const startRequest = async (
+    text: string,
+    mode: string,
+    threadId: string | null,
+  ) => {
     setStartError(null);
     setStarting(true);
     try {
-      let target = selectedId;
+      let target = threadId;
       if (!target) {
         target = (await createThread())?.id ?? null;
         if (target) navigate(`/agent/${target}`);
       }
       if (!target) return;
-      setInput("");
-      // Registered workflow descriptions determine the execution route.
       const started = await api.startRun({
         threadId: target,
         workspaceId: WORKSPACE_ID,
         text,
-        mode: "auto",
+        mode,
       });
       if (started.kind === "canvas") canvasRun.attach(started.runId);
       else attachAgent(started.runId, started.action, started.status);
@@ -191,19 +213,122 @@ const AgentPage = (): React.JSX.Element => {
 
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden font-['Inter',sans-serif]">
+      <NavRail tab={tab} onChange={setTab} />
       <Sidebar />
 
       <div className="flex flex-col flex-1 min-w-0 min-h-0 bg-white dark:bg-[#0F0F0F]">
         <div className="flex items-center gap-3 h-[60px] px-6 border-b border-[#E4E4E7] dark:border-[#27272A]">
           <span className="text-lg font-semibold text-[#18181B] dark:text-[#FAFAFA]">
-            케찹이
+            {TAB_TITLES[tab]}
           </span>
-          <span className="text-xs text-[#71717A]">
-            현재 질문은 이 대화에만 적용됩니다.
-          </span>
+          {tab === "home" && (
+            <span className="text-xs text-[#71717A]">
+              현재 질문은 이 대화에만 적용됩니다.
+            </span>
+          )}
         </div>
 
-        <div className="flex flex-1 min-h-0">
+        {tab !== "home" && (
+          <div role="tabpanel" className="flex-1 overflow-y-auto px-6 py-6">
+            <div className="max-w-3xl">
+              {tab === "work" && (
+                <>
+                  <p className="mb-4 text-sm text-[#71717A]">
+                    실행할 업무를 고르면 새 대화에서 바로 시작합니다.
+                  </p>
+                  <WorkflowLauncher
+                    disabled={busy}
+                    onStart={(workflow) => {
+                      setTab("home");
+                      void startRequest(workflow.label, workflow.mode, null);
+                    }}
+                  />
+                </>
+              )}
+              {tab === "upload" && (
+                <>
+                  <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-[#18181B] dark:text-[#FAFAFA]">
+                    <LuFolderSearch className="h-4 w-4" />
+                    검색 폴더
+                  </h3>
+                  <p className="mb-4 text-xs leading-relaxed text-[#71717A]">
+                    활성화한 폴더만 검색하며, 답변에는 실제 인용한 문서가
+                    표시됩니다.
+                  </p>
+                  <CollectionPanel
+                    collections={collectionsState.collections}
+                    error={collectionsState.error}
+                    onAdd={() => void collectionsState.add()}
+                    onRemove={(name) => void collectionsState.remove(name)}
+                    onSync={(name) => void collectionsState.sync(name)}
+                    onToggle={(name, active) =>
+                      void collectionsState.setActive(name, active)
+                    }
+                  />
+                </>
+              )}
+              {tab === "context" && (
+                <section>
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="flex items-center gap-1.5 text-sm font-semibold text-[#18181B] dark:text-[#FAFAFA]">
+                      <LuBrain className="h-4 w-4" />
+                      저장된 컨텍스트
+                    </h3>
+                    <label className="flex items-center gap-1.5 text-xs text-[#71717A]">
+                      <input
+                        type="checkbox"
+                        checked={memoryEnabled}
+                        onChange={(event) =>
+                          void toggleMemory(event.target.checked)
+                        }
+                      />
+                      사용
+                    </label>
+                  </div>
+                  <p className="mb-4 mt-1 text-xs leading-relaxed text-[#71717A]">
+                    {memoryEnabled
+                      ? "고정한 항목은 항상, 나머지는 관련 질문에서 사용합니다."
+                      : "꺼져 있어 저장된 컨텍스트를 답변에 사용하지 않습니다."}
+                  </p>
+                  {memoryStatus && (
+                    <p className="mb-3 text-xs text-[#DC2626]">{memoryStatus}</p>
+                  )}
+                  <MemoryPanel
+                    memories={memoriesState.memories}
+                    onAdd={memoriesState.add}
+                    onUpdate={memoriesState.update}
+                    onPin={memoriesState.setPinned}
+                    onConfirm={memoriesState.confirm}
+                    onDelete={memoriesState.remove}
+                  />
+                </section>
+              )}
+              {tab === "settings" && (
+                <>
+                  <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-[#18181B] dark:text-[#FAFAFA]">
+                    <LuSettings className="h-4 w-4" />
+                    모델 연결
+                  </h3>
+                  {modelConfigurable ? (
+                    <>
+                      <p className="mb-4 text-xs leading-relaxed text-[#71717A]">
+                        LiteLLM 게이트웨이와 사용할 모델을 지정합니다. 기본
+                        모델은 loki입니다.
+                      </p>
+                      <ModelSettingsForm api={api} />
+                    </>
+                  ) : (
+                    <p className="text-xs text-[#71717A]">
+                      이 배포판은 모델 연결이 고정되어 있어 변경할 수 없습니다.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className={tab === "home" ? "flex flex-1 min-h-0" : "hidden"}>
           <div className="flex flex-col flex-1 min-w-0 min-h-0">
             <div className="flex-1 overflow-y-auto px-6 py-4">
               <AgentMessages
@@ -362,107 +487,6 @@ const AgentPage = (): React.JSX.Element => {
         </div>
       </div>
 
-      <aside className="flex flex-col w-[300px] shrink-0 border-l border-[#E4E4E7] dark:border-[#27272A] bg-[#FAFAFA] dark:bg-[#141414]">
-        <div
-          role="tablist"
-          aria-label="오른쪽 패널"
-          className="flex h-[60px] border-b border-[#E4E4E7] dark:border-[#27272A]"
-        >
-          {(
-            [
-              ["collections", LuFolderSearch, "폴더"],
-              ["context", LuLayers, "컨텍스트"],
-              ...(modelConfigurable ? [["model", LuSettings, "모델"]] as const : []),
-            ] as const
-          ).map(([key, Icon, label]) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={tab === key}
-              onClick={() => setTab(key)}
-              className={`flex-1 inline-flex items-center justify-center gap-1 text-xs font-semibold ${tab === key ? "text-[#0066FF] border-b-2 border-[#0066FF]" : "text-[#71717A]"}`}
-            >
-              <Icon className="w-4 h-4" />
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="flex-1 overflow-y-auto p-4">
-          {tab === "collections" && (
-            <div role="tabpanel">
-              <h3 className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-[#18181B] dark:text-[#FAFAFA]">
-                <LuFolderSearch className="h-4 w-4" />
-                검색 폴더
-              </h3>
-              <p className="mb-3 text-[11px] leading-relaxed text-[#71717A]">
-                활성화한 폴더만 검색하며, 답변에는 실제 인용한 문서가
-                표시됩니다.
-              </p>
-              <CollectionPanel
-                collections={collectionsState.collections}
-                error={collectionsState.error}
-                onAdd={() => void collectionsState.add()}
-                onRemove={(name) => void collectionsState.remove(name)}
-                onSync={(name) => void collectionsState.sync(name)}
-                onToggle={(name, active) =>
-                  void collectionsState.setActive(name, active)
-                }
-              />
-            </div>
-          )}
-          {tab === "context" && (
-            <div role="tabpanel">
-              <section>
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="flex items-center gap-1.5 text-xs font-semibold text-[#18181B] dark:text-[#FAFAFA]">
-                    <LuBrain className="h-4 w-4" />
-                    저장된 컨텍스트
-                  </h3>
-                  <label className="flex items-center gap-1.5 text-[11px] text-[#71717A]">
-                    <input
-                      type="checkbox"
-                      checked={memoryEnabled}
-                      onChange={(event) =>
-                        void toggleMemory(event.target.checked)
-                      }
-                    />
-                    사용
-                  </label>
-                </div>
-                <p className="mb-3 mt-1 text-[11px] leading-relaxed text-[#71717A]">
-                  {memoryEnabled
-                    ? "고정한 항목은 항상, 나머지는 관련 질문에서 사용합니다."
-                    : "꺼져 있어 저장된 컨텍스트를 답변에 사용하지 않습니다."}
-                </p>
-                {memoryStatus && (
-                  <p className="mb-3 text-xs text-[#DC2626]">{memoryStatus}</p>
-                )}
-                <MemoryPanel
-                  memories={memoriesState.memories}
-                  onAdd={memoriesState.add}
-                  onUpdate={memoriesState.update}
-                  onPin={memoriesState.setPinned}
-                  onConfirm={memoriesState.confirm}
-                  onDelete={memoriesState.remove}
-                />
-              </section>
-            </div>
-          )}
-          {modelConfigurable && tab === "model" && (
-            <div role="tabpanel">
-              <h3 className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-[#18181B] dark:text-[#FAFAFA]">
-                <LuSettings className="h-4 w-4" />
-                모델 연결
-              </h3>
-              <p className="mb-3 text-[11px] leading-relaxed text-[#71717A]">
-                LiteLLM 게이트웨이와 사용할 모델을 지정합니다. 기본 모델은 loki입니다.
-              </p>
-              <ModelSettingsForm api={api} />
-            </div>
-          )}
-        </div>
-      </aside>
       {view.action?.type === "business_tool" && view.runId && view.action.id !== dismissedActionId && <BusinessToolPanel key={view.action.id} api={api} runId={view.runId} action={view.action} onClose={() => setDismissedActionId(view.action!.id)} />}
       {view.action?.type === "work_sources" && view.runId && view.action.id !== dismissedActionId && <WorkSourcePanel key={view.action.id} api={api} request={{ runId: view.runId, actionId: view.action.id }} onClose={() => setDismissedActionId(view.action!.id)} />}
     </div>
