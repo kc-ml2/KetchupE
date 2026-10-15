@@ -92,6 +92,19 @@ export function bindAccounts(s: ExcelJS.Worksheet, accounts: KcAccount[], previo
   return { bindings, unresolved };
 }
 function formula(s: ExcelJS.Worksheet, cell: string, expression: string, value: Amount) { s.getCell(cell).value = { formula: expression, result: value.toNumber() }; }
+/** Writes a 집행내역 description so neither Excel nor the PNG clips it: wrap on, and the row tall enough for the lines the merged cell's real width can hold. */
+export function fitDescription(s: ExcelJS.Worksheet, cell: ExcelJS.Cell, label: string) {
+  cell.value = label;
+  cell.alignment = { ...cell.alignment, wrapText: true, vertical: cell.alignment?.vertical ?? "middle" };
+  const column = (address: string) => address.replace(/\d+/g, "");
+  const merge = s.model.merges.find((range) => range.startsWith(`${cell.address}:`));
+  const from = column(cell.address).charCodeAt(0), to = merge ? column(merge.split(":")[1]).charCodeAt(0) : from;
+  // Same pixel model as image.ts: width*7+5 px per column, 8 px padding, a CJK glyph is one em and ASCII about 0.55 em.
+  const widthPx = Array.from({ length: to - from + 1 }, (_, i) => Math.round((s.getColumn(String.fromCharCode(from + i)).width ?? 10) * 7 + 5)).reduce((a, b) => a + b, 0) - 8;
+  const pt = cell.font?.size ?? 10; const perLine = Math.max(1, widthPx / (pt * 4 / 3));
+  const lines = label.split("\n").reduce((n, line) => n + Math.max(1, Math.ceil([...line].reduce((units, ch) => units + (ch.charCodeAt(0) > 127 ? 1 : 0.55), 0) / perLine)), 0);
+  const row = s.getRow(Number(cell.row)); row.height = Math.max(row.height ?? 15, Math.ceil(lines * pt * 1.25 + 4));
+}
 export function buildReport(book: ExcelJS.Workbook, previous: ExcelJS.Worksheet, reportDate: string, workDate: string, amounts: Record<string, Amount>, accounts: KcAccount[], bindings: Map<string, string>, actual: Movement[], plan: Movement[], rates: Rates, changes: Record<string, { incoming: Amount; outgoing: Amount }>) {
   const l = layout(previous); const name = sheetDate(reportDate);
   if (book.getWorksheet(name)) throw new Error(`${name} 시트가 이미 있습니다. 기존 시트를 덮어쓰지 않습니다.`);
@@ -116,7 +129,9 @@ export function buildReport(book: ExcelJS.Workbook, previous: ExcelJS.Worksheet,
     numeric(s.getCell(`G${row}`), amounts[`H${row}`]); numeric(s.getCell(`H${row}`), 0);
     if (currencyAt(row, l) !== "KRW") numeric(s.getCell(`I${row}`), 0);
   }
-  for (const row of l.businessRows) numeric(s.getCell(`P${row}`), 0);
+  // The KC side table (header + every account row) must be readable in the PNG, so unhide it even if the previous sheet collapsed those rows.
+  s.getRow(l.businessRows[0] - 1).hidden = false;
+  for (const row of l.businessRows) { numeric(s.getCell(`P${row}`), 0); s.getRow(row).hidden = false; }
   for (const account of accounts) {
     const target = bindings.get(account.key)!; const row = Number(target.slice(1)); numeric(s.getCell(target), account.balance);
     s.getCell(target).note = `출처: 자금현황표/${account.source}; 계좌키 ${account.key}; 계좌잔고(O열)`;
@@ -147,7 +162,7 @@ export function buildReport(book: ExcelJS.Workbook, previous: ExcelJS.Worksheet,
     for (const direction of ["in", "out"] as const) {
       const entries = items.filter((m) => m.direction === direction); const first = direction === "in" ? l.opening + 1 : l.inSum + 1; const last = direction === "in" ? l.inSum - 1 : l.closing - 2;
       if (entries.length > last - first + 1) throw new Error("집행내역이 고정 양식의 행 수를 초과합니다. 양식 확장이 필요합니다.");
-      entries.forEach((m, i) => { const r = first + i; s.getCell(`${descCol}${r}`).value = `${m.description}${m.party ? ` / ${m.party}` : ""}`; numeric(s.getCell(`${amountCol}${r}`), m.amount); s.getCell(`${amountCol}${r}`).note = m.source; s.getRow(r).hidden = false; const label = String(s.getCell(`${descCol}${r}`).value); const lines = Math.max(1, Math.ceil([...label].reduce((n, ch) => n + (/[^\x00-\x7f]/.test(ch) ? 1 : 0.55), 0) / 25)); s.getRow(r).height = Math.max(s.getRow(r).height ?? 15, lines * 12 + 6); });
+      entries.forEach((m, i) => { const r = first + i; fitDescription(s, s.getCell(`${descCol}${r}`), `${m.description}${m.party ? ` / ${m.party}` : ""}`); numeric(s.getCell(`${amountCol}${r}`), m.amount); s.getCell(`${amountCol}${r}`).note = m.source; s.getRow(r).hidden = false; });
       formula(s, `${amountCol}${direction === "in" ? l.inSum : l.outSum}`, `SUM(${amountCol}${first}:${amountCol}${last})`, sum(entries.map((m) => m.amount)));
     }
   }
@@ -166,5 +181,6 @@ export function buildReport(book: ExcelJS.Workbook, previous: ExcelJS.Worksheet,
   s.getCell(`D${l.closing + 4}`).value = null; s.getCell(`D${l.closing + 5}`).value = null; s.getCell(`D${l.closing + 6}`).value = null;
   s.pageSetup.printArea = `A1:M${l.total}`; s.state = "visible";
   book.calcProperties.fullCalcOnLoad = true;
-  return { sheet: s, totalKrw: totals[3][1], lastRow: l.total };
+  // The KC side table runs one row past 총원화; the PNG must include it.
+  return { sheet: s, totalKrw: totals[3][1], lastRow: Math.max(l.total, l.businessRows.at(-1) ?? 0) };
 }

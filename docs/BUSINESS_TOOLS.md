@@ -16,7 +16,7 @@ await dailyCashTool.execute({
 });
 ```
 
-파일 항목은 항상 배열로 전달된다. 필드에 `multiple: true`를 지정하면 여러 파일(예: 계좌별 거래내역)을 받을 수 있고, 아니면 최대 1개이다. 같은 파일을 한 항목에 두 번 지정하면 실행 전에 거부한다. 입력 화면에서는 각 파일 항목 아래의 파일 선택 버튼이나 이미 연결된 자료 목록으로 고른다.
+파일 항목은 항상 배열로 전달된다. 필드에 `multiple: true`를 지정하면 여러 파일(예: 계좌별 거래내역)을 받을 수 있고, 아니면 최대 1개이다. 같은 파일을 한 항목에 두 번 지정하면 실행 전에 거부한다. 입력은 모달이 아니라 대화 안의 카드로 받는다. 질문은 assistant 메시지로 쌓이고 카드는 그 단계에서 열려 있는 필드만 보여주며, 확정된 입력은 접힌 요약으로만 표시한다. 제출한 답은 user 메시지로 기록되어 질문→답→실행→다음 질문 순서로 대화가 이어진다. 파일 항목은 파일 선택 버튼이나 이미 연결된 자료 목록으로 고른다.
 
 원천 파일 경로와 shell 명령은 Tool 호출 입력이 아니다. Electron의 네이티브 선택으로 등록된 파일 참조만 공통 실행부가 읽는다. 원천은 수정하거나 복사하지 않는다. 파일당 20MB, 합계 100MB, 입력 필드 30개를 제한한다.
 
@@ -26,7 +26,7 @@ await dailyCashTool.execute({
 2. 수작업 정답 자료와 비교하는 회귀 테스트를 추가한다.
 3. `dailyCashTool.version`을 올린다. 실행 중인 업무는 버전이 달라지면 새 작업으로 시작한다.
 
-새 업무는 `BusinessTool` 구현을 `electron/business/registry.ts`에 추가한다. 필드 `type`은 file/date/text/number/movements다. `movements`는 `rows`로 받은 계획 목록을 표로 보여주고 실제 금액 수정·추가 거래를 `{changes, add}` JSON 문자열로 제출한다. Tool의 `suggest(files, today)`는 연결된 업무 폴더의 파일 목록으로 입력을 미리 채운다. 다른 전용 입력이 필요하면 `BusinessField.type`·`flow.validateFields`·`BusinessToolPanel`을 함께 확장한다. 실행 코드는 제품에 포함된 신뢰된 코드만 사용하고 사용자 파일·모델이 만든 코드·외부 SKILL.md를 실행하지 않는다.
+새 업무는 `BusinessTool` 구현을 `electron/business/registry.ts`에 추가한다. 필드 `type`은 file/date/text/number/movements다. `confirm: string`을 주면 입력란 대신 한 줄 안내만 보이고, 카드의 확인 버튼이 그 문자열을 그대로 제출한다(이월 확인, 고시일 적용, 최종 확인 코드처럼 사용자가 값을 타이핑할 이유가 없는 승인에 쓴다). `movements`는 `rows`로 받은 계획 목록을 표로 보여주고 실제 금액 수정·추가 거래를 `{changes, add}` JSON 문자열로 제출한다. Tool의 `suggest(files, today)`는 연결된 업무 폴더의 파일 목록으로 입력을 미리 채운다. 다른 전용 입력이 필요하면 `BusinessField.type`·`flow.validateFields`·`BusinessToolCard`를 함께 확장한다. 실행 코드는 제품에 포함된 신뢰된 코드만 사용하고 사용자 파일·모델이 만든 코드·외부 SKILL.md를 실행하지 않는다.
 
 ## 반환 계약
 
@@ -61,6 +61,8 @@ return {
 ```ts
 return { status: "failed", message: "계좌 A의 마감잔액이 원천 합계와 일치하지 않습니다." };
 ```
+
+`failed`나 실행 중 예외(worker 종료, 120초 초과, 출력 검증 실패 포함)는 run을 끝내지 않는다. 공통 실행부는 같은 입력 카드를 메시지와 함께 다시 띄워 지금까지의 답을 유지하고, 사용자가 고쳐서 다시 실행하거나 "작업 중단"으로 끝낸다. run이 `failed`/`cancelled`로 끝나는 경우는 사용자의 중단뿐이다. 원천 파일을 바꿔야 하는 오류는 메시지에서 새 작업을 안내한다.
 
 ## 실행·버전·파일 수명
 

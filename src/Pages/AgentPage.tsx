@@ -1,4 +1,4 @@
-import BusinessToolPanel, { BusinessArtifacts } from "@Features/Agent/components/BusinessToolPanel";
+import BusinessToolCard, { BusinessArtifacts } from "@Features/Agent/components/BusinessToolCard";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { IoSend } from "react-icons/io5";
@@ -61,7 +61,6 @@ const AgentPage = (): React.JSX.Element => {
     view,
     attach: attachAgent,
     resume,
-    cancel,
   } = useAgentRun(api, selectedId, () => void reload());
   const canvasRun = useCanvasRun(api, selectedId, () => void reload());
   const canvas = canvasRun.view;
@@ -76,6 +75,16 @@ const AgentPage = (): React.JSX.Element => {
   const [dismissedActionId, setDismissedActionId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Wraps whichever inline prompt (business input card or anchor choice) is waiting, so 이어가기 can bring it into view.
+  const promptRef = useRef<HTMLDivElement>(null);
+  const [stopping, setStopping] = useState(false);
+  const awaitingContractRequest = location.state?.workflow === "doc" &&
+    !view.runId && !canvas.runId && messages.length === 0;
+
+  useEffect(() => {
+    if (awaitingContractRequest) inputRef.current?.focus();
+  }, [awaitingContractRequest, location.key]);
 
   useEffect(() => {
     void api?.getWorkspace().then((workspace) => {
@@ -96,7 +105,7 @@ const AgentPage = (): React.JSX.Element => {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, view.streamingText, view.phase, starting, canvas.phase]);
+  }, [messages, view.streamingText, view.phase, view.action, starting, canvas.phase]);
 
   if (!api) {
     return (
@@ -110,7 +119,40 @@ const AgentPage = (): React.JSX.Element => {
   }
 
   const canvasActive = Boolean(canvas.runId);
-  const busy = starting || view.isRunning || canvas.isBusy;
+  const busy = starting || stopping || view.isRunning || canvas.isBusy;
+  const agentPending = view.isRunning || view.waitingQuestion !== null;
+  const canvasPending = canvas.isBusy || canvas.interrupt !== null;
+  const activeRunId = agentPending ? view.runId : canvasPending ? canvas.runId : null;
+
+  const stopWorkflow = async () => {
+    if (stopping) return;
+    if (awaitingContractRequest && !starting) {
+      setInput("");
+      navigate(location.pathname, { replace: true, state: null });
+      return;
+    }
+    if (!activeRunId) return;
+    setStopping(true);
+    setStartError(null);
+    try {
+      await api.cancelRun(activeRunId);
+    } catch (cause) {
+      setStartError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setStopping(false);
+    }
+  };
+
+  const continueWorkflow = () => {
+    if (view.action?.type === "work_sources") setDismissedActionId(null);
+    else if (view.action?.type === "business_tool" || canvas.interrupt?.type === "awaiting_anchor_choice") {
+      promptRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      promptRef.current?.focus({ preventScroll: true });
+    } else {
+      if (canvas.interrupt?.type === "awaiting_edit") canvasRun.reopen();
+      inputRef.current?.focus();
+    }
+  };
 
   const toggleMemory = async (enabled: boolean) => {
     setMemoryEnabled(enabled);
@@ -140,7 +182,7 @@ const AgentPage = (): React.JSX.Element => {
       return;
     }
     setInput("");
-    await startRequest(text, "auto", selectedId);
+    await startRequest(text, awaitingContractRequest ? "doc" : "auto", selectedId);
   };
 
   /** mode "auto" lets registered workflow descriptions pick the route; any other mode is a workflow ID. */
@@ -155,7 +197,9 @@ const AgentPage = (): React.JSX.Element => {
       let target = threadId;
       if (!target) {
         target = (await createThread())?.id ?? null;
-        if (target) navigate(`/agent/${target}`);
+        if (target) navigate(`/agent/${target}`, {
+          state: awaitingContractRequest ? { workflow: "doc" } : null,
+        });
       }
       if (!target) return;
       const started = await api.startRun({
@@ -175,6 +219,8 @@ const AgentPage = (): React.JSX.Element => {
   };
 
   const placeholder = (() => {
+    if (awaitingContractRequest)
+      return "계약서 종류와 주요 조건을 입력해 주세요";
     if (canvas.interrupt?.type === "awaiting_anchor_choice")
       return "위에서 참고할 표준 양식을 선택해 주세요";
     if (canvas.actionContexts.length > 1)
@@ -189,7 +235,6 @@ const AgentPage = (): React.JSX.Element => {
       return "에이전트의 질문에 답해 주세요...";
     return "무엇을 도와드릴까요? 예: 계약서 초안 작성, 일일자금일보 작성";
   })();
-  // 진행 상태는 메시지 목록의 progressText가, 안내 문구는 입력창 placeholder가 보여준다. 여기서는 실패만 알린다.
   const errorText = startError ?? view.error ?? canvas.error ?? null;
   const responsePersisted = Boolean(
     !view.isRunning &&
@@ -203,13 +248,19 @@ const AgentPage = (): React.JSX.Element => {
     ),
   );
   const streamingText = responsePersisted ? "" : view.streamingText;
-  const progressText = starting
-    ? "요청을 준비하는 중..."
-    : view.isRunning && !streamingText
-      ? phaseLabel(view.phase) || "작업 중..."
-      : canvas.isBusy
-        ? canvasPhaseLabel(canvas.phase) || "문서를 처리하는 중..."
-        : null;
+  const workflowStatus = (() => {
+    if (stopping) return "작업을 중단하는 중...";
+    if (starting) return "요청을 준비하는 중...";
+    if (view.isRunning) return phaseLabel(view.phase) || "작업 중...";
+    if (canvas.isBusy) return canvasPhaseLabel(canvas.phase) || "문서를 처리하는 중...";
+    if (view.action) return `${view.action.title} · 입력 대기`;
+    if (canvas.interrupt?.type === "awaiting_anchor_choice") return "계약서 작성 · 참고 문서 선택 대기";
+    if (canvas.interrupt?.type === "awaiting_edit") return "문서 작성 · 초안 검토 및 수정 대기";
+    if (view.waitingQuestion !== null) return "답변 대기 · 아래에 답변을 입력해 주세요";
+    if (awaitingContractRequest) return "계약서 작성 · 요청 입력 대기";
+    return "진행 중인 업무가 없습니다";
+  })();
+  const canContinue = !busy && (awaitingContractRequest || agentPending || canvasPending);
 
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden font-['Inter',sans-serif]">
@@ -234,12 +285,18 @@ const AgentPage = (): React.JSX.Element => {
               {tab === "work" && (
                 <>
                   <p className="mb-4 text-sm text-[#71717A]">
-                    실행할 업무를 고르면 새 대화에서 바로 시작합니다.
+                    실행할 업무를 고르면 새 대화에서 안내합니다.
                   </p>
                   <WorkflowLauncher
                     disabled={busy}
                     onStart={(workflow) => {
                       setTab("home");
+                      if (workflow.mode === "doc") {
+                        setInput("");
+                        setStartError(null);
+                        navigate("/agent", { state: { workflow: "doc" } });
+                        return;
+                      }
                       void startRequest(workflow.label, workflow.mode, null);
                     }}
                   />
@@ -253,7 +310,8 @@ const AgentPage = (): React.JSX.Element => {
                   </h3>
                   <p className="mb-4 text-xs leading-relaxed text-[#71717A]">
                     활성화한 폴더만 검색하며, 답변에는 실제 인용한 문서가
-                    표시됩니다.
+                    표시됩니다. 일일자금일보 같은 Excel 업무도 이 폴더에서
+                    전일 일보·주간계획·자금현황표를 파일명으로 찾아 미리 채웁니다.
                   </p>
                   <CollectionPanel
                     collections={collectionsState.collections}
@@ -332,6 +390,7 @@ const AgentPage = (): React.JSX.Element => {
           <div className="flex flex-col flex-1 min-w-0 min-h-0">
             <div className="flex-1 overflow-y-auto px-6 py-4">
               <AgentMessages
+                initialPrompt={awaitingContractRequest ? "어떤 계약서 작성을 도와드릴까요?" : undefined}
                 messages={messages}
                 streamingText={streamingText}
                 streamingRunId={view.runId}
@@ -339,23 +398,30 @@ const AgentPage = (): React.JSX.Element => {
                 streamingAppliedContext={
                   responsePersisted ? { memories: [] } : view.appliedContext
                 }
-                progressText={progressText}
+                progressText={null}
                 hasMore={hasMore}
                 onLoadOlder={() => void loadOlder()}
                 onOpenCitation={(runId, evidenceId) =>
                   void api.openCitation(runId, evidenceId)
                 }
               />
+              {view.action?.type === "business_tool" && view.runId && (
+                <div ref={promptRef} tabIndex={-1} aria-label={`${view.action.title} 입력 대기`}>
+                  <BusinessToolCard key={view.action.id} api={api} runId={view.runId} action={view.action} />
+                </div>
+              )}
               {canvas.interrupt?.type === "awaiting_anchor_choice" && (
-                <AnchorChoicePrompt
-                  candidates={canvas.interrupt.candidates}
-                  selectedIds={canvas.selectedAnchorIds}
-                  disabled={canvas.isBusy}
-                  onToggle={canvasRun.toggleAnchor}
-                  onSubmit={(action) =>
-                    void canvasRun.submitAnchorChoice(action)
-                  }
-                />
+                <div ref={promptRef} tabIndex={-1} aria-label="참고 문서 선택">
+                  <AnchorChoicePrompt
+                    candidates={canvas.interrupt.candidates}
+                    selectedIds={canvas.selectedAnchorIds}
+                    disabled={canvas.isBusy}
+                    onToggle={canvasRun.toggleAnchor}
+                    onSubmit={(action) =>
+                      void canvasRun.submitAnchorChoice(action)
+                    }
+                  />
+                </div>
               )}
               {canvas.canvas && canvasRun.showMissingTermsForm && (
                 <MissingTermsForm
@@ -407,17 +473,18 @@ const AgentPage = (): React.JSX.Element => {
                 </button>
               )}
               {selectedId && <BusinessArtifacts api={api} threadId={selectedId} running={view.isRunning} />}
-              {view.action && <div role="status" className="flex items-center gap-3 mb-2 rounded-lg border border-[#0066FF] bg-[#EFF6FF] dark:bg-[#0B1B33] px-3 py-2 text-sm">
+              <div role="group" aria-label="워크플로 상태" className="flex flex-wrap items-center gap-3 mb-2 rounded-lg border border-[#E4E4E7] dark:border-[#27272A] bg-[#F4F4F5] dark:bg-[#1F1F1F] px-3 py-2 text-sm">
                 <LuCirclePause aria-hidden className="w-4 h-4 shrink-0 text-[#0066FF]" />
-                <span className="flex-1 font-medium text-[#18181B] dark:text-[#FAFAFA]">{view.action.title} 작업이 진행 중입니다</span>
-                <button type="button" onClick={() => setDismissedActionId(null)} className="rounded bg-[#0066FF] px-3 py-1 font-medium text-white">이어가기</button>
-                <button type="button" onClick={() => void cancel()} className="rounded px-3 py-1 text-[#DC2626] hover:bg-[#FEE2E2] dark:hover:bg-[#3B1111]">작업 중단</button>
-              </div>}
+                <span role="status" className="flex-1 font-medium text-[#18181B] dark:text-[#FAFAFA]">{workflowStatus}</span>
+                {canContinue && <button type="button" onClick={continueWorkflow} className="rounded bg-[#0066FF] px-3 py-1 font-medium text-white">이어가기</button>}
+                {(activeRunId || awaitingContractRequest || starting) && <button type="button" disabled={stopping || (!activeRunId && starting)} onClick={() => void stopWorkflow()} className="rounded px-3 py-1 text-[#DC2626] hover:bg-[#FEE2E2] dark:hover:bg-[#3B1111] disabled:opacity-40">작업 중단</button>}
+              </div>
               <form
                 onSubmit={submit}
                 className="flex items-end gap-2 p-2 rounded-xl border border-[#E4E4E7] dark:border-[#27272A]"
               >
                 <textarea
+                  ref={inputRef}
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
                   onKeyDown={(event) => {
@@ -434,11 +501,8 @@ const AgentPage = (): React.JSX.Element => {
                 {busy ? (
                   <button
                     type="button"
-                    onClick={() =>
-                      void (view.runId
-                        ? cancel()
-                        : canvas.runId && api.cancelRun(canvas.runId))
-                    }
+                    disabled={stopping || !activeRunId}
+                    onClick={() => void stopWorkflow()}
                     className="p-2 text-[#DC2626]"
                     title="중단"
                   >
@@ -487,7 +551,6 @@ const AgentPage = (): React.JSX.Element => {
         </div>
       </div>
 
-      {view.action?.type === "business_tool" && view.runId && view.action.id !== dismissedActionId && <BusinessToolPanel key={view.action.id} api={api} runId={view.runId} action={view.action} onClose={() => setDismissedActionId(view.action!.id)} />}
       {view.action?.type === "work_sources" && view.runId && view.action.id !== dismissedActionId && <WorkSourcePanel key={view.action.id} api={api} request={{ runId: view.runId, actionId: view.action.id }} onClose={() => setDismissedActionId(view.action!.id)} />}
     </div>
   );

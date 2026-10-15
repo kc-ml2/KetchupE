@@ -97,6 +97,7 @@ const ContextSources = ({ citations, appliedContext, runId, onOpenCitation }: { 
 };
 
 type Props = {
+  initialPrompt?: string;
   messages: MessageRecord[];
   streamingText: string;
   streamingRunId: string | null;
@@ -108,8 +109,15 @@ type Props = {
   onOpenCitation: (runId: string, evidenceId: string) => void;
 };
 
-const AgentMessages = ({ messages, streamingText, streamingRunId, streamingCitations, streamingAppliedContext, progressText, hasMore, onLoadOlder, onOpenCitation }: Props): React.JSX.Element => (
+const AgentMessages = ({ initialPrompt, messages, streamingText, streamingRunId, streamingCitations, streamingAppliedContext, progressText, hasMore, onLoadOlder, onOpenCitation }: Props): React.JSX.Element => (
   <div className="flex flex-col gap-3">
+    {initialPrompt && (
+      <div className="flex justify-start">
+        <div className="max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed bg-[#F4F4F5] dark:bg-[#1F1F1F] text-[#18181B] dark:text-[#FAFAFA]">
+          {initialPrompt}
+        </div>
+      </div>
+    )}
     {hasMore && (
       <button type="button" onClick={onLoadOlder} className="self-center text-xs text-[#0066FF] hover:underline">
         이전 대화 더 보기

@@ -3,6 +3,7 @@
 - 상태: 구현 기준 문서
 - 기준일: 2026-09-14
 - 범위: KetchupE desktop client, local data, 중앙 OTLP 수집 계약. MARU와 benchmark 구현은 범위 밖이다.
+- 현재 구현 요약: [README](README.md). 외부 팀 협업: [MCP 제작·전달 가이드](docs/MCP_PROVIDER_GUIDE.md), [워크플로 추가 가이드](docs/WORKFLOW_INTEGRATION_GUIDE.md).
 
 ## 1. 궁극적인 목표
 

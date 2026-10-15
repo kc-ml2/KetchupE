@@ -3,6 +3,7 @@
 - 대상: 이 저장소를 처음 여는 사람
 - 기준: `v3.0` 브랜치 작업 트리 (2026-10-15)
 - 설계 의도와 "왜"는 [KETCHUPE_V3_ARCHITECTURE.md](KETCHUPE_V3_ARCHITECTURE.md)에 있다. 이 문서는 **실제 코드가 어떻게 생겼고 지금 어디까지 됐는지**를 설명한다.
+- 빠른 개요는 [README](README.md), 새 업무 연결은 [워크플로 추가 가이드](docs/WORKFLOW_INTEGRATION_GUIDE.md), 외부 팀 전달 계약은 [MCP 제작 가이드](docs/MCP_PROVIDER_GUIDE.md)를 본다.
 
 ---
 
@@ -566,7 +567,7 @@ classify(문서 종류 preset)
   → finalize
 ```
 
-- 라우팅: [router.ts](electron/agent/router.ts). 기본 경로와 `matches()`를 통과한 실행기만 모델 후보로 전달한다. Canvas 후보는 문서 명사 + 작성 동사를 검사한다. 후보가 없으면 모델 호출을 생략하며 UI의 문서 아이콘은 `mode: "doc"`로 강제한다. 새 기능은 [runtime.ts](electron/agent/runtime.ts)에 실행기와 라우팅 메타데이터를 등록한다.
+- 라우팅: [router.ts](electron/agent/router.ts)는 등록된 모든 기능의 설명·예시·필수 입력을 모델에 전달한다. `matches()`는 후보 제외 조건이 아니다. `$doc` 또는 `mode: "doc"`로 명시 선택할 수도 있다. 업무 탭의 계약서 작성은 요청을 먼저 입력받고 문서 모드로 실행한다. 새 기능은 [runtime.ts](electron/agent/runtime.ts)에 실행기와 라우팅 메타데이터를 등록한다.
 - anchor 선택: 파일명 bigram 겹침률([`anchorRelevance`](electron/agent/canvas/flow.ts))로 순위를 매기고, 1등이 0.34 이상이면서 2등과 0.15 이상 벌어져야 "명확한 승자". 아니면 사용자에게 고르게 한다.
 - 버전 관리: 편집 op마다 **트리 전체 스냅샷**을 `canvas_versions`에 쓰고 `canvases.head_version_id`를 옮긴다. undo/redo = head 포인터 이동. (diff/patch 안 씀 — 문서 크기가 작아서 스냅샷이 더 싸다)
 - 편집 op: `edit / add / delete / reorder / set_parties / set_terms / regenerate / undo / redo / finalize / batch`. `feedback`만 주면 해당 블록만 LLM이 다시 쓴다.

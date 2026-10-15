@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import ExcelJS from "exceljs";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { openAgentDb } from "../db/openAgentDb.ts";
-import { createThread, ensureWorkspace, getRun, getRunAction } from "../agent/store.ts";
+import { createThread, ensureWorkspace, getRun, getRunAction, loadThread } from "../agent/store.ts";
 import { WorkSources } from "../work/sources.ts";
 import { loadWorkbook } from "../work/mapping.ts";
 import { BusinessFlow } from "./flow.ts";
@@ -40,6 +40,9 @@ it("executes a registered tool using selected bytes and delivers only verified a
   const runId = start(); const action = getRunAction(db, runId)!;
   await flow.submit(runId, action.id, input);
   expect(getRun(db, runId).status).toBe("completed");
+  expect(loadThread(db, threadId).messages.map((message) => [message.role, message.content])).toEqual([
+    ["user", "테스트 엑셀 만들어줘"], ["assistant", "기준 정보와 원천 파일을 지정해 주세요."], ["user", "기준일: 2026-10-15\n원천: source.xlsx"], ["assistant", expect.stringContaining("테스트 업무 완료")],
+  ]);
   expect(tool.execute).toHaveBeenCalledWith(expect.objectContaining({ values: input.values, files: { source: [{ bytes: output, fingerprint: expect.any(String), name: "source.xlsx" }] } }));
   const [artifact] = flow.artifacts(threadId); expect(artifact).toMatchObject({ runId, version: "1.0", name: "테스트결과.xlsx" });
   const path = await flow.artifactPath(artifact.id); expect(path).toContain(folder);
@@ -71,7 +74,7 @@ it("does not reuse answers when the pinned source changed", async () => {
   const runId = start(); await flow.submit(runId, getRunAction(db, runId)!.id, input);
   await writeFile(join(folder, "source.xlsx"), "changed");
   await flow.submit(runId, getRunAction(db, runId)!.id, { ...input, values: { ...input.values, confirm: "yes" } });
-  expect(getRun(db, runId).status).toBe("failed"); expect(tool.execute).toHaveBeenCalledTimes(1); expect(flow.artifacts(threadId)).toEqual([]);
+  expect(getRun(db, runId).status).toBe("waiting_user"); expect(tool.execute).toHaveBeenCalledTimes(1); expect(flow.artifacts(threadId)).toEqual([]);
 });
 
 it("rejects missing, extra, invalid dates and unregistered file paths before calling the tool", async () => {
@@ -80,7 +83,7 @@ it("rejects missing, extra, invalid dates and unregistered file paths before cal
   await expect(flow.submit(runId, actionId, { ...input, values: { businessDate: "2026-02-30" } })).rejects.toThrow("기준일");
   await expect(flow.submit(runId, actionId, { ...input, values: { ...input.values, rogue: "x" } })).rejects.toThrow("등록되지 않은");
   await flow.submit(runId, actionId, { ...input, files: { source: [{ ...input.files.source[0], relativePath: "../outside.xlsx" }] } });
-  expect(tool.execute).not.toHaveBeenCalled(); expect(getRun(db, runId).status).toBe("failed");
+  expect(tool.execute).not.toHaveBeenCalled(); expect(getRun(db, runId).status).toBe("waiting_user");
 });
 
 it.each(["checks", "xlsx", "name", "throw"])("never publishes invalid output: %s", async (kind) => {
@@ -93,7 +96,7 @@ it.each(["checks", "xlsx", "name", "throw"])("never publishes invalid output: %s
     return result;
   });
   const runId = start(); await flow.submit(runId, getRunAction(db, runId)!.id, input);
-  expect(getRun(db, runId).status).toBe("failed"); expect(flow.artifacts(threadId)).toEqual([]);
+  expect(getRun(db, runId).status).toBe("waiting_user"); expect(flow.artifacts(threadId)).toEqual([]);
 });
 
 it("ignores late completion after cancellation and prevents simultaneous submissions", async () => {
@@ -116,18 +119,30 @@ it("refuses the same file twice in a multi-file field before calling the tool", 
   await flow.stop(); flow = makeFlow([{ ...tool, fields: tool.fields.map((field) => ({ ...field, multiple: field.type === "file" })) }]);
   const runId = start(); const [file] = input.files.source;
   await flow.submit(runId, getRunAction(db, runId)!.id, { ...input, files: { source: [file, file] } });
-  expect(getRun(db, runId).status).toBe("failed"); expect(tool.execute).not.toHaveBeenCalled();
+  expect(getRun(db, runId).status).toBe("waiting_user"); expect(tool.execute).not.toHaveBeenCalled();
 });
 
 it("times out a tool that never returns", async () => {
   vi.mocked(tool.execute).mockImplementation(() => new Promise(() => undefined)); flow = makeFlow([tool], 30);
   const runId = start(); await flow.submit(runId, getRunAction(db, runId)!.id, input);
-  expect(getRun(db, runId).status).toBe("failed"); expect(flow.artifacts(threadId)).toEqual([]);
+  expect(getRun(db, runId).status).toBe("waiting_user"); expect(flow.artifacts(threadId)).toEqual([]);
 });
 
 it("starts daily cash by asking for the three real sources without producing an unverified report", async () => {
   flow = makeFlow([dailyCashTool]); const { runId, done } = flow.workflows()[0].start({ threadId, workspaceId: "default", text: "일일자금일보 작성해줘" }); await done;
   expect(getRun(db, runId).status).toBe("waiting_user"); expect(getRunAction(db, runId)).toMatchObject({ type: "business_tool" }); expect(flow.artifacts(threadId)).toEqual([]);
+});
+
+it("prefills Seoul's today as an editable date even without a connected folder, locking it only after the first run", async () => {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+  tool.suggest = (_files, day) => ({ values: { businessDate: day }, files: {} });
+  const { runId, done } = flow.workflows()[0].start({ threadId, workspaceId: "default", text: "테스트" }); await done;
+  expect(getRunAction(db, runId)).toMatchObject({ input: { values: { businessDate: today }, files: {} }, lockedKeys: [], question: "기준 정보와 원천 파일을 지정해 주세요." });
+  vi.mocked(tool.execute).mockResolvedValueOnce({ status: "needs_input", question: "계좌?", fields: [{ key: "account", type: "text", label: "계좌", required: true }] });
+  await flow.submit(runId, getRunAction(db, runId)!.id, { ...input, values: { businessDate: "2026-10-01" } });
+  expect(tool.execute).toHaveBeenCalledWith(expect.objectContaining({ values: { businessDate: "2026-10-01" } }));
+  expect(getRunAction(db, runId)).toMatchObject({ lockedKeys: expect.arrayContaining(["businessDate", "source"]) });
+  await expect(flow.submit(runId, getRunAction(db, runId)!.id, { ...input, values: { businessDate: "2026-10-02", account: "a" } })).rejects.toThrow("변경할 수 없습니다");
 });
 
 it("allows correcting a supplemental answer when the tool asks for it again", async () => {
@@ -139,10 +154,22 @@ it("allows correcting a supplemental answer when the tool asks for it again", as
   await flow.submit(runId, getRunAction(db, runId)!.id, { ...input, values: { ...input.values, account: "correct" } });
   expect(getRun(db, runId).status).toBe("completed");
 });
+it("keeps the run and its answers after a tool error so a retry can finish it", async () => {
+  vi.mocked(tool.execute).mockResolvedValueOnce({ status: "needs_input", question: "계좌?", fields: [{ key: "account", type: "text", label: "계좌", required: true }] })
+    .mockRejectedValueOnce(new Error("일시 오류")).mockResolvedValueOnce(success());
+  const runId = start(); await flow.submit(runId, getRunAction(db, runId)!.id, input);
+  const answered = { ...input, values: { ...input.values, account: "001" } };
+  await flow.submit(runId, getRunAction(db, runId)!.id, answered);
+  const action = getRunAction(db, runId)!;
+  expect(getRun(db, runId).status).toBe("waiting_user"); expect(action).toMatchObject({ type: "business_tool", question: expect.stringContaining("일시 오류"), input: answered, lockedKeys: expect.arrayContaining(["businessDate"]) });
+  await flow.submit(runId, action.id, answered);
+  expect(getRun(db, runId).status).toBe("completed"); expect(tool.execute).toHaveBeenCalledTimes(3);
+});
+
 it("does not publish when source access is revoked during execution", async () => {
   vi.mocked(tool.execute).mockImplementation(async () => { new WorkSources(db).remove(input.files.source[0].sourceId); return success(); });
   const runId = start(); await flow.submit(runId, getRunAction(db, runId)!.id, input);
-  expect(getRun(db, runId).status).toBe("failed"); expect(flow.artifacts(threadId)).toEqual([]);
+  expect(getRun(db, runId).status).toBe("waiting_user"); expect(flow.artifacts(threadId)).toEqual([]);
 });
 
 it("persists workbook and PNG together and checks both fingerprints", async () => {
@@ -158,5 +185,5 @@ it.each(["../escape.png", "invalid.png"])("publishes neither artifact when an im
   const result = success(); if (result.status !== "completed") throw new Error("fixture"); result.image = { name, bytes: Buffer.from("not png") };
   vi.mocked(tool.execute).mockResolvedValue(result);
   const runId = start(); await flow.submit(runId, getRunAction(db, runId)!.id, input);
-  expect(getRun(db, runId).status).toBe("failed"); expect(flow.artifacts(threadId)).toEqual([]);
+  expect(getRun(db, runId).status).toBe("waiting_user"); expect(flow.artifacts(threadId)).toEqual([]);
 });

@@ -1,8 +1,10 @@
 import { basename } from "node:path";
+import { realpath } from "node:fs/promises";
 import { BrowserWindow, dialog, ipcMain } from "electron";
 import type { AgentRuntime } from "../agent/runtime.ts";
 import { setCollectionActive } from "../agent/store.ts";
 import { TOMATO_LONG_CALL_TIMEOUT_MS } from "../tomato/tomatoClient.ts";
+import { WorkSources } from "../work/sources.ts";
 
 const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
@@ -40,6 +42,8 @@ export function registerCollectionHandlers(runtime: AgentRuntime): void {
     const taken = new Set(runtime.collections().map((collection) => collection.name));
     const name = collectionNameFor(folder, taken);
     const collection = await runtime.tomato.call("registerCollection", [folder, name, "auto"], { timeoutMs: TOMATO_LONG_CALL_TIMEOUT_MS });
+    // One folder concept for the user: a search folder is also where Excel business tools look for their source files.
+    await new WorkSources(runtime.db).register([folder], "folder");
     await runtime.refreshCollections();
     runtime.watchers.watch(collection);
     void runtime.watchers.syncNow(name);
@@ -48,6 +52,8 @@ export function registerCollectionHandlers(runtime: AgentRuntime): void {
   });
 
   ipcMain.handle("collection:remove", async (_event, name: string) => {
+    const folder = runtime.collections().find((collection) => collection.name === name)?.path;
+    if (folder) { const sources = new WorkSources(runtime.db); const canonical = await realpath(folder).catch(() => folder); for (const source of sources.list()) if (source.kind === "folder" && source.displayPath === canonical) sources.remove(source.id); }
     runtime.watchers.unwatch(name);
     await runtime.tomato.call("remove", [name]);
     await runtime.refreshCollections();

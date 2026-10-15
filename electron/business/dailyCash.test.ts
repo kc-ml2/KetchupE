@@ -1,11 +1,13 @@
 // @vitest-environment node
 import { expect, it, vi } from "vitest";
 import ExcelJS from "exceljs";
+import sharp from "sharp";
 import { dailyCashTool, applyEdits } from "./dailyCash.ts";
+import { fitDescription } from "./dailyCash/report.ts";
 import { fixtureBooks } from "./dailyCash/fixtures.ts";
 import { readCashStatus } from "./dailyCash/cashStatus.ts";
 import { readWeekly } from "./dailyCash/weekly.ts";
-import { parseHana } from "./dailyCash/hana.ts";
+import { fetchHana, parseHana } from "./dailyCash/hana.ts";
 import { Money } from "./dailyCash/values.ts";
 import type { BusinessTool } from "./contracts.ts";
 vi.mock("./dailyCash/hana.ts", async (original) => ({ ...await original<typeof import("./dailyCash/hana.ts")>(), fetchHana: vi.fn(async (day: string) => ({ date: day, requestedDate: day, round: "10", publishedAt: "테스트 고시", source: "fixture-only", fetchedAt: "2026-10-14T00:00:00Z", responseHash: "fixture", perUnit: { USD: "1400", JPY: "9.5", CNY: "200" } })) }));
@@ -18,7 +20,7 @@ async function confirm(input: Parameters<BusinessTool["execute"]>[0]) {
   const review = await dailyCashTool.execute(input);
   expect(review.status, JSON.stringify(review)).toBe("needs_input");
   if (review.status !== "needs_input") throw new Error("review");
-  const code = review.question.match(/확인 [a-f0-9]{12}/)?.[0]; expect(code, review.question).toBeTruthy();
+  const code = review.fields.find((field) => field.key === "review")?.confirm; expect(code, review.question).toMatch(/^확인 [a-f0-9]{12}$/);
   return dailyCashTool.execute({ ...input, checkpoint: review.checkpoint ?? {}, values: { ...input.values, review: code! } });
 }
 it("appends a dated sheet, redeems a maturity, reconciles KC cash and returns a real PNG", async () => {
@@ -36,6 +38,13 @@ it("appends a dated sheet, redeems a maturity, reconciles KC cash and returns a 
   expect(s.getCell("K23").value).toBe(9.5); expect(s.getCell("H27").formula).toBe("H26");
   expect(s.getCell("J23").result).toBe(0); expect(s.pageSetup.printArea).toBe("A1:M248");
   expect(Buffer.from(result.image!.bytes).subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a"); expect(result.image!.bytes.length).toBeGreaterThan(10000);
+  // The PNG (rendered at 2x) spans the visible columns A:P and every visible row through O249, the last KC side-table row.
+  // An A:M / 총원화-row render, which cut the 사업부문 자금현황표(KC) off the right edge, would be 702 px narrower and 58 px shorter.
+  const SCALE = 2;
+  const columnsPx = [6, 15, 23, 18, 6, 18, 15, 18, 17, 3, 25, 20].reduce((total, width) => total + Math.round(width * 7 + 5), 0);
+  const rowsPx = Array.from({ length: 249 }, (_, i) => s.getRow(i + 1)).filter((row) => !row.hidden).reduce((total, row) => total + Math.round((row.height ?? 15) * 4 / 3), 0);
+  for (const row of [238, 239, 249]) expect(s.getRow(row).hidden, `row ${row}`).toBe(false);
+  await expect(sharp(Buffer.from(result.image!.bytes)).metadata()).resolves.toMatchObject({ width: columnsPx * SCALE, height: rowsPx * SCALE });
   expect(result.externalData?.matured).toHaveLength(1);
 });
 it("matches the KC file date to the report date (work date minus one), not the work date", async () => {
@@ -126,7 +135,30 @@ it("never combines a months-old daily report with a current KC snapshot", async 
 });
 it("re-asks for confirmation when actual or next-day plan changes after review", async () => {
   const { input } = await setup(); const result = await dailyCashTool.execute(input); if (result.status !== "needs_input") throw new Error("review");
-  input.values.review = result.question.match(/확인 [a-f0-9]{12}/)![0]; input.checkpoint = result.checkpoint!;
+  const codeOf = (fields: typeof result.fields) => fields.find((field) => field.key === "review")!.confirm!;
+  input.values.review = codeOf(result.fields); input.checkpoint = result.checkpoint!;
   input.values.planEdits = '{"changes":[{"index":1,"amount":3000}]}';
-  const updated = await dailyCashTool.execute(input); expect(updated.status).toBe("needs_input"); if (updated.status === "needs_input") expect(updated.question.match(/확인 [a-f0-9]{12}/)![0]).not.toBe(input.values.review);
+  const updated = await dailyCashTool.execute(input); expect(updated.status).toBe("needs_input"); if (updated.status === "needs_input") expect(codeOf(updated.fields)).not.toBe(input.values.review);
+});
+
+it("wraps a long execution description and grows the row so the PNG does not clip it", () => {
+  const { report } = fixtureBooks(); const s = report.getWorksheet("261012")!;
+  const short = s.getCell("F131"); const long = s.getCell("F132");
+  fitDescription(s, short, "익일 지급 계획 / 가상상사");
+  fitDescription(s, long, "협력사 10월 기성 대금 및 부가가치세 정산 지급 (제2공장 설비 증설분 포함) / 가상건설 주식회사");
+  expect(short.alignment.wrapText).toBe(true); expect(s.getRow(131).height).toBe(22);
+  // F:G is 15+23 chars wide (268 px of 9pt text ≈ 22 CJK glyphs per line) → 3 lines ≥ 38pt, well above the template's 22pt.
+  expect(long.alignment.wrapText).toBe(true); expect(s.getRow(132).height).toBeGreaterThanOrEqual(38);
+});
+
+it("falls back to manually entered rates after a failed retry and records them as manual", async () => {
+  const { input } = await setup(); vi.mocked(fetchHana).mockClear().mockRejectedValueOnce(new Error("화면 변경")).mockRejectedValueOnce(new Error("화면 변경"));
+  const first = await dailyCashTool.execute(input); expect(first).toMatchObject({ status: "needs_input", fields: [expect.objectContaining({ key: "retryRates", confirm: "확인" })] });
+  input.values.retryRates = "확인";
+  const second = await dailyCashTool.execute(input); expect(second).toMatchObject({ status: "needs_input", fields: expect.arrayContaining([expect.objectContaining({ key: "manualUSD", type: "number" }), expect.objectContaining({ key: "manualJPY100" })]) });
+  Object.assign(input.values, { manualRateDate: "2026-10-13", manualRateRound: "8", manualUSD: "1402.5", manualJPY100: "950.12", manualCNY: "199.9" });
+  const review = await dailyCashTool.execute(input); expect(review.status).toBe("needs_input"); if (review.status !== "needs_input") return;
+  expect(review.fields.map((field) => field.key)).toContain("review"); expect(review.question).toContain("USD 1402.5"); expect(review.question).toContain("JPY(1엔) 9.5012");
+  expect(review.checkpoint).toMatchObject({ rates: { source: expect.stringContaining("수동"), round: "8", date: "2026-10-13", perUnit: { USD: "1402.5", JPY: "9.5012", CNY: "199.9" } } });
+  expect(fetchHana).toHaveBeenCalledTimes(2);
 });
