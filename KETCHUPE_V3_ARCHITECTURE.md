@@ -1260,7 +1260,7 @@ renderer → typed IPC → WorkflowDispatcher
 1. 기능별 실행기는 `start(input) → { runId, done }`, `cancel(runId)`를 제공한다. 일반 텍스트로 재개할 수 있으면 `resume(runId, text)`도 제공한다. 구조화된 입력을 받는 Canvas는 전용 IPC를 유지한다.
 2. `runtime.ts`의 등록 배열에 고유한 `id`, 영속 `kind`, `description`, 선택적 `examples`·`requiredInputs`와 실행 함수를 연결한다. 실행기는 `createRun()`에 등록한 kind를 기록한다. 기존 RAG harness, dispatcher, 공통 IPC에는 기능별 분기를 추가하지 않는다.
 3. 모든 등록 기능의 설명·예시·입력 요건을 라우팅 모델에 전달한다. 키워드가 없다는 이유로 후보를 제외하지 않는다. 선택 실패 시 임의의 기능으로 fallback하지 않고 재요청을 안내한다. `mode: "auto"`는 자동 선택, 다른 mode나 메시지의 `$id`는 등록 ID를 직접 선택한다. 기존 chat/doc ID는 유지한다.
-4. `work_sources`는 매핑 검증을 위한 자료 준비 실행기다. `daily_cash` 등 완성 Excel 업무는 `BusinessFlow`와 `business/registry.ts`를 사용한다. 선언된 입력·추가 질문·checkpoint·버전을 저장하고 별도 worker에서 실행한다. 업무 검사와 XLSX 검증을 통과한 파일만 완료 결과로 등록한다. daily_cash는 실제 업무 코드 구현 전까지 abstained로 안내한다. 상세 계약은 [업무 Tool 연결 가이드](docs/BUSINESS_TOOLS.md)를 참조한다.
+4. `work_sources`는 매핑 검증을 위한 자료 준비 실행기다. `daily_cash` 등 완성 Excel 업무는 `BusinessFlow`와 `business/registry.ts`를 사용한다. 선언된 입력·추가 질문·checkpoint·버전을 저장하고 별도 worker에서 실행한다. 업무 검사와 XLSX 검증을 통과한 파일만 완료 결과로 등록한다. daily_cash v1은 전일 일보·주간계획·기준일 KC로 새 날짜 시트와 PNG를 만들며 규칙은 [DAILY_CASH.md](docs/DAILY_CASH.md)에 있다. 상세 계약은 [업무 Tool 연결 가이드](docs/BUSINESS_TOOLS.md)를 참조한다.
 5. 일반 텍스트 기능은 기존 status/text_delta/ask_user/completed/failed 이벤트와 대화 UI를 사용한다. 새로운 표현이나 구조화된 상호작용이 필요하면 해당 기능의 typed IPC와 UI를 추가한다.
 6. 사용자 응답을 기다리는 run은 새 요청의 mode보다 저장된 kind를 우선한다. 텍스트 resume이 없는 기능은 전용 화면으로 안내하고 기존 상태를 보존한다. 앱 재시작 후에도 같은 kind를 등록해야 재개할 수 있으므로 영속 kind를 임의로 변경하지 않는다.
 

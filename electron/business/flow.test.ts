@@ -125,9 +125,9 @@ it("times out a tool that never returns", async () => {
   expect(getRun(db, runId).status).toBe("failed"); expect(flow.artifacts(threadId)).toEqual([]);
 });
 
-it("reports the real daily cash tool as unavailable without producing a fake report", () => {
-  flow = makeFlow([dailyCashTool]); const runId = start();
-  expect(getRun(db, runId).status).toBe("abstained"); expect(getRunAction(db, runId)).toBeUndefined(); expect(flow.artifacts(threadId)).toEqual([]);
+it("starts daily cash by asking for the three real sources without producing an unverified report", async () => {
+  flow = makeFlow([dailyCashTool]); const { runId, done } = flow.workflows()[0].start({ threadId, workspaceId: "default", text: "일일자금일보 작성해줘" }); await done;
+  expect(getRun(db, runId).status).toBe("waiting_user"); expect(getRunAction(db, runId)).toMatchObject({ type: "business_tool" }); expect(flow.artifacts(threadId)).toEqual([]);
 });
 
 it("allows correcting a supplemental answer when the tool asks for it again", async () => {
@@ -141,6 +141,22 @@ it("allows correcting a supplemental answer when the tool asks for it again", as
 });
 it("does not publish when source access is revoked during execution", async () => {
   vi.mocked(tool.execute).mockImplementation(async () => { new WorkSources(db).remove(input.files.source[0].sourceId); return success(); });
+  const runId = start(); await flow.submit(runId, getRunAction(db, runId)!.id, input);
+  expect(getRun(db, runId).status).toBe("failed"); expect(flow.artifacts(threadId)).toEqual([]);
+});
+
+it("persists workbook and PNG together and checks both fingerprints", async () => {
+  const result = success(); if (result.status !== "completed") throw new Error("fixture");
+  result.image = { name: "일보.png", bytes: await (await import("sharp")).default({ create: { width: 1, height: 1, channels: 4, background: "white" } }).png().toBuffer() };
+  vi.mocked(tool.execute).mockResolvedValue(result);
+  const runId = start(); await flow.submit(runId, getRunAction(db, runId)!.id, input);
+  expect(getRun(db, runId).status).toBe("completed");
+  expect(flow.artifacts(threadId).map((a) => a.name)).toEqual(["테스트결과.xlsx", "일보.png"]);
+  for (const item of flow.artifacts(threadId)) expect(await flow.artifactPath(item.id)).toContain(item.name);
+});
+it.each(["../escape.png", "invalid.png"])("publishes neither artifact when an image is invalid: %s", async (name) => {
+  const result = success(); if (result.status !== "completed") throw new Error("fixture"); result.image = { name, bytes: Buffer.from("not png") };
+  vi.mocked(tool.execute).mockResolvedValue(result);
   const runId = start(); await flow.submit(runId, getRunAction(db, runId)!.id, input);
   expect(getRun(db, runId).status).toBe("failed"); expect(flow.artifacts(threadId)).toEqual([]);
 });

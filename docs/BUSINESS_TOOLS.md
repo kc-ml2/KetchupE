@@ -1,15 +1,14 @@
 # Excel 업무 Tool 연결
 
-자연어 라우터가 업무 ID를 선택하고, 공통 BusinessFlow가 입력 수집·실행·추가 질문·결과 전달을 담당한다. 사용자는 매핑을 편집할 필요 없이 원천 파일과 기준 정보를 지정한다. 아래 daily_cash 입력 역할은 담당자 확인 전의 예시이며 확정된 업무 명세가 아니다.
+자연어 라우터가 업무 ID를 선택하고, 공통 BusinessFlow가 입력 수집·실행·추가 질문·결과 전달을 담당한다. 사용자는 매핑을 편집할 필요 없이 원천 파일과 기준 정보를 지정한다. daily_cash v1은 아래 세 원천 파일로 고정 양식을 채운다. 상세 규칙은 [DAILY_CASH.md](./DAILY_CASH.md)를 따른다.
 
 ```ts
 // Agent 실행부가 선택한 파일을 읽어 Tool에 전달하는 형태
 await dailyCashTool.execute({
-  values: { businessDate: "2026-10-15" },
+  values: { workDate: "2026-10-15" },
   files: {
-    transactions: [{ bytes: transactionBytes, fingerprint: "sha256...", name: "원본 파일명.xlsx" }],
-    counterparties: [{ bytes: counterpartyBytes, fingerprint: "sha256...", name: "원본 파일명.xlsx" }],
-    balances: [{ bytes: balanceBytes, fingerprint: "sha256...", name: "원본 파일명.xlsx" }],
+    weeklyPlans: [{ bytes: weeklyBytes, fingerprint: "sha256...", name: "주간계획.xlsx" }],
+    cashStatus: [{ bytes: statusBytes, fingerprint: "sha256...", name: "261014_자금현황표[KC].xlsx" }],
     previousReport: [{ bytes: previousReportBytes, fingerprint: "sha256...", name: "원본 파일명.xlsx" }],
   },
   checkpoint: {},
@@ -21,14 +20,13 @@ await dailyCashTool.execute({
 
 원천 파일 경로와 shell 명령은 Tool 호출 입력이 아니다. Electron의 네이티브 선택으로 등록된 파일 참조만 공통 실행부가 읽는다. 원천은 수정하거나 복사하지 않는다. 파일당 20MB, 합계 100MB, 입력 필드 30개를 제한한다.
 
-## 담당자 확인 후 수정할 곳
+## 업무 변경 시 수정할 곳
 
-1. `electron/business/dailyCash.ts`의 입력 `fields`와 기능 설명을 실제 업무에 맞춘다.
-2. `execute()`에 추출·계산·대사·외부 조회·템플릿 출력을 구현한다. 다른 업무에서는 읽기/금액 연산/양식 채우기 같은 기존 함수를 재사용할 수 있다. LLM에 계산을 맡기지 않는다.
-3. 실제 원천 파일과 수작업 정답 파일로 회귀 테스트를 추가한다. 출력 셀 값·합계·제외 행·환율·반올림·오류 사례를 비교한다.
-4. `version`을 배포 버전으로 변경하고 `unavailableReason`을 제거한다. 이미 registry에 등록되어 있으므로 라우터·IPC·공통 입력 UI·결과 UI를 고칠 필요는 없다.
+1. `electron/business/dailyCash/`의 원천 parser·계산·대사·양식 출력을 수정한다. 계산은 LLM에 맡기지 않는다.
+2. 수작업 정답 자료와 비교하는 회귀 테스트를 추가한다.
+3. `dailyCashTool.version`을 올린다. 실행 중인 업무는 버전이 달라지면 새 작업으로 시작한다.
 
-새 업무는 `BusinessTool` 구현을 `electron/business/registry.ts`에 추가한다. 필드 `type`은 file/date/text이며 복잡한 전용 입력이 필요할 경우 입력 계약과 UI를 확장한다. 실행 코드는 제품에 포함된 신뢰된 코드만 사용하고 사용자 파일·모델이 만든 코드·외부 SKILL.md를 실행하지 않는다.
+새 업무는 `BusinessTool` 구현을 `electron/business/registry.ts`에 추가한다. 필드 `type`은 file/date/text/number/movements다. `movements`는 `rows`로 받은 계획 목록을 표로 보여주고 실제 금액 수정·추가 거래를 `{changes, add}` JSON 문자열로 제출한다. Tool의 `suggest(files, today)`는 연결된 업무 폴더의 파일 목록으로 입력을 미리 채운다. 다른 전용 입력이 필요하면 `BusinessField.type`·`flow.validateFields`·`BusinessToolPanel`을 함께 확장한다. 실행 코드는 제품에 포함된 신뢰된 코드만 사용하고 사용자 파일·모델이 만든 코드·외부 SKILL.md를 실행하지 않는다.
 
 ## 반환 계약
 
@@ -74,4 +72,4 @@ return { status: "failed", message: "계좌 A의 마감잔액이 원천 합계�
 - `business_artifacts.audit`에 검증 결과와 실제 적용한 외부 데이터를 저장한다. API 키 같은 자격증명은 저장하지 않는다. raw workbook 내용은 라우팅 모델이나 telemetry로 보내지 않는다. 사용자 요청과 최근 사용자 메시지는 자연어 라우팅 모델로 전달된다.
 - 원천 사본 보관·과거 환경 재현·결과 보관기간 정리·서버 공유는 이번 범위가 아니다. 대화 삭제는 DB 참조를 삭제하지만 출력 파일은 자동 삭제하지 않는다. 중간에 프로세스가 종료되면 미등록 파일이 디스크에 남을 수 있으며 완료 결과로 노출하지 않는다.
 
-현재 daily_cash는 구현 대기 상태를 명시적으로 반환한다. 실제 업무 결과를 흉내 낸 샘플 보고서는 생성하지 않는다. 공통 흐름의 성공/추가 질문/재시작/오류/취소는 테스트 전용 Tool로 검증한다.
+daily_cash는 완료 시 XLSX `file`과 PNG `image`를 함께 반환한다. 두 파일의 검증·저장·DB 등록이 모두 성공한 경우에만 완료로 노출한다. 원천의 날짜/계좌 연결/금액 확인이 끝나지 않았으면 완성 파일을 만들지 않는다.

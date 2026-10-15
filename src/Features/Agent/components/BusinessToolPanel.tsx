@@ -3,6 +3,7 @@ import { LuFile } from "react-icons/lu";
 import type { KetchupEAgentAPI } from "@app-types/Agent.types";
 import type { BusinessAction, BusinessArtifact, BusinessInput } from "@app-types/BusinessTool.types";
 import type { WorkFile, WorkSource } from "@app-types/WorkSource.types";
+import MovementsEditor from "./MovementsEditor";
 
 const control = "rounded border border-[#D4D4D8] dark:border-[#52525B] p-2 bg-white dark:bg-[#18181B] text-sm disabled:opacity-50";
 const sameFile = (a: WorkFile, b: WorkFile) => a.sourceId === b.sourceId && a.relativePath === b.relativePath;
@@ -35,8 +36,12 @@ export default function BusinessToolPanel({ api, runId, action, onClose }: { api
         {action.fields.map((field) => {
           const locked = action.lockedKeys?.includes(field.key);
           const label = `${field.label}${field.required ? " *" : ""}`;
+          const setValue = (value: string) => setInput((current) => ({ ...current, values: { ...current.values, [field.key]: value } }));
+          if (field.type === "movements") return <fieldset key={field.key} disabled={locked} className="grid gap-1 text-sm"><legend>{label}</legend>
+            <MovementsEditor field={field} value={input.values[field.key]} disabled={Boolean(locked)} onChange={setValue} />
+          </fieldset>;
           if (field.type !== "file") return <label key={field.key} className="grid gap-1 text-sm">{label}
-            <input className={control} disabled={locked} type={field.type} required={field.required} maxLength={4000} value={input.values[field.key] ?? ""} onChange={(event) => setInput((current) => ({ ...current, values: { ...current.values, [field.key]: event.target.value } }))} />
+            {field.type === "text" ? <textarea className={control} disabled={locked} rows={3} required={field.required} maxLength={4000} value={input.values[field.key] ?? ""} onChange={(event) => setInput((current) => ({ ...current, values: { ...current.values, [field.key]: event.target.value } }))} /> : <input className={control} disabled={locked} type={field.type} step={field.type === "number" ? "any" : undefined} inputMode={field.type === "number" ? "decimal" : undefined} required={field.required} maxLength={4000} value={input.values[field.key] ?? ""} onChange={(event) => setInput((current) => ({ ...current, values: { ...current.values, [field.key]: event.target.value } }))} />}
           </label>;
           const chosen = input.files[field.key] ?? [];
           // Single-file fields replace the selection; multi-file fields append without duplicates.

@@ -1,7 +1,11 @@
 import type { WorkFile } from "./WorkSource.types";
 
-/** `multiple` lets a file field take several files (e.g. one bank statement per account). */
-export type BusinessField = { key: string; label: string; type: "file" | "date" | "text"; required: boolean; multiple?: boolean };
+/** A planned cash movement shown in a `movements` table; `index` is the 1-based position in the tool's original plan list. */
+export type PlannedMovement = { index: number; direction: "in" | "out"; description: string; party: string; amount: string };
+/** Edits a `movements` table submits, serialized as JSON into `values[key]`: changed amounts (0 = not executed) and added transactions. */
+export type MovementEdits = { changes: { index: number; amount: string }[]; add: { direction: "in" | "out"; description: string; party: string; amount: string }[] };
+/** `multiple` lets a file field take several files (e.g. one bank statement per account). `rows` seeds a `movements` table. */
+export type BusinessField = { key: string; label: string; type: "file" | "date" | "text" | "number" | "movements"; required: boolean; multiple?: boolean; rows?: PlannedMovement[] };
 export type BusinessInput = { values: Record<string, string>; files: Record<string, WorkFile[]> };
 export type BusinessAction = {
   id: string; type: "business_tool"; title: string; question: string;

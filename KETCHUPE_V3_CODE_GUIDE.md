@@ -97,7 +97,7 @@ electron/
 ├── db/{schema.ts, openAgentDb.ts}
 ├── tomato/                     검색 엔진 (tomato.ts, embedding.ts, text.ts, tomatoClient.ts)
 ├── work/                       업무 자료: sources(연결·읽기 범위), mapping(헤더 기반 열 매핑·추출), profiles, reader
-├── business/                   업무 Tool: contracts, flow(BusinessFlow), registry, workerClient, dailyCash, bankDaily(테스트)
+├── business/                   업무 Tool: contracts, flow(BusinessFlow), registry, workerClient, dailyCash(+dailyCash/ 레이아웃·KC·주간계획·환율·PNG), bankDaily(테스트)
 ├── workers/                    utilityProcess 진입점: tomato / workbook(엑셀 읽기) / business(Tool 실행)
 ├── collectionWatchers.ts       fs.watch → debounce → single-flight sync
 └── ipc/{agentHandlers.ts, collectionHandlers.ts, workSourceHandlers.ts}
@@ -106,7 +106,7 @@ src/
 ├── Pages/AgentPage.tsx         유일한 페이지. 왼쪽 탭(홈/설정/업무/파일/컨텍스트)에 따라 채팅 또는 전체 폭 패널을 보여준다
 ├── Features/Agent/
 │   ├── hooks/                  useAgentRun, useCanvasRun, useThreadMessages, useCollections, useMemories
-│   └── components/             AgentMessages, CanvasPanel, CollectionPanel, MemoryPanel, WorkSourcePanel, BusinessToolPanel, WorkflowLauncher, 설정 폼
+│   └── components/             AgentMessages, CanvasPanel, CollectionPanel, MemoryPanel, WorkSourcePanel, BusinessToolPanel, MovementsEditor, WorkflowLauncher, 설정 폼
 ├── Features/Sidebar/           NavRail(탭 레일), thread 목록
 ├── Contexts/ThreadsProvider    sidebar ↔ page가 공유하는 thread 목록
 └── app-types/                  Agent.types.ts, Canvas.types.ts, CanvasEdit.types.ts, WorkSource.types.ts, BusinessTool.types.ts, Navigation.types.ts
@@ -660,7 +660,7 @@ npx vite-node scripts/bank-fixture.ts fixtures   # bank_daily 샘플 거래내�
 | 6 Golden data | **외부 benchmark repository로 분리** | 이 저장소는 OTLP 수집 계약만 제공한다. runner·dataset·importer·promotion은 외부 저장소에서 구현·운영 |
 | 모니터링 (추가) | 완료 / 운영 provision 대기 | 강제 OTLP gateway + HMAC/redaction + agent/index/feedback trace + outbox. 실제 gateway domain/TLS/Langfuse project는 운영 설정 필요 |
 | 캔버스 (추가) | 완료 | classify→anchor→ground→draft→edit→finalize, 버전 트리 undo/redo |
-| Excel 업무 Tool (추가) | 공통 흐름 완료 / **실업무 미구현** | BusinessFlow·입력 화면·worker 실행·검증 후 결과 저장. `daily_cash`는 규칙 확인 전 비활성, `bank_daily`는 테스트용 |
+| Excel 업무 Tool (추가) | 공통 흐름 완료 / `daily_cash` v1 구현 | BusinessFlow·입력 화면(폴더 자동 채움, 셀별 숫자·거래 표 입력)·worker 실행·검증 후 결과 저장. `daily_cash`는 실제 10월 자료로 완주 확인, 환율 정책(기준일 최종 고시 vs 월요일 기준율)은 담당자 확인 대기. `bank_daily`는 테스트용 |
 | 외부 MCP (추가) | 조회만 | MARU storage 조회·문서 읽기, Trolley capabilities·Operation 목록. 실행·쓰기 없음 |
 | 7 설치본 | **설정만** | native 모듈 external/asarUnpack, mac arm64+x64 매트릭스. signing/notarization credential과 fresh-install smoke 미완 |
 
@@ -694,6 +694,7 @@ npx vite-node scripts/bank-fixture.ts fixtures   # bank_daily 샘플 거래내�
 | 새 IPC 추가 | [preload.js](electron/preload.js) + [agentHandlers.ts](electron/ipc/agentHandlers.ts) + [Agent.types.ts](src/app-types/Agent.types.ts) (업무 자료·Tool은 [workSourceHandlers.ts](electron/ipc/workSourceHandlers.ts) + WorkSource/BusinessTool types) |
 | DB 스키마 | [db/schema.ts](electron/db/schema.ts) (`CREATE TABLE IF NOT EXISTS` + `openAgentDb`의 ALTER 패턴) |
 | 왼쪽 탭 레일·탭별 패널 | [NavRail.tsx](src/Features/Sidebar/components/NavRail.tsx), [AgentPage.tsx](src/Pages/AgentPage.tsx) |
+| 업무 Tool 입력 형식 추가 | [BusinessTool.types.ts](src/app-types/BusinessTool.types.ts) `BusinessField.type` → [flow.ts](electron/business/flow.ts) `validateFields` → [BusinessToolPanel.tsx](src/Features/Agent/components/BusinessToolPanel.tsx) 렌더링 |
 | 기억 CRUD·선택 | [MemoryPanel.tsx](src/Features/Agent/components/MemoryPanel.tsx) + [memory.ts](electron/agent/memory.ts) + [context.ts](electron/agent/context.ts) |
 | 답변 아래 인용·적용 컨텍스트 | [AgentMessages.tsx](src/Features/Agent/components/AgentMessages.tsx) + [store.ts](electron/agent/store.ts) |
 | 새 문서 종류(canvas preset) | [canvas/presets.ts](electron/agent/canvas/presets.ts) |

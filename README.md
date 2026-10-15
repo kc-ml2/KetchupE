@@ -126,7 +126,7 @@ npm run dev
 
 파일당 20MB, 시트 100개, 시트당 100,000행·500열을 상한으로 두고 한 번에 한 파일을 별도 utility process에서 읽습니다(30초 제한). 폴더 탐색은 최대 깊이 10, 항목 10,000개, 파일 500개 미만으로 제한하며 심볼릭 링크·숨김 파일·Excel 잠금 파일은 제외합니다.
 
-현재 완료 범위는 **자연어 업무 선택 → 원천 자료 연결·매핑 설정·추출 검증 → 이 자료로 계속**입니다. 입력 대기는 로컬 DB에 저장되어 재접속 후 이어갈 수 있습니다. 일일자금일보는 아래 업무 Tool 실행 경로로 분리했으며 실제 업무 로직 구현 전에는 구현 대기 상태를 안내합니다. 전체 정규화 데이터의 업무 저장, 거래처 조인·잔액 대사·외화 계산·고정 양식 출력은 아직 연결하지 않았습니다. 실제 ERP 원천 자료와 담당자 수작업 결과를 확인한 뒤 업무 계약을 정하고 추가합니다. 기존 RAG/Canvas 라우팅 동작은 유지합니다.
+현재 완료 범위는 **자연어 업무 선택 → 원천 자료 연결·매핑 설정·추출 검증 → 이 자료로 계속**입니다. 입력 대기는 로컬 DB에 저장되어 재접속 후 이어갈 수 있습니다. 일일자금일보는 아래 업무 Tool 실행 경로로 분리했으며 v1 계산·대사·양식 출력이 들어 있습니다([규칙](docs/DAILY_CASH.md)). 전체 정규화 데이터의 업무 저장은 아직 연결하지 않았습니다. 기존 RAG/Canvas 라우팅 동작은 유지합니다.
 
 | 데이터 | 위치와 역할 |
 | --- | --- |
@@ -221,6 +221,7 @@ electron/
 ├── tomato/                 parser, chunker, embedding, local retrieval
 ├── work/                   로컬 업무 자료 연결, XLSX 읽기·열 매핑·추출 프로필
 ├── business/               업무 Tool 계약, BusinessFlow(입력·실행·검증·결과), registry, Tool 구현
+│   └── dailyCash/          일일자금일보 v1: 양식 레이아웃·KC 읽기·주간계획·하나은행 환율·PNG 렌더
 ├── workers/                Tomato·workbook·business utility process entry
 ├── db/                     SQLite schema/open
 ├── ipc/                    main-process handlers
@@ -228,7 +229,7 @@ electron/
 
 src/
 ├── Pages/AgentPage.tsx     왼쪽 탭(홈/설정/업무/파일/컨텍스트)에 따라 채팅 또는 전체 폭 패널
-├── Features/Agent/         채팅·Canvas·업무 Tool 패널(WorkflowLauncher, BusinessToolPanel)
+├── Features/Agent/         채팅·Canvas·업무 Tool 패널(WorkflowLauncher, BusinessToolPanel, MovementsEditor)
 ├── Features/Sidebar/       NavRail(탭 레일), thread 목록
 ├── Contexts/ThreadsProvider.tsx
 └── app-types/              Navigation.types.ts 포함
@@ -238,10 +239,13 @@ scripts/
 ├── maru-probe.ts            MCP 인증·도구·storage 연결 확인
 ├── trolley-probe.ts         Bearer API key로 capabilities 연결 확인
 ├── bank-fixture.ts          bank_daily 테스트용 은행 거래내역 샘플 XLSX 생성
+├── daily-cash-demo.ts       일일자금일보 합성 자료 생성과 오프라인 완주 데모
 └── telemetry-gateway.ts
 
 fixtures/                    bank_daily 샘플 거래내역(계좌별 2개)과 2026-10-14 예상 결과
+fixtures/daily-cash/         daily-cash-demo.ts가 만든 합성 입력 3개와 결과 XLSX/PNG
 docs/BUSINESS_TOOLS.md       업무 Tool 연결 가이드와 호출 예시
+docs/DAILY_CASH.md           일일자금일보 v1 확정 규칙·입력·검증 상태
 ```
 
 ## 검증
@@ -268,9 +272,9 @@ MIT
 
 ### 완성 Excel을 생성하는 업무 Tool
 
-`electron/business/registry.ts`에 등록된 업무는 자연어로 선택되고, `BusinessFlow`가 선언된 file/date/text 입력을 받아 utility process에서 실행합니다. 추가 질문과 조회값 checkpoint를 저장하고 재시작 후 이어갈 수 있습니다. Tool 버전·원천 해시·기준 정보를 고정하며, 업무 검사와 XLSX 검증을 통과한 파일만 저장·표시합니다. 취소·시간 초과·오류가 나면 완료 파일을 전달하지 않습니다.
+`electron/business/registry.ts`에 등록된 업무는 자연어로 선택되고, `BusinessFlow`가 선언된 file/date/text/number/movements 입력을 받아 utility process에서 실행합니다. Tool이 `suggest`를 구현하면 실행 시작 시 연결된 업무 폴더의 파일명으로 입력을 미리 채웁니다. 추가 질문과 조회값 checkpoint를 저장하고 재시작 후 이어갈 수 있습니다. Tool 버전·원천 해시·기준 정보를 고정하며, 업무 검사와 XLSX 검증을 통과한 파일만 저장·표시합니다. 취소·시간 초과·오류가 나면 완료 파일을 전달하지 않습니다.
 
-일일자금일보의 실제 계산은 담당자 확인 전이므로 비활성입니다. [연결 가이드와 Tool 예시](docs/BUSINESS_TOOLS.md)에 따라 `dailyCash.ts`의 입력 정의·실행 코드·버전을 완성하고 구현 대기 표시를 제거하면 기존 Agent 경로에서 실행됩니다. 사용자가 매핑을 편집하는 과정은 필요하지 않습니다.
+**`daily_cash` (일일자금일보, `1.0.0`)**: 작업일 전날을 기준일로, 전일 일보 통합문서·주간자금계획·기준일 자금현황표(KC)에서 새 날짜 시트와 PNG를 만듭니다. 계좌 연결·실적 확인(표 입력)·하나은행 최종 고시 조회·총 원화 대사를 거치며, 규칙과 남은 검증은 [DAILY_CASH.md](docs/DAILY_CASH.md)에 있습니다. 사용자가 매핑을 편집하는 과정은 필요하지 않습니다.
 
 파일 입력은 항목 아래의 **파일 선택…/파일 추가…** 버튼이나 이미 연결된 자료 목록에서 고릅니다. `multiple: true`인 항목은 여러 파일을 받습니다(Tool에는 항상 배열로 전달). 같은 파일을 한 항목에 두 번 넣으면 실행 전에 거부합니다.
 

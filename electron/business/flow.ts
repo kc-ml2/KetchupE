@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile, unlink } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import type { AgentStreamEvent, StartRunInput } from "../../src/app-types/Agent.types.ts";
@@ -41,9 +41,23 @@ export class BusinessFlow {
     appendMessage(this.db, { threadId: input.threadId, runId, role: "user", content: input.text });
     new TraceWriter(this.db, runId).record("run.started", "runtime", { localOnly: true, toolId: tool.id, version: tool.version });
     this.save(runId, { toolId: tool.id, version: tool.version, input: emptyInput(), fingerprints: {}, fields: tool.fields });
-    if (tool.unavailableReason) this.finish(runId, tool.unavailableReason, "abstained");
-    else this.ask(runId, "기준 정보와 원천 파일을 지정해 주세요.");
-    return { runId, done: Promise.resolve() };
+    if (tool.unavailableReason) { this.finish(runId, tool.unavailableReason, "abstained"); return { runId, done: Promise.resolve() }; }
+    if (!tool.suggest) { this.ask(runId, "기준 정보와 원천 파일을 지정해 주세요."); return { runId, done: Promise.resolve() }; }
+    const done = this.suggest(tool).then((input) => {
+      if (input) this.save(runId, { ...this.job(runId), input });
+      this.ask(runId, input ? "연결된 폴더에서 찾은 파일을 미리 채웠습니다. 확인하거나 바꾼 뒤 실행해 주세요." : "기준 정보와 원천 파일을 지정해 주세요.");
+    });
+    return { runId, done };
+  }
+
+  /** Lists every connected source; a source that cannot be read is skipped so the form still opens. */
+  private async suggest(tool: BusinessTool): Promise<BusinessInput | null> {
+    if (!tool.suggest) return null;
+    const sources = new WorkSources(this.db);
+    const listed = await Promise.allSettled(sources.list().map((source) => sources.files(source.id)));
+    const files = listed.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+    const input = tool.suggest(files, new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" }));
+    return Object.values(input.files).some((list) => list.length) ? input : null;
   }
 
   private resume(runId: string, text: string) {
@@ -118,21 +132,35 @@ export class BusinessFlow {
         if (!/^[^/\\:*?"<>|]{1,150}\.xlsx$/i.test(result.file.name) || [...result.file.name].some((char) => char.charCodeAt(0) < 32) || !(result.file.bytes instanceof Uint8Array) || result.file.bytes.length > 20 * 1024 * 1024) throw new Error("잘못된 출력 파일입니다.");
         await this.abortable(this.validateWorkbook(result.file.bytes), controller.signal);
         controller.signal.throwIfAborted();
-        const id = randomUUID();
-        await mkdir(this.outputDir, { recursive: true });
-        const directory = join(this.outputDir, id);
-        await mkdir(directory);
-        const path = join(directory, result.file.name);
-        await writeFile(path, result.file.bytes, { flag: "wx", mode: 0o600 });
+        const outputs = [result.file];
+        if (result.image) {
+          if (!/^[^/\\:*?"<>|]{1,150}\.png$/i.test(result.image.name) || [...result.image.name].some((char) => char.charCodeAt(0) < 32) || !(result.image.bytes instanceof Uint8Array) || result.image.bytes.length > 20 * 1024 * 1024 || !Buffer.from(result.image.bytes.subarray(0, 8)).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw new Error("잘못된 출력 이미지입니다.");
+          const { default: sharp } = await import("sharp");
+          const metadata = await this.abortable(sharp(result.image.bytes, { limitInputPixels: 96000000 }).metadata(), controller.signal);
+          if (metadata.format !== "png" || !metadata.width || !metadata.height) throw new Error("PNG 이미지를 읽을 수 없습니다.");
+          outputs.push(result.image);
+        }
+        const artifacts = outputs.map((file) => ({ ...file, id: randomUUID() }));
+        const message = `${result.summary}\n\n완성 파일: ${artifacts.map((file) => file.name).join(", ")}`;
         let transaction = false;
         try {
+          await mkdir(this.outputDir, { recursive: true });
+          for (const file of artifacts) {
+            const directory = join(this.outputDir, file.id);
+            await mkdir(directory);
+            await writeFile(join(directory, file.name), file.bytes, { flag: "wx", mode: 0o600 });
+          }
           controller.signal.throwIfAborted();
           this.db.exec("BEGIN"); transaction = true;
-          this.db.prepare("INSERT INTO business_artifacts (id, run_id, name, fingerprint, audit) VALUES (?, ?, ?, ?, ?)").run(id, runId, result.file.name, hash(result.file.bytes), JSON.stringify({ checks: result.checks, externalData: result.externalData ?? {} }));
-          this.finish(runId, `${result.summary}\n\n완성 파일: ${result.file.name}`, "completed", false);
+          for (const file of artifacts) this.db.prepare("INSERT INTO business_artifacts (id, run_id, name, fingerprint, audit) VALUES (?, ?, ?, ?, ?)").run(file.id, runId, file.name, hash(file.bytes), JSON.stringify({ checks: result.checks, externalData: result.externalData ?? {} }));
+          this.finish(runId, message, "completed", false);
           this.db.exec("COMMIT"); transaction = false;
-        } catch (error) { if (transaction) this.db.exec("ROLLBACK"); await unlink(path); throw error; }
-        this.event(runId, "completed", { text: `${result.summary}\n\n완성 파일: ${result.file.name}`, outcome: "success" });
+        } catch (error) {
+          if (transaction) this.db.exec("ROLLBACK");
+          await Promise.allSettled(artifacts.map((file) => rm(join(this.outputDir, file.id), { recursive: true, force: true })));
+          throw error;
+        }
+        this.event(runId, "completed", { text: message, outcome: "success" });
       } else throw new Error("잘못된 업무 결과입니다.");
     } catch (error) {
       if (getRun(this.db, runId).status === "running") this.fail(runId, error instanceof Error ? error.message : String(error));
@@ -194,7 +222,7 @@ export class BusinessFlow {
     this.emit({ runId, seq, type, payload });
   }
   private validateFields(fields: BusinessField[]) {
-    if (!fields.length || fields.length > 30 || new Set(fields.map((field) => field.key)).size !== fields.length || fields.some((field) => !fieldKey.test(field.key) || ["__proto__", "constructor", "prototype"].includes(field.key) || !["text", "date", "file"].includes(field.type))) throw new Error("잘못된 업무 입력 정의입니다.");
+    if (!fields.length || fields.length > 30 || new Set(fields.map((field) => field.key)).size !== fields.length || fields.some((field) => !fieldKey.test(field.key) || ["__proto__", "constructor", "prototype"].includes(field.key) || !["text", "date", "file", "number", "movements"].includes(field.type))) throw new Error("잘못된 업무 입력 정의입니다.");
   }
   private validateInput(fields: BusinessField[], input: BusinessInput) {
     for (const key of Object.keys(input.values)) if (!fields.some((field) => field.key === key && field.type !== "file")) throw new Error("등록되지 않은 입력입니다.");

@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => {
           build: {
             outDir: "dist-electron",
             rollupOptions: {
-              external: ["electron", "electron-updater", "node:sqlite", "kordoc", "@huggingface/transformers", "exceljs"],
+              external: ["electron", "electron-updater", "node:sqlite", "kordoc", "@huggingface/transformers", "exceljs", "sharp"],
             },
           },
         },
@@ -52,7 +52,7 @@ export default defineConfig(({ mode }) => {
         vite: {
           build: {
             outDir: "dist-electron",
-            rollupOptions: { external: ["electron", "exceljs"], output: { format: "es" } },
+            rollupOptions: { external: ["electron", "exceljs", "sharp"], output: { format: "es" } },
           },
         },
       },
@@ -61,7 +61,7 @@ export default defineConfig(({ mode }) => {
         vite: {
           build: {
             outDir: "dist-electron",
-            rollupOptions: { external: ["electron", "exceljs"], output: { format: "es" } },
+            rollupOptions: { external: ["electron", "exceljs", "sharp"], output: { format: "es" } },
           },
         },
       },

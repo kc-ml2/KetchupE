@@ -55,3 +55,20 @@ it("still offers available files when an older source no longer exists", async (
   await screen.findByRole("option", { name: "source.xlsx" });
   expect(screen.getByRole("alert")).toHaveTextContent("일부 연결된 자료");
 });
+it("edits planned movements in a table and submits the amount changes and added rows as edits JSON", async () => {
+  const api = apiFixture();
+  const rows = [{ index: 1, direction: "out" as const, description: "전력비", party: "한전", amount: "202230" }, { index: 2, direction: "out" as const, description: "인터넷", party: "SKB", amount: "63000" }];
+  const table: BusinessAction = { ...action, fields: [{ key: "actualEdits", label: "10/14 실적", type: "movements", required: true, rows }], input: { values: {}, files: {} } };
+  render(<BusinessToolPanel api={api} runId="run" action={table} onClose={vi.fn()} />);
+  await screen.findByText("전력비");
+  fireEvent.change(screen.getByLabelText("2번 실제 금액"), { target: { value: "55550" } });
+  fireEvent.click(screen.getByRole("button", { name: "계획에 없는 거래 추가" }));
+  fireEvent.change(screen.getByLabelText("추가 거래 구분"), { target: { value: "in" } });
+  fireEvent.change(screen.getByLabelText("추가 거래 적요"), { target: { value: "현금반납" } });
+  fireEvent.change(screen.getByLabelText("추가 거래 거래처"), { target: { value: "박정경" } });
+  fireEvent.change(screen.getByLabelText("추가 거래 금액"), { target: { value: "48200" } });
+  fireEvent.click(screen.getByRole("button", { name: "이 자료로 실행" }));
+  await waitFor(() => expect(api.submitBusinessInput).toHaveBeenCalledTimes(1));
+  const submitted = vi.mocked(api.submitBusinessInput).mock.calls[0][2];
+  expect(JSON.parse(submitted.values.actualEdits)).toEqual({ changes: [{ index: 2, amount: "55550" }], add: [{ direction: "in", description: "현금반납", party: "박정경", amount: "48200" }] });
+});
