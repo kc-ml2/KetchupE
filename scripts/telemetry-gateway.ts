@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_STRING_CHARS = 16_000;
+const UPSTREAM_TIMEOUT_MS = 30_000;
 
 const redactString = (value: string) => value
   .slice(0, MAX_STRING_CHARS)
@@ -69,11 +70,19 @@ export function createTelemetryGateway(options: { langfuseHost: string; publicKe
           "x-langfuse-ingestion-version": "4",
         },
         body: JSON.stringify(sanitizeTelemetry(body)),
+        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
       });
-      response.writeHead(upstream.status, { "content-type": upstream.headers.get("content-type") ?? "application/json" });
+      const retryAfter = upstream.headers.get("retry-after");
+      response.writeHead(upstream.status, {
+        "content-type": upstream.headers.get("content-type") ?? "application/json",
+        ...(retryAfter ? { "retry-after": retryAfter } : {}),
+      });
       response.end(await upstream.text());
     } catch (error) {
-      reply(response, error instanceof Error && error.message === "payload too large" ? 413 : 400, error instanceof Error ? error.message : String(error));
+      const status = error instanceof SyntaxError ? 400
+        : error instanceof Error && error.message === "payload too large" ? 413
+        : error instanceof Error && error.name === "TimeoutError" ? 504 : 502;
+      reply(response, status, status >= 500 ? "telemetry upstream unavailable" : error instanceof Error ? error.message : String(error));
     }
   });
 }

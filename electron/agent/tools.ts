@@ -1,5 +1,6 @@
 import { AgentError, EVIDENCE_SNIPPET_MAX_CHARS, type AgentErrorCode, type Evidence, type ExternalDocumentRef, type Locator } from "./contracts.ts";
 import type { ChunkRecord, IngestedSource, SearchMode, SearchResult, Tomato, TomatoSearch } from "../tomato/tomato.ts";
+import type { TrolleyDiscoveryTool } from "./trolley.ts";
 
 export type ExternalCallResult = { summary: string; documents: ExternalDocumentRef[] };
 
@@ -8,6 +9,7 @@ export interface SearchTools {
   search(query: string, collections: string[]): Promise<TomatoSearch>;
   neighbors(chunkId: string, before: number, after: number): Promise<ChunkRecord[]>;
   sourceChunks(sourceId: string): Promise<ChunkRecord[]>;
+  trolley?: { call(tool: TrolleyDiscoveryTool, signal: AbortSignal): Promise<ExternalCallResult> };
   maru?: {
     call(tool: "browse_storage" | "find_storage", args: Record<string, unknown>, signal: AbortSignal): Promise<ExternalCallResult>;
     readDocument(document: ExternalDocumentRef, signal: AbortSignal): Promise<IngestedSource>;
@@ -66,13 +68,17 @@ export function normalizeQuery(query: string): string {
 
 export async function withTimeout<T>(promise: Promise<T>, ms: number, code: AgentErrorCode, signal?: AbortSignal): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new AgentError(code, `timed out after ${ms}ms`)), ms);
-    signal?.addEventListener("abort", () => reject(new AgentError("CANCELLED", "cancelled")), { once: true });
+    onAbort = () => reject(new AgentError("CANCELLED", "cancelled"));
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
   });
   try {
-    return await Promise.race([promise, timeout]);
+    return await Promise.race(signal?.aborted ? [timeout, promise] : [promise, timeout]);
   } finally {
     clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener("abort", onAbort);
   }
 }

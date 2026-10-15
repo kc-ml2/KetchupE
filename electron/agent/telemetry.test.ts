@@ -2,7 +2,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { openAgentDb } from "../db/openAgentDb.ts";
 import { PIPELINE_PROFILE, Tomato } from "../tomato/tomato.ts";
 import type { PolicyDecision } from "./contracts.ts";
@@ -10,7 +10,7 @@ import { Harness } from "./harness.ts";
 import { createFixtureClient } from "./modelClient.ts";
 import { ANSWER_PROMPT_VERSION, assignVariant, DEFAULT_POLICY_PROFILE, POLICY_VARIANTS } from "./policy.ts";
 import { createThread, ensureWorkspace, recordInteraction } from "./store.ts";
-import { buildRunTrace, interactionScore, LangfuseExporter, traceIdFor } from "./telemetry.ts";
+import { buildRunTrace, interactionScore, LangfuseExporter, retryAfterMs, traceIdFor } from "./telemetry.ts";
 import { tomatoTools } from "./tools.ts";
 
 let temporary: string;
@@ -76,6 +76,44 @@ afterAll(async () => {
 });
 
 describe("telemetry", () => {
+  it("parses Retry-After dates, seconds and invalid values without timer overflow", () => {
+    const now = Date.parse("2026-10-12T00:00:00Z");
+    expect(retryAfterMs("90", now)).toBe(90_000);
+    expect(retryAfterMs("Mon, 12 Oct 2026 00:01:00 GMT", now)).toBe(60_000);
+    expect(retryAfterMs("Sun, 11 Oct 2026 00:00:00 GMT", now)).toBe(0);
+    expect(retryAfterMs("invalid", now)).toBe(0);
+    expect(retryAfterMs(null, now)).toBe(0);
+    expect(retryAfterMs("999999999", now)).toBe(2_147_483_647);
+  });
+
+  it("bounds telemetry requests and schedules throttled items after Retry-After", async () => {
+    const originalFetch = globalThis.fetch;
+    let signal: AbortSignal | undefined;
+    const timer = vi.spyOn(globalThis, "setTimeout");
+    const exporter = new LangfuseExporter(
+      db,
+      () => ({ endpoint: "https://collector.test/v1/traces", contentMode: "ops", environment: "test", tenantId: "test", variant: "" }),
+      { installId: "inst", appVersion: "3.0.0", os: "darwin" },
+      () => undefined,
+    );
+    try {
+      globalThis.fetch = (async (_url, init) => {
+        signal = init?.signal as AbortSignal;
+        return new Response("busy", { status: 429, headers: { "retry-after": "90" } });
+      }) as typeof fetch;
+      exporter.score(interactionScore(runId, "corrected"));
+      expect((await exporter.flush()).error).toContain("429");
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(timer).toHaveBeenLastCalledWith(expect.any(Function), 90_000);
+      expect(db.prepare("SELECT attempts FROM telemetry_outbox WHERE kind = 'score'").get()).toMatchObject({ attempts: 1 });
+    } finally {
+      globalThis.fetch = (async () => new Response("{}")) as typeof fetch;
+      await exporter.stop();
+      globalThis.fetch = originalFetch;
+      timer.mockRestore();
+    }
+  });
+
   it("maps a run to one OTLP trace with step, tool, and generation spans, redacted by default", () => {
     const built = buildRunTrace(db, runId, { userId: "install:test", identityKey: "local-secret", contentMode: "ops", environment: "test", tenantId: "test", resource: { "service.name": "ketchupe" } });
     expect(built).toBeDefined();

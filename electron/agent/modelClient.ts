@@ -1,8 +1,9 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { APICallError, generateText, streamText, tool } from "ai";
+import { APICallError, generateText, streamText, tool, ToolChoiceViolationError } from "ai";
 import type { ZodType } from "zod";
 import {
   AgentError,
+  LIMITS,
   PolicyDecisionSchema,
   VerificationResultSchema,
   type AgentErrorCode,
@@ -34,7 +35,11 @@ export function normalizeBaseURL(input: string): string {
 
 /** GET /models on the OpenAI-compatible gateway. The gateway is already wired to its upstream, so only domain + key are needed. */
 export async function listModels(baseURL: string, apiKey: string, signal?: AbortSignal): Promise<string[]> {
-  const response = await fetch(new URL("models", normalizeBaseURL(baseURL)), { headers: { Authorization: `Bearer ${apiKey}` }, signal });
+  const timeout = AbortSignal.timeout(LIMITS.toolTimeoutMs);
+  const response = await fetch(new URL("models", normalizeBaseURL(baseURL)), {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  });
   if (response.status === 401 || response.status === 403) throw new AgentError("MODEL_AUTH", "LiteLLM API key가 거부되었습니다.");
   if (!response.ok) throw new AgentError("MODEL_PROTOCOL", `GET /models failed: ${response.status}`);
   const body = (await response.json()) as { data?: Array<{ id?: string }> };
@@ -52,6 +57,8 @@ export async function resolveModelAlias(baseURL: string, apiKey: string, explici
 export interface ModelClient {
   /** Usage/latency of the most recent call; read by the harness right after each call. */
   lastCall?: ModelCallInfo;
+  /** Shared runtime clients isolate usage by the run's abort signal. */
+  lastCallFor?: (signal: AbortSignal) => ModelCallInfo | undefined;
   decide(state: PolicyState, profile: PolicyProfile, signal: AbortSignal): Promise<PolicyDecision>;
   verify(input: VerifyInput, profile: PolicyProfile, signal: AbortSignal): Promise<VerificationResult>;
   streamAnswer(input: AnswerInput, profile: PolicyProfile, signal: AbortSignal): AsyncIterable<AnswerEvent>;
@@ -130,27 +137,37 @@ export function createLiteLLMClient(options: LiteLLMClientOptions): ModelClient 
     signal: AbortSignal,
   ): Promise<T> {
     const startedAt = Date.now();
+    const validate = (value: unknown): T => {
+      const parsed = schema.safeParse(value);
+      if (!parsed.success) throw new AgentError(toolName === "policy_decision" ? "INVALID_DECISION" : "MODEL_PROTOCOL", `model returned invalid ${toolName}`);
+      return parsed.data;
+    };
     try {
       const result = await generateText({
         model: provider(profile.modelAlias),
         system: messages.system,
         prompt: messages.prompt,
         abortSignal: signal,
+        maxRetries: 0,
         tools: { [toolName]: tool({ description, inputSchema: schema }) },
         toolChoice: { type: "tool", toolName },
-      });
-      report({
-        purpose,
-        modelAlias: profile.modelAlias,
-        latencyMs: Date.now() - startedAt,
-        promptTokens: result.usage.inputTokens ?? 0,
-        cachedPromptTokens: result.usage.inputTokenDetails.cacheReadTokens,
-        completionTokens: result.usage.outputTokens ?? 0,
-        finishReason: result.finishReason,
+        onLanguageModelCallEnd: ({ usage, finishReason }) => report({
+          purpose,
+          modelAlias: profile.modelAlias,
+          latencyMs: Date.now() - startedAt,
+          promptTokens: usage.inputTokens ?? 0,
+          cachedPromptTokens: usage.inputTokenDetails.cacheReadTokens,
+          completionTokens: usage.outputTokens ?? 0,
+          finishReason,
+        }),
       });
       const call = result.toolCalls.find((item) => item.toolName === toolName);
-      return (call ? call.input : extractJsonObject(result.text)) as T;
+      return validate(call ? call.input : extractJsonObject(result.text));
     } catch (error) {
+      if (ToolChoiceViolationError.isInstance(error)) {
+        const text = error.content.filter((part) => part.type === "text").map((part) => part.text).join("");
+        return validate(extractJsonObject(text));
+      }
       throw toAgentError(error);
     }
   }
@@ -181,7 +198,7 @@ export function createLiteLLMClient(options: LiteLLMClientOptions): ModelClient 
     async complete(input, profile, signal) {
       const startedAt = Date.now();
       try {
-        const result = await generateText({ model: provider(profile.modelAlias), system: input.system, prompt: input.prompt, abortSignal: signal });
+        const result = await generateText({ model: provider(profile.modelAlias), system: input.system, prompt: input.prompt, abortSignal: signal, maxRetries: 0 });
         report({ purpose: input.purpose ?? "canvas", modelAlias: profile.modelAlias, latencyMs: Date.now() - startedAt, promptTokens: result.usage.inputTokens ?? 0, completionTokens: result.usage.outputTokens ?? 0, finishReason: result.finishReason });
         return result.text;
       } catch (error) {
@@ -197,6 +214,7 @@ export function createLiteLLMClient(options: LiteLLMClientOptions): ModelClient 
           system: messages.system,
           prompt: messages.prompt,
           abortSignal: signal,
+          maxRetries: 0,
         });
         let ttftMs: number | undefined;
         for await (const text of result.textStream) {

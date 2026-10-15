@@ -2,6 +2,20 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // v3 local RAG agent API — narrow surface, no paths or secrets cross this bridge.
 contextBridge.exposeInMainWorld('agentAPI', {
+  submitBusinessInput: (runId, actionId, input) => ipcRenderer.invoke('business:submit', runId, actionId, input),
+  listBusinessArtifacts: (threadId) => ipcRenderer.invoke('business:artifacts', threadId),
+  openBusinessArtifact: (id) => ipcRenderer.invoke('business:openArtifact', id),
+  submitWorkSelection: (runId, actionId, selection) => ipcRenderer.invoke('work:submitSelection', runId, actionId, selection),
+  pickWorkSources: (kind) => ipcRenderer.invoke('work:pickSources', kind),
+  pickWorkFiles: (multiple) => ipcRenderer.invoke('work:pickFiles', multiple),
+  listWorkSources: () => ipcRenderer.invoke('work:listSources'),
+  removeWorkSource: (id) => ipcRenderer.invoke('work:removeSource', id),
+  listWorkFiles: (sourceId) => ipcRenderer.invoke('work:listFiles', sourceId),
+  inspectWorkFile: (file, sheet, headerRow) => ipcRenderer.invoke('work:inspect', file, sheet, headerRow),
+  previewSourceMapping: (file, fingerprint, mapping) => ipcRenderer.invoke('work:preview', file, fingerprint, mapping),
+  listSourceProfiles: () => ipcRenderer.invoke('work:listProfiles'),
+  saveSourceProfile: (file, fingerprint, profile) => ipcRenderer.invoke('work:saveProfile', file, fingerprint, profile),
+  removeSourceProfile: (id) => ipcRenderer.invoke('work:removeProfile', id),
   getWorkspace: () => ipcRenderer.invoke('agent:getWorkspace'),
   setMemoryEnabled: (workspaceId, enabled) => ipcRenderer.invoke('agent:setMemoryEnabled', workspaceId, enabled),
 

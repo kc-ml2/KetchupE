@@ -32,3 +32,4 @@ release
 .cursor/*
 .claude/*
 .duo/
+.venv/

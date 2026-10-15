@@ -14,9 +14,10 @@ export type CanvasView = {
   selectedAnchorIds: string[];
   changedBlockIds: string[];
   submittedTermsKey: string | null;
+  hidden: boolean;
 };
 
-const initial: CanvasView = { runId: null, canvas: null, interrupt: null, isBusy: false, phase: null, error: null, actionContexts: [], selectedAnchorIds: [], changedBlockIds: [], submittedTermsKey: null };
+const initial: CanvasView = { runId: null, canvas: null, interrupt: null, isBusy: false, phase: null, error: null, actionContexts: [], selectedAnchorIds: [], changedBlockIds: [], submittedTermsKey: null, hidden: false };
 
 const PHASE_LABEL: Record<string, string> = { classifying: "문서 종류 판단 중", grounding: "참고 문서 검색 중", drafting: "초안 작성 중" };
 export const canvasPhaseLabel = (phase: string | null): string => (phase ? (PHASE_LABEL[phase] ?? phase) : "");
@@ -197,11 +198,12 @@ export const useCanvasRun = (api: KetchupEAgentAPI | null, threadId: string | nu
     void sendOp({ op: "finalize" }, "문서 확정");
     return true;
   };
-  const close = () => setView((current) => ({ ...current, canvas: null, actionContexts: [] }));
+  const close = () => setView((current) => ({ ...current, hidden: true, actionContexts: [] }));
+  const reopen = () => setView((current) => ({ ...current, hidden: false }));
 
   const showMissingTermsForm = Boolean(
     view.canvas && view.interrupt?.type === "awaiting_edit" && view.canvas.status !== "finalized" && view.canvas.missing_terms.length > 0 && `${view.canvas.canvas_id}:${view.canvas.version_id}` !== view.submittedTermsKey,
   );
 
-  return { view, attach, sendFeedback, toggleAnchor, submitAnchorChoice, startEditBlock, startAddBlockAfter, removeContext, deleteBlock, updateBlockContent, submitMissingTerms, changeVersion, finalize, close, showMissingTermsForm };
+  return { view, attach, sendFeedback, toggleAnchor, submitAnchorChoice, startEditBlock, startAddBlockAfter, removeContext, deleteBlock, updateBlockContent, submitMissingTerms, changeVersion, finalize, close, reopen, showMissingTermsForm };
 };

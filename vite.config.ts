@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => {
           build: {
             outDir: "dist-electron",
             rollupOptions: {
-              external: ["electron", "electron-updater", "node:sqlite", "kordoc", "@huggingface/transformers"],
+              external: ["electron", "electron-updater", "node:sqlite", "kordoc", "@huggingface/transformers", "exceljs", "sharp"],
             },
           },
         },
@@ -44,6 +44,24 @@ export default defineConfig(({ mode }) => {
               external: ["electron", "node:sqlite", "kordoc", "@huggingface/transformers"],
               output: { format: "es" },
             },
+          },
+        },
+      },
+      {
+        entry: "electron/workers/workbook.worker.ts",
+        vite: {
+          build: {
+            outDir: "dist-electron",
+            rollupOptions: { external: ["electron", "exceljs", "sharp"], output: { format: "es" } },
+          },
+        },
+      },
+      {
+        entry: "electron/workers/business.worker.ts",
+        vite: {
+          build: {
+            outDir: "dist-electron",
+            rollupOptions: { external: ["electron", "exceljs", "sharp"], output: { format: "es" } },
           },
         },
       },

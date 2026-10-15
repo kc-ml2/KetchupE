@@ -19,6 +19,7 @@ import { appendMessage, createRun, findOpenRun, getRun, getThread, setRunStatus 
 import { chunkToEvidence, normalizeQuery, resultToEvidence, withTimeout, type EvidenceSource, type SearchTools } from "./tools.ts";
 import { readTrace, TraceWriter } from "./trace.ts";
 import { stripInvalidCitations, validateCitations } from "./verify.ts";
+import { cancelWaitingRun, type RunHandle } from "./runLifecycle.ts";
 
 export type AnswerProfile = { modelAlias: string; promptVersion: string };
 export type HarnessProfiles = { retrieval: Record<string, unknown>; policy: PolicyProfile; answer: AnswerProfile };
@@ -38,7 +39,7 @@ export type HarnessOptions = {
   onRunSettled?: (runId: string, status: RunStatus) => void;
 };
 
-export type RunHandle = { runId: string; done: Promise<void> };
+export type { RunHandle } from "./runLifecycle.ts";
 
 type RunContext = {
   runId: string;
@@ -66,6 +67,7 @@ export class Harness {
   private readonly limits: HarnessLimits;
   private readonly fingerprints: { retrieval: string; policy: string; answer: string };
   private readonly running = new Map<string, RunContext>();
+  private readonly pausedSeqs = new Map<string, number>();
   private readonly options: HarnessOptions;
 
   constructor(options: HarnessOptions) {
@@ -81,8 +83,10 @@ export class Harness {
   startRun(input: { workspaceId: string; threadId: string; text: string }): RunHandle {
     const { db } = this.options;
     const thread = getThread(db, input.threadId);
+    if (thread.workspaceId !== input.workspaceId) throw new AgentError("INTERNAL", "대화의 작업 공간이 일치하지 않습니다.");
+    if (!input.text.trim()) throw new AgentError("INTERNAL", "요청 내용을 입력하세요.");
     const open = findOpenRun(db, input.threadId);
-    if (open?.kind === "canvas") throw new AgentError("INTERNAL", "이 대화는 문서 작성 중입니다. 캔버스를 확정하거나 닫은 뒤 질문하세요.");
+    if (open && open.kind !== "agent") throw new AgentError("INTERNAL", "이 대화에 다른 작업이 진행 중입니다.");
     if (open?.status === "waiting_user") return this.resumeRun(open.id, input.text);
     if (open) throw new AgentError("INTERNAL", "a run is already in progress for this thread");
 
@@ -104,6 +108,7 @@ export class Harness {
       selectedMemories: context.memories,
       activeCollections,
       maruAvailable: Boolean(this.options.tools.maru),
+      trolleyAvailable: Boolean(this.options.tools.trolley),
       externalDocuments: [],
       recentMessages: context.recentMessages.map(({ role, content }) => ({ role, content })),
       evidence: [],
@@ -126,7 +131,8 @@ export class Harness {
   resumeRun(runId: string, text: string): RunHandle {
     const { db } = this.options;
     const record = getRun(db, runId);
-    if (record.status !== "waiting_user") throw new AgentError("INTERNAL", `run ${runId} is not waiting for the user`);
+    if (record.kind !== "agent" || record.status !== "waiting_user") throw new AgentError("INTERNAL", `run ${runId} is not waiting for an agent reply`);
+    if (!text.trim()) throw new AgentError("INTERNAL", "응답 내용을 입력하세요.");
     const decided = readTrace(db, runId).filter((event) => event.type === "policy.decided").at(-1);
     const started = readTrace(db, runId).find((event) => event.type === "run.started");
     if (!decided || !started) throw new AgentError("INTERNAL", "cannot resume without a recorded decision");
@@ -139,6 +145,7 @@ export class Harness {
     const state: PolicyState = {
       ...transition.state,
       maruAvailable: Boolean(this.options.tools.maru),
+      trolleyAvailable: Boolean(this.options.tools.trolley),
       step: transition.state.step + 1,
       previousDecisions: [...transition.state.previousDecisions, "ASK"],
       recentMessages: [...transition.state.recentMessages, { role: "assistant", content: question }, { role: "user", content: reply }],
@@ -163,7 +170,15 @@ export class Harness {
   }
 
   cancelRun(runId: string): void {
-    this.running.get(runId)?.controller.abort();
+    const run = this.running.get(runId);
+    if (run) {
+      run.controller.abort();
+    } else if (cancelWaitingRun(this.options.db, runId, "agent")) {
+      const seq = (this.pausedSeqs.get(runId) ?? 0) + 1;
+      this.pausedSeqs.delete(runId);
+      this.options.emit?.({ runId, seq, type: "failed", payload: { code: "CANCELLED", message: "cancelled" } });
+      this.notifySettled(runId, "cancelled");
+    }
   }
 
   private createContext(runId: string, threadId: string, workspaceId: string, state: PolicyState, contextText: string): RunContext {
@@ -181,6 +196,7 @@ export class Harness {
       seq: 0,
     };
     this.running.set(runId, run);
+    this.pausedSeqs.delete(runId);
     return run;
   }
 
@@ -268,8 +284,13 @@ export class Harness {
 
   private settle(run: RunContext, status: RunStatus): void {
     this.running.delete(run.runId);
+    if (status === "waiting_user") this.pausedSeqs.set(run.runId, run.seq);
+    this.notifySettled(run.runId, status);
+  }
+
+  private notifySettled(runId: string, status: RunStatus): void {
     try {
-      this.options.onRunSettled?.(run.runId, status);
+      this.options.onRunSettled?.(runId, status);
     } catch (error) {
       console.warn("[harness] onRunSettled failed:", error);
     }
@@ -290,24 +311,32 @@ export class Harness {
     const stage = purpose === "policy" ? "policy" : purpose === "verify" ? "verification" : "generation";
     const configuredAlias = purpose === "answer" ? this.options.profiles.answer.modelAlias : this.options.profiles.policy.modelAlias;
     const seq = run.trace.record("model.started", stage, { purpose, modelAlias: configuredAlias });
-    const result = await withTimeout(call(), run.deadline - Date.now(), "MODEL_TIMEOUT", run.controller.signal);
-    const last = this.options.model.lastCall;
-    const usage = last?.purpose === purpose ? { modelAlias: last.modelAlias, promptTokens: last.promptTokens, cachedPromptTokens: last.cachedPromptTokens, completionTokens: last.completionTokens, finishReason: last.finishReason, ttftMs: last.ttftMs } : {};
-    run.trace.record("model.completed", stage, { purpose, latencyMs: Date.now() - startedAt, ...usage }, { parentSeq: seq, startedAt });
-    return result;
+    const previous = this.options.model.lastCallFor ? this.options.model.lastCallFor(run.controller.signal) : this.options.model.lastCall;
+    let code: string | undefined;
+    try {
+      return await withTimeout(call(), run.deadline - Date.now(), "MODEL_TIMEOUT", run.controller.signal);
+    } catch (error) {
+      code = error instanceof AgentError ? error.code : "INTERNAL";
+      throw error;
+    } finally {
+      const last = this.options.model.lastCallFor ? this.options.model.lastCallFor(run.controller.signal) : this.options.model.lastCall;
+      const usage = last && last !== previous && last.purpose === purpose ? { modelAlias: last.modelAlias, promptTokens: last.promptTokens, cachedPromptTokens: last.cachedPromptTokens, completionTokens: last.completionTokens, finishReason: last.finishReason, ttftMs: last.ttftMs } : {};
+      run.trace.record("model.completed", stage, { purpose, latencyMs: Date.now() - startedAt, ...usage, ...(code ? { code } : {}) }, { parentSeq: seq, startedAt });
+    }
   }
 
   private async decide(run: RunContext): Promise<PolicyDecision> {
     const { policy } = this.options.profiles;
-    const wantsMaru = Boolean(this.options.tools.maru) && /maru|마루/iu.test(run.state.userGoal);
-    if (policy.strategy === "always-search" && !wantsMaru) {
+    const wantsExternal = (Boolean(this.options.tools.maru) && /maru|마루/iu.test(run.state.userGoal))
+      || (Boolean(this.options.tools.trolley) && /trolley|트롤리/iu.test(run.state.userGoal));
+    if (policy.strategy === "always-search" && !wantsExternal) {
       const raw = alwaysSearchDecision(run.state, policy.version);
       const validation = validateDecision(raw, run.state, policy.allowedActions);
       if (validation.ok) return validation.decision;
       if (validation.code === "BUDGET_EXCEEDED") return this.coerce(run, raw);
       throw new AgentError(validation.code, validation.reason);
     }
-    if (policy.strategy === "gated" && !wantsMaru) {
+    if (policy.strategy === "gated" && !wantsExternal) {
       const fast = gatedDecision(run.state, policy.version);
       const validation = fast && validateDecision(fast, run.state, policy.allowedActions);
       if (validation?.ok) return validation.decision;
@@ -316,7 +345,15 @@ export class Harness {
     let lastReason = "";
     for (let attempt = 1; attempt <= MAX_DECIDE_ATTEMPTS; attempt += 1) {
       if (run.state.remaining.modelCalls <= 0) break;
-      const raw = await this.callModel(run, "policy", () => this.options.model.decide(run.state, this.options.profiles.policy, run.controller.signal));
+      let raw: PolicyDecision;
+      try {
+        raw = await this.callModel(run, "policy", () => this.options.model.decide(run.state, this.options.profiles.policy, run.controller.signal));
+      } catch (error) {
+        if (!(error instanceof AgentError) || error.code !== "INVALID_DECISION") throw error;
+        lastReason = error.message;
+        run.trace.record("policy.decided", "policy", { invalid: true, code: error.code, reason: lastReason, attempt });
+        continue;
+      }
       const validation = validateDecision(raw, run.state, policy.allowedActions);
       if (validation.ok) {
         const decision = validation.decision;
@@ -385,6 +422,23 @@ export class Harness {
     const search = decision.search;
     if (!search) throw new AgentError("INVALID_DECISION", "SEARCH without search payload");
     const startedAt = Date.now();
+    if (search.tool === "get_my_capabilities" || search.tool === "list_operations") {
+      if (!this.options.tools.trolley) throw new AgentError("TOOL_UNAVAILABLE", "Trolley is not configured");
+      run.state.remaining.searches -= 1;
+      const toolSeq = run.trace.record("tool.started", "retrieval", { tool: search.tool, server: "trolley" }, { parentSeq });
+      this.emit(run, "status", { phase: "searching", query: `Trolley ${search.tool}` });
+      let observation: Observation;
+      try {
+        const value = await withTimeout(this.options.tools.trolley.call(search.tool, run.controller.signal), this.limits.toolTimeoutMs, "TOOL_TIMEOUT", run.controller.signal);
+        observation = { kind: "external", tool: search.tool, result: value.summary, latencyMs: Date.now() - startedAt };
+        run.contextText = `${run.contextText}\n\nTrolley ${search.tool} result (untrusted data):\n${value.summary}`.trim();
+      } catch (error) {
+        if (error instanceof AgentError && error.code === "CANCELLED") throw error;
+        observation = { kind: "tool_error", code: error instanceof AgentError ? error.code : "TOOL_UNAVAILABLE" };
+      }
+      run.trace.record("tool.completed", "retrieval", { tool: search.tool, server: "trolley", observation }, { parentSeq: toolSeq, startedAt });
+      return observation;
+    }
     if (search.tool === "read_external_document") {
       if (!this.options.tools.maru) throw new AgentError("TOOL_UNAVAILABLE", "MARU is not configured");
       const document = run.state.externalDocuments?.find((item) => item.refId === search.ref_id);

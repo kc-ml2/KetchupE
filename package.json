@@ -20,6 +20,7 @@
     "typecheck:electron": "tsc -p tsconfig.electron.json",
     "smoke:litellm": "vite-node scripts/litellm-smoke.ts",
     "probe:maru": "vite-node scripts/maru-probe.ts",
+    "probe:trolley": "vite-node scripts/trolley-probe.ts",
     "telemetry:gateway": "vite-node scripts/telemetry-gateway.ts"
   },
   "build": {
@@ -108,6 +109,7 @@
     "docx": "^9.7.1",
     "dotenv": "^16.4.5",
     "electron-updater": "^6.8.3",
+    "exceljs": "4.4.0",
     "kordoc": "^4.18.3",
     "react": "^19.0.0",
     "react-device-detect": "^2.2.3",
@@ -120,7 +122,9 @@
     "rehype-raw": "^7.0.0",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
-    "zod": "^4.5.4"
+    "zod": "^4.5.4",
+    "decimal.js": "10.5.0",
+    "sharp": "^0.35.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

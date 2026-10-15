@@ -61,7 +61,7 @@ production trajectory
 - 외부 trace SaaS를 local trace의 원본으로 사용하는 것
 - multi-agent와 `DELEGATE` 구현
 
-`DELEGATE`는 궁극 action set에 포함하지만, 외부 benchmark에서 병목과 이득이 확인된 뒤 추가한다. 현재는 미래용 registry나 handoff framework를 만들지 않는다.
+`DELEGATE`는 궁극 action set에 포함하지만, 외부 benchmark에서 병목과 이득이 확인된 뒤 추가한다. Handoff framework는 만들지 않는다. 현재 제품에 존재하는 RAG·Canvas 실행기의 등록 경계는 21절을 따른다.
 
 ## 2. 핵심 설계 원칙
 
@@ -677,7 +677,7 @@ type AppliedContext = {
 
 ### 10.1 Renderer 패널 경계
 
-오른쪽 sidebar의 컨텍스트 패널은 응답 방식과 업무 정보를 하나의 durable memory 목록으로 관리한다. 폴더 패널은 Tomato collection 등록·활성화·동기화·해제를 담당한다. 가운데 질문 입력은 현재 thread/run에만 적용된다.
+왼쪽 탭 레일이 홈(채팅)·설정·업무·파일 업로드·컨텍스트 화면을 전환한다. 컨텍스트 탭은 응답 방식과 업무 정보를 하나의 durable memory 목록으로 관리하고, 파일 업로드 탭은 Tomato collection 등록·활성화·동기화·해제를 담당한다. 업무 탭은 등록된 workflow를 버튼으로 노출하고 새 대화에서 시작한다. 가운데 질문 입력은 현재 thread/run에만 적용된다.
 
 ## 11. Trajectory와 사용자 interaction
 
@@ -1235,3 +1235,217 @@ question → policy SEARCH → Tomato evidence → policy ANSWER
 | 7 설치본 | 설정만 | `node:sqlite`/native 모듈 external·asarUnpack, mac arm64+x64, CI에 electron 테스트 단계. signing/fresh-install smoke는 credential 필요 |
 
 실행: Node 22.5+ (`node:sqlite`). `npm run test:electron`, `npm test`, `npm run build`.
+
+## 21. 기능 확장을 위한 실행 경계 (2026-10-12)
+
+RAG의 policy loop와 문서 작성의 CanvasFlow는 상태와 중단 조건이 다르다. 두 기능을 하나의 큰 switch/loop로 합치지 않고, `WorkflowDispatcher`가 공통 진입점을 담당한다. `runtime.ts`는 DB·Tomato·모델·telemetry를 구성하고 실행기를 등록하는 조립 지점이다.
+
+```text
+renderer → typed IPC → WorkflowDispatcher
+                       ├─ chat / kind=agent → Harness
+                       ├─ doc / kind=canvas → CanvasFlow
+                       └─ 추가 workflow → 기능별 실행기
+```
+
+| 경계 | 책임 |
+| --- | --- |
+| `workflows.ts` | 등록 ID/kind 중복 검사, workspace·입력 검사, 대화별 시작 중복 방지, 저장된 kind에 따른 재개·취소 |
+| `router.ts` | 등록된 description·examples·requiredInputs 전체에서 의미 기반 선택, ID 검증, 실패 시 재요청 안내 (임의 fallback 없음) |
+| `runLifecycle.ts` | 공통 RunHandle, 컨트롤러가 없는 waiting_user run의 영속 취소 |
+| 기능별 실행기 | 자체 budget·policy·tool·state·trace, 재개 payload와 기능별 사용자 입력 |
+| `liveModelClient.ts` | 현재 설정 적용, AbortSignal별 사용량 분리로 동시 run 간 trace 오염 방지 |
+
+### 기능을 추가하는 방법
+
+1. 기능별 실행기는 `start(input) → { runId, done }`, `cancel(runId)`를 제공한다. 일반 텍스트로 재개할 수 있으면 `resume(runId, text)`도 제공한다. 구조화된 입력을 받는 Canvas는 전용 IPC를 유지한다.
+2. `runtime.ts`의 등록 배열에 고유한 `id`, 영속 `kind`, `description`, 선택적 `examples`·`requiredInputs`와 실행 함수를 연결한다. 실행기는 `createRun()`에 등록한 kind를 기록한다. 기존 RAG harness, dispatcher, 공통 IPC에는 기능별 분기를 추가하지 않는다.
+3. 모든 등록 기능의 설명·예시·입력 요건을 라우팅 모델에 전달한다. 키워드가 없다는 이유로 후보를 제외하지 않는다. 선택 실패 시 임의의 기능으로 fallback하지 않고 재요청을 안내한다. `mode: "auto"`는 자동 선택, 다른 mode나 메시지의 `$id`는 등록 ID를 직접 선택한다. 기존 chat/doc ID는 유지한다.
+4. `work_sources`는 매핑 검증을 위한 자료 준비 실행기다. `daily_cash` 등 완성 Excel 업무는 `BusinessFlow`와 `business/registry.ts`를 사용한다. 선언된 입력·추가 질문·checkpoint·버전을 저장하고 별도 worker에서 실행한다. 업무 검사와 XLSX 검증을 통과한 파일만 완료 결과로 등록한다. daily_cash v1은 전일 일보·주간계획·기준일 KC로 새 날짜 시트와 PNG를 만들며 규칙은 [DAILY_CASH.md](docs/DAILY_CASH.md)에 있다. 상세 계약은 [업무 Tool 연결 가이드](docs/BUSINESS_TOOLS.md)를 참조한다.
+5. 일반 텍스트 기능은 기존 status/text_delta/ask_user/completed/failed 이벤트와 대화 UI를 사용한다. 새로운 표현이나 구조화된 상호작용이 필요하면 해당 기능의 typed IPC와 UI를 추가한다.
+6. 사용자 응답을 기다리는 run은 새 요청의 mode보다 저장된 kind를 우선한다. 텍스트 resume이 없는 기능은 전용 화면으로 안내하고 기존 상태를 보존한다. 앱 재시작 후에도 같은 kind를 등록해야 재개할 수 있으므로 영속 kind를 임의로 변경하지 않는다.
+
+이 경계는 제품에 포함된 기능을 코드로 등록하는 방식이다. 외부 SKILL.md 탐색·실행, 동적 플러그인 로딩, 기능 사이 handoff, 파일 수정 권한은 구현하지 않았다. 외부 skill이 실제 요구사항이 되면 별도의 신뢰·권한 경계를 설계해야 한다.
+
+### 이번에 해결한 비효율과 남은 측정 범위
+
+- 활성 collection 조회와 run 종료 telemetry callback의 중복을 제거하고 기존 `tomatoTools()`를 재사용했다.
+- IPC가 모든 실행기에 cancel을 호출하던 방식을 저장된 kind의 소유자에게만 전달하도록 변경했다.
+- 대기 중 취소가 아무 일도 하지 않던 문제를 수정했다. 대화·초안·trace를 보존하고 run을 cancelled로 끝내므로 같은 thread에서 다음 작업을 시작하거나 thread를 삭제할 수 있다.
+- `withTimeout()`은 성공·실패·timeout·abort 모두에서 listener를 정리하며 이미 abort된 signal도 처리한다. 다만 전달받은 Promise의 내부 작업까지 중단시키지는 않는다. 외부 작업 자체의 중단은 해당 adapter가 AbortSignal을 처리해야 한다.
+- 모델 사용량은 run의 AbortSignal별로 보관한다. 서로 다른 대화의 RAG·Canvas가 동시에 실행되어도 공유 lastCall 때문에 토큰 수가 섞이지 않는다.
+- thread당 영속 실행은 기존 unique index로 하나만 허용한다. 전체 thread를 합친 실행 수 제한과 대규모 retrieval 처리량은 이번 변경으로 보장하지 않는다. SQLite vector linear scan·메시지별 citation 조회·renderer 번들 크기는 corpus와 사용량 측정 후 별도로 최적화할 대상이다.
+
+검증: 기존 RAG·Canvas·Tomato·UI 회귀 테스트, 세 번째 workflow 등록·재개·소유자별 취소, routing 중 중복 시작, 잘못된 workspace/mode, 대기 중 취소, AbortSignal listener 정리, 동시 모델 호출의 사용량 분리. Electron typecheck와 production build를 확인한다. 실제 gateway/MARU 호출 및 signed installer 검증은 별도다.
+
+## 22. System design 검증 (2026-10-12)
+
+제공된 decision ladder, DDIA 12장과 일곱 Applied AI 시나리오를 **이 저장소의 실제 구현**에 대조한다. 아래의 충족은 코드 경계와 테스트에 대한 판단이며 production 부하·보안·정답률 인증이 아니다. 면접 참고 자료의 GPU 용량, 정확도 0.94, 30/30 routing 성적, 비용·latency 숫자는 이 제품의 검증 결과로 사용하지 않는다. 외부 문서 `03 §1`의 구체적인 용량 계산·SLO는 제공되지 않았으므로 추정하지 않는다.
+
+### 22.1 Requirements — 먼저 결정할 다섯 질문
+
+| 질문 | 현재 선택과 근거 | 포기하거나 미확정인 것 |
+| --- | --- | --- |
+| 데이터가 나갈 수 있는가, 누가 무엇을 보는가? | 개인 PC의 원본·SQLite, 지정 LiteLLM과 서비스 OTLP gateway. renderer는 typed IPC만 사용 | local 저장만으로 폐쇄망이 되지 않음. MARU server의 팀/storage ACL 재사용 가능(§23), local 재사용 경로의 권한 회수·region 검증·endpoint egress 강제는 미완성 |
+| 올바른 답과 오답 비용은 무엇인가? | 근거 ID 검사, ASK/STOP, 선택적 VERIFY, Canvas 편집·확정 | citation 존재가 사실성의 증명은 아님. 수치 계산 engine, 위험도별 mandatory review, 자동 외부 발송은 없음 |
+| 부하와 SLO는 무엇인가? | thread당 열린 run 최대 1개, utility process, SSE, 모델 token/latency/TTFT trace | 설치본당 동시 run, RPS, corpus 성장률, p95/p99/TTFT 목표·출력 길이는 미정. 전역 admission queue는 없음 |
+| 무엇이 자주 바뀌는가? | source/chunk content hash, parser/chunker/embedding profile, prompt·profile SHA·corpus fingerprint | 모델 alias는 immutable checkpoint가 아님. 모든 tool schema·trace payload의 reader 호환성, corpus 전체의 평가 후 전환은 미완성 |
+| 무엇이 실패하고 그 다음은? | keyword degrade, tool error observation, bounded RAG loop, waiting run 복구, durable outbox | worker 작업의 강제 중단, 전역 retry budget, 분산 lease/fencing, 자동 checkpoint rollback은 없음 |
+
+현재 선택은 기존 제품 범위를 유지한다. 기업 공용 문서 서비스로 확장할 때는 첫 번째와 세 번째 질문에 대한 답을 먼저 확정해야 한다. workspace ID와 telemetry tenant label은 인증·인가 계약이 아니다.
+
+### 22.2 Data boundary — 권한과 원본
+
+- 등록한 파일은 원본 위치에 두고 parse artifact·chunk·embedding을 로컬에 저장한다. MARU는 인증된 원격 조회 후 HTTPS/origin/크기 제한을 검사해 app-managed cache로 내려받는다. 이 cache는 원격 문서의 사본이다.
+- 활성 collection 이름은 BM25·vector SQL의 pre-filter에 들어간다. 그러나 collection on/off는 개인 사용자의 범위 선택이며 tenant/user ACL enforcement가 아니다. neighbors/sourceChunks 같은 ID 조회도 별도의 principal ACL 검사를 하지 않는다. 공유 서비스에는 인증된 principal에서 권한을 산출하고 검색·본문 조회·citation 열기 전부에 같은 검사를 적용해야 한다.
+- 모델은 선택 evidence, recent messages, confirmed memory를 받는다. telemetry는 `ops`/`redacted_eval`/`internal_full`에 따라 내용이 달라진다. 정규식 redaction은 모든 개인정보 탐지나 residency를 보장하지 않는다.
+- embedding 모델 최초 다운로드도 egress다. 폐쇄망 요구 시 모델 artifact 사전 배포, LiteLLM/MARU/OTLP·Langfuse 목적지, DNS·TLS·방화벽과 로그 위치를 함께 검증해야 한다. 현재 client 코드만으로 "국외 반출 없음"을 증명하지 않는다.
+
+### 22.3 Core flow — 정답·version·transaction
+
+RAG는 `context → policy → SEARCH/ASK/VERIFY/ANSWER/STOP → citation 검사 → terminal trace`다. Canvas는 `classify → anchor 선택 → ground → draft → 편집/확정`이며 화면에서 사용자가 검토한다. 텍스트 SSE는 citation 검사 전에 provisional하게 표시되고, 완성 메시지는 검사 후 저장된다. 모든 출력 전에 검증하는 구조나 불가역 action의 승인 시스템으로 해석하지 않는다.
+
+Tomato는 source hash로 변경 파일을 재파싱하고 parser/chunker fingerprint가 달라지면 다시 구성한다. chunk ID와 content hash가 같은 embedding은 재사용하며, embeddings는 8개 batch로 기록한다. chunk/FTS 교체 및 삭제는 DB 트랜잭션이고 embedding도 batch별 트랜잭션이다. source와 version으로 index를 다시 만들 수 있으며 해당 회귀 테스트가 있다.
+
+반면 파일 artifact와 SQLite는 하나의 트랜잭션이 아니고, run 생성·첫 message·trace도 하나의 atomic unit이 아니다. source가 수정·삭제되면 fingerprint만으로 과거 원문을 복구할 수 없다. client trace가 남아 있어도 모델 alias 변경과 nondeterminism 때문에 동일 답변의 재생을 보장하지 않는다. 완전한 replay에는 외부 benchmark의 frozen corpus·recorded response·고정 commit/model checkpoint가 필요하다.
+
+### 22.4 Scale — 수치와 측정 경계
+
+| 현재 값 | 의미 |
+| --- | --- |
+| 열린 run 1개/thread | SQLite unique index의 로컬 invariant. 전체 thread 합산 실행 수 제한은 아님 |
+| RAG 6 steps / 8 model calls / 3 searches / 1 verify / 180초 | 기본 budget. policy profile과 harness limits 중 작은 값 적용 |
+| 일반 tool 30초 / index·embed worker call 최대 1시간 | 대기 timeout. worker 내부 작업이 반드시 중단된다는 뜻은 아님 |
+| retrieval top 8 / evidence 최대 12 / embedding 384 dimensions | context 규모와 vector scan 비용의 입력 |
+| memory context 1,500 estimated tokens / recent message 12개 | memory 선택 상한. 전체 prompt/output/cost의 상한은 아님 |
+| watcher debounce 1.5초 / reconcile 10분 / watcher 재연결 1분 | event 병합·유실 복구 주기. 검색 가능 시점의 freshness SLO는 아님 |
+| outbox flush 5초 / batch 최대 100개 / 요청당 30초 | 전송 시도 값. batch 전체 시간이나 outbox 저장량 상한은 아님 |
+
+Vector 검색은 대상 collection의 `N`개 chunk를 읽고 `O(N × 384)` cosine 계산 후 정렬한다. ANN, replica, dedicated vector DB를 이미 운영한다고 주장하지 않는다. "50K chunk 이하면 충분" 같은 임계값도 hardware·corpus·동시 부하 측정 없이 채택하지 않는다.
+
+용량 계산에는 최소 `동시 run ≈ 요청률 × run 지속시간`, `model 요청률 ≈ run 요청률 × run당 model calls`, `token/s ≈ model 요청률 × (input + output tokens)`가 필요하다. 실제 burst 분포, output 길이, prefix cache hit rate, corpus 크기·change rate를 함께 기록한다. client는 GPU KV-cache 용량이나 server의 continuous batching을 확인할 수 없으므로 server 측 headroom 계산은 LiteLLM/vLLM 운영 책임이다.
+
+### 22.5 Failure — 이번에 보강한 계약
+
+- SDK HTTP 자동 재시도는 `maxRetries: 0`으로 꺼서 harness 호출 예산 밖에서 HTTP 시도가 늘지 않게 한다. policy schema 오류는 harness에서 최대 한 번 더 시도하며 둘 다 model-call budget을 차감한다. 모델 transport 오류 자체는 자동 재시도하지 않는다.
+- tool call과 JSON fallback 결과를 같은 schema로 검사한다. 현재 AI SDK가 forced-tool 응답 대신 JSON text를 받으면 던지는 `ToolChoiceViolationError`에서도 text 부분만 추출해 검증한다. reasoning은 답변으로 복구하지 않는다. 추가 HTTP 호출은 없다.
+- RAG 모델의 성공·실패 시도 모두 종료 trace를 기록한다. 응답을 받은 뒤 schema 검증에 실패한 경우에도 reported usage를 유지하며 이전 호출의 사용량을 재사용하지 않는다. 응답 없이 timeout·연결 실패한 호출의 실제 서버 과금은 client가 알 수 없으므로 token 합계를 완전한 비용 증명으로 사용하지 않는다.
+- 모델 목록 조회와 telemetry client/gateway upstream fetch는 30초 AbortSignal timeout을 갖는다. gateway는 malformed JSON 400, 과도한 payload 413, upstream timeout 504, 다른 upstream 실패 502를 구분한다.
+- telemetry는 실패 row를 보존하고 capped exponential backoff로 자동 재전송한다. gateway가 `Retry-After`를 전달하고 client의 자동 schedule은 local backoff보다 이른 시간을 고르지 않는다. Node timer 한계로 header delay는 최대 약 24.8일이다. 수동 flush와 종료 시 flush는 즉시 시도하므로 strict한 영속 retry-not-before 계약은 아직 아니다. 총 재시도 횟수·outbox 크기도 제한하지 않는다.
+- outbox는 at-least-once 전송이다. 안정적인 trace/span ID를 사용해 재전송하지만 중앙 sink의 deduplication을 client 테스트만으로 보장하지 않는다. ACK 유실과 중앙 중복 처리는 운영 검증 대상이다.
+- 앱 재시작은 running run을 cancelled로 끝내고 waiting_user만 복구한다. worker crash 뒤 현재 요청은 실패하고 다음 호출에서 지연 재시작한다. 이는 모든 step을 무한 재시도하거나 exactly-once 실행하는 방식이 아니다.
+
+### 22.6 Operate — DDIA 12장 대조
+
+| 장 | 판정 | 코드 근거와 남은 조건 |
+| --- | --- | --- |
+| 1 신뢰성·확장성·유지보수성 | 부분 충족 | bounded RAG loop, 실행기 등록, token/latency/TTFT 관측. 10배 부하 테스트와 p95/p99 SLO 미검증 |
+| 2 데이터 모델 | local 용도 충족, enterprise 부분 | SQLite relational state + JSON trace/tree + collection filter. local principal enforcement는 없음. MARU remote 경로는 사용자·팀·storage 권한에 위임 가능(§23) |
+| 3 storage/retrieval | local 용도 충족 | FTS5/BM25 + exact vector + RRF, incremental content hash. ANN·검색별 부하 검증 없음 |
+| 4 encoding/evolution | 부분 충족 | parser/chunker/schema/profile/prompt version과 DB migrations, 모델 응답 schema 검사. checkpoint pinning·전체 payload version 호환성 미완성 |
+| 5 replication | 서버 범위 미구현 | client는 단일 local writer. model weight/region replica와 failover는 server 운영 범위 |
+| 6 partitioning | 부분 충족 | collection 검색 범위, workspace state 분리. 보안 tenant partition·hot tenant quota·prefix affinity routing 없음 |
+| 7 transactions | 부분 충족 | chunk/FTS/embedding 트랜잭션, thread open-run unique index. filesystem/DB·run/message/trace 전체 원자성은 없음 |
+| 8 distributed failures | 부분 충족 | 요청 timeout, 명시적 policy 재시도, durable outbox. lease/fencing·strict retry-not-before·전역 resource admission 없음 |
+| 9 consistency/consensus | local invariant 충족, 분산 범위 미구현 | SQLite가 열린 run 1개를 강제. 중앙 전송은 at-least-once이며 consensus·분산 leader/lock 없음 |
+| 10 batch | 부분 충족 | hash 기반 ingestion/rebuild, embedding batch. corpus 전체의 bench gate·atomic head swap·자동 rollback 없음 |
+| 11 stream | 부분 충족 | watcher→증분 sync, SSE runId+seq 검사, trace/outbox. durable source event log·CDC·consumer offset 및 immutable transition log는 없음 |
+| 12 derived data | index 용도 충족, 과거 재현 부분 | index/artifact는 원본에서 재구성. 삭제된 원문 snapshot, 전체 개인정보 제거, 외부 eval replay는 별도 |
+
+### 22.7 일곱 시나리오의 범위
+
+| 시나리오 | 현재 판정과 다음 검증 |
+| --- | --- |
+| 2.1 enterprise 내부 문서 assistant | 부분 충족. hybrid·citation·incremental ingest는 있음. principal ACL, 두 사용자/tenant 권한 회귀, 한/영 Recall@k·abstention release gate 필요. 전용 reranker는 없음 |
+| 2.2 온프렘 open-weight 모델 1,000 사용자 | client로 충족 판정 불가. server의 GPU/KV-cache·batching·prefix routing·queue·quota와 실제 workload 부하 테스트 필요 |
+| 2.3 multi-region residency | 미구현. region별 inference/log boundary와 fail-closed 여부, region 장애 시 국외 전송 금지 검증 필요 |
+| 2.4 shared GPU checkpoint 평가 | 외부 benchmark/infra 범위. immutable checkpoint·suite version, lease/heartbeat/fencing, idempotent score invariant는 이 client에 없음 |
+| 2.5 백만 문서 daily ingest | 부분 충족. hash 증분 갱신과 삭제는 있음. freshness 계측, CDC/tombstone·ACL change event, index version gate/swap, million-document 처리량 검증 없음 |
+| 2.6 agent tool의 피해 방지 | 부분 충족. RAG schema·budget·ASK/STOP·trace와 MCP allowlist, 불가역 action 미제공. per-tool principal scope·total token/cost cap·Canvas 전체 budget·side-effect approval/idempotency 계약은 없음 |
+| 2.7 신뢰할 수 있는 multi-agent 출력 | 미구현. deterministic numeric engine·isolated parallel agents·synthesizer·numeric verifier·conditional critic은 없음 |
+
+### 22.8 다음 변경을 승인하는 검증 기준
+
+현재 local 범위에서 다음 우선순위는 전체 run 초기화·종료의 원자성, 실제 timeout 후 남은 외부 작업의 중단, 설치본당 resource admission과 Canvas 전체 budget이다. 공유 서비스 요구가 확정되면 principal ACL을 모든 retrieval/본문/citation 경로에 먼저 적용하고 두 사용자 간 누출 회귀 테스트를 추가한다.
+
+ANN/queue/replica 도입은 명시한 corpus·동시 부하·출력 길이에서 p95/p99·TTFT·CPU/RSS 측정이 목표를 넘을 때 결정한다. index 교체는 고정 snapshot의 span-preservation·언어별 Recall@k·abstention 평가 뒤 진행한다. model/prompt 변경은 고정 checkpoint·suite version의 held-out `pass^k`와 비용을 비교한다. 변경 한 번으로 되돌릴 수 있는 profile/version 선택은 지원하되, 운영 one-config rollback 검증은 별도로 수행한다.
+
+검증 범위는 local fixture·mock HTTP·schema·실행기 및 UI 회귀·typecheck·production build다. 실제 사내 endpoint, 중앙 sink dedup, production load, region-loss chaos, permission release gate, signed installer는 이 판정에 포함하지 않는다.
+
+## 23. MARU ACL 통합 가능성 검증 (2026-10-12)
+
+**결론: MARU를 권한의 원본으로 삼아 사용자별 접근 제어를 구현할 수 있다.** 현재 KetchupE에 local ACL이 없다는 것은 MARU도 사용자 권한을 제공하지 않는다는 뜻이 아니다. 다만 사용자별 credential 연결과 local cache·대화·재개 경로의 권한 회수 처리가 추가되어야 end-to-end ACL을 충족한다.
+
+### 23.1 검증한 GitHub 버전과 배포 계약
+
+권한 코드 검토 대상은 [kc-ml2/MARU-Lang](https://github.com/kc-ml2/MARU-Lang)의 `feat/filesystem-retrieval-server`, 확인 시 GitHub에서 반환한 snapshot [6ea4c432dacccd049cec2fa9fe4fbe7b242ee56e](https://github.com/kc-ml2/MARU-Lang/commit/6ea4c432dacccd049cec2fa9fe4fbe7b242ee56e)다. 기본 `main`은 이전 RAG/chat 구현이므로 현재 filesystem MCP와 구분한다. **현재 client 연결 계약은 [배포 onboarding](https://maru.ml2-alpha.com/onboarding.md)과 live `tools/list`를 우선한다.** Git snapshot의 예전 명시적 도구 구성을 현재 설정에 적용하지 않는다.
+
+검토한 Git snapshot에는 `list_my_teams`, `list_storages`, `find_storage_files`, `search_storage_text`, `get_file_download_url` 등 명시적 team-scoped 도구가 있다. 그러나 현재 onboarding은 `browse_storage`, `find_storage` 두 도구와 사용자 API token만 안내하며 team/user ID 선택이 필요 없다고 명시한다. 실제 `https://maru.ml2-alpha.com/mcp`도 initialize에서 `MARU Filesystem / 1.30.0`을 반환하고 이 두 도구만 노출했다. **KetchupE의 adapter는 현재 onboarding 및 live MCP 계약과 맞는다.** serverInfo version만으로 배포 commit SHA를 알 수 없으므로 snapshot의 전체 구현을 배포 상태와 동일시하지 않는다.
+
+### 23.2 서버가 이미 담당하는 권한
+
+| 경계 | GitHub 코드 근거 | 의미 |
+| --- | --- | --- |
+| API token → 사용자 | [api_tokens.authenticate_token](https://github.com/kc-ml2/MARU-Lang/blob/6ea4c432dacccd049cec2fa9fe4fbe7b242ee56e/maru_lang/services/api_tokens.py#L35), [MaruTokenVerifier](https://github.com/kc-ml2/MARU-Lang/blob/6ea4c432dacccd049cec2fa9fe4fbe7b242ee56e/maru_lang/mcp_server.py#L29) | token hash, revoked_at, expiry, 사용자 존재를 확인하고 인증된 user_id를 MCP subject로 설정 |
+| 사용자 → 팀 | [require_team_member](https://github.com/kc-ml2/MARU-Lang/blob/6ea4c432dacccd049cec2fa9fe4fbe7b242ee56e/maru_lang/services/authorization.py#L6) | 요청된 team_id를 신뢰하지 않고 현재 TeamMember를 확인. 개인 팀은 stale membership이 있어도 소유자만 허용 |
+| 팀 → storage | [authorized_storage_root](https://github.com/kc-ml2/MARU-Lang/blob/6ea4c432dacccd049cec2fa9fe4fbe7b242ee56e/maru_lang/services/filesystem.py#L28) | 현재 팀 멤버십과 TeamStorageLink를 모두 확인한 뒤 filesystem root를 결정. 검색 전에 적용 |
+| storage → 경로 | [resolve_within](https://github.com/kc-ml2/MARU-Lang/blob/6ea4c432dacccd049cec2fa9fe4fbe7b242ee56e/maru_lang/services/filesystem.py#L53) | 상대 경로·root 내부 여부를 확인해 traversal와 symlink escape를 거부 |
+| 다운로드 발급·사용 | [create_download_url](https://github.com/kc-ml2/MARU-Lang/blob/6ea4c432dacccd049cec2fa9fe4fbe7b242ee56e/maru_lang/services/download.py#L25), [resolve_download](https://github.com/kc-ml2/MARU-Lang/blob/6ea4c432dacccd049cec2fa9fe4fbe7b242ee56e/maru_lang/services/download.py#L78) | URL 발급 시 권한 확인, 사용 시 현재 사용자·팀/storage 권한과 파일 size/mtime를 재검사 |
+
+이는 사용자별 identity를 팀 membership으로 문서 집합에 연결하는 ACL이다. 동일 storage 안에서 파일 A는 허용하고 파일 B는 거부하는 사용자별 path ACL은 현재 모델에 없다. 실제 요구가 팀/폴더 경계이면 storage 공유로 표현할 수 있지만 원본 시스템의 파일별 ACL을 그대로 보존하려면 별도 metadata·검사가 필요하다.
+
+Signed download URL은 API token과 별개의 bearer capability다. HEAD 코드에서 API token을 폐기해도 이미 발급한 URL은 서명 만료까지 유효할 수 있다. 사용자 삭제·팀 탈퇴·storage 연결 제거는 URL 사용 시 다시 검사하지만 API token의 revoked_at은 다운로드 resolve 경로에서 조회하지 않는다. URL 만료는 새 다운로드 시작만 막으며 이미 시작한 전송·내려받은 사본을 회수하지 않는다.
+
+### 23.3 KetchupE가 이미 하는 것과 부족한 것
+
+- `runtime.ts`는 하나의 `MARU_API_TOKEN`으로 MaruClient를 생성한다. 이 token을 사용자별로 발급·배치하면 remote 요청은 해당 사용자의 권한으로 처리된다. 공용 운영자 token을 모든 사용자에게 배포하면 모두 같은 principal이 되므로 사용자별 ACL을 대신할 수 없다.
+- `MaruClient.readDocument()`는 `find_storage(storage_id, file_path)`의 새로운 허용 결과와 다운로드 가능 상태를 확인한 뒤에만 cache를 사용한다. 따라서 **이 함수로 다시 읽는 경로**에서는 cache hit가 서버의 권한 검사를 생략하지 않는다. local 회귀 테스트로 허용 후 거부된 요청이 cached 파일을 재인덱싱하지 않는 것을 확인했다.
+- MARU cache 파일명·collection/ref ID는 storage/path 중심이며 principal을 포함하지 않는다. 같은 앱 데이터에서 token 사용자가 바뀌어도 기존 SQLite·history·evidence·cache를 분리하거나 제거하지 않는다.
+- ASK 재개는 trace에 남은 evidence·context를 복원하고, 최근 대화도 기존 메시지 내용을 그대로 모델 prompt에 포함한다. `agent:openCitation`은 저장된 local path를 열며 MARU에 다시 묻지 않는다. 이 경로들은 권한 회수 후에도 이전 데이터를 사용할 수 있다.
+- MARU 임시 collection은 일반 등록 collection 목록에는 포함되지 않는다. 따라서 모든 MARU cache가 자동으로 local 전체 검색에 섞인다는 뜻은 아니다. 실제 누락은 이미 보관한 데이터의 재개·history·citation과 credential 교체 경계다.
+
+### 23.4 통합에 필요한 최소 변경
+
+1. **사용자 credential 경계:** 설치본마다 사용자 token을 사용하고 Electron main의 안전한 저장소에서 관리한다. 공유 profile을 허용하면 인증된 principal/credential 단위로 DB·cache·index를 분리하고 token 교체·logout 시 실행과 이전 데이터 사용을 차단한다. renderer가 보낸 user/team ID로 권한을 생성하지 않는다.
+2. **출처 metadata:** 외부 evidence·citation·history에 provider, principal scope, storage_id, file path/version을 연결해 권한을 확인할 대상을 잃지 않게 한다. 로컬 파일과 원격 사본을 같은 absolute path만으로 취급하지 않는다.
+3. **재사용 전 검사:** 새 remote read뿐 아니라 ASK resume, 과거 context 구성, citation 열기, cached retrieval에서도 MARU가 현재 접근을 허용하는지 확인한다. 엄격한 revocation 요구에서는 offline/401/403/권한 확인 실패 시 remote 자료를 prompt에 포함하지 않고 cache를 열지 않는다. offline cache 허용은 별도 제품 결정이다.
+4. **회수 처리:** 사용자 변경·팀 탈퇴·storage 공유 해제에 따라 remote index·artifact·실행 중 evidence·파생 context의 재사용을 중지한다. 이미 사용자에게 공개·다운로드된 내용의 물리적 회수까지 local ACL로 보장하지 않는다.
+5. **도구 버전 계약:** 현재 onboarding과 live MCP의 `browse_storage`·`find_storage` 두 read 도구를 contract 테스트의 기준으로 고정한다. storage 이름은 최신 browse 결과에서 찾고 team/user ID를 모델이 추정해 전달하지 않는다. Git snapshot에 있는 관리 write 도구를 현재 client에 추가하지 않는다.
+
+KetchupE가 MARU의 TeamMember/TeamStorageLink DB를 복제할 필요는 없다. 최신 권한 판단은 MARU에 위임하고 KetchupE는 credential·출처·local 재사용 경계를 책임진다.
+
+### 23.5 실제 수행한 검증과 한계
+
+| 검증 | 수행 결과 | 증명 범위 |
+| --- | --- | --- |
+| live MCP initialize/tools list | 성공; 배포 도구 `browse_storage`·`find_storage` 확인 | 현재 token의 연결 및 adapter 계약 |
+| live 인증 누락·오류 token | 각각 HTTP 401 | 무인증·잘못된 credential 거부 |
+| live 현재 token의 storage 조회 | 성공, 결과 5개 | 해당 credential의 허용 목록 조회; 다른 사용자와의 비교는 아님 |
+| live 존재하지 않는 storage 지정 | tool error | 이용 불가 storage 요청 거부; 실제 타 팀의 존재하는 storage에 대한 두 사용자 테스트를 대체하지 않음 |
+| pinned source 함수 self-check | synthetic ORM 경계에서 6개 검사 그룹 통과 | 타 사용자 팀 접근·미연결 storage 거부, 개인 팀 소유권, 다운로드 시 권한 회수/만료/파일 변경, traversal, API token 폐기와 URL의 독립성 |
+| KetchupE MARU cache 회귀 | fresh 허용 검사 후 cache 사용; 후속 거부 시 ingest 미호출 | 현재 readDocument 경로의 fail-closed 동작 |
+
+Source self-check는 GitHub HEAD에서 받은 실제 authorization/filesystem/download/api_tokens 함수 본문을 scratch 환경에서 실행하고 ORM과 token decode 경계만 synthetic하게 대체했다. MARU 전체 test suite, PostgreSQL integration 또는 서명 암호 구현의 검증은 아니다. 권한 회수 검증을 위해 운영 사용자를 삭제하거나 멤버십·token을 변경하지 않았다. 인증키·원문·signed URL은 도구 출력이나 문서에 기록하지 않았다.
+
+미완료 release gate는 서로 다른 두 사용자 token으로 **실제로 존재하는** 타 팀 storage를 거부하는 검증, sandbox 팀의 탈퇴/공유 해제 후 signed URL·KetchupE resume/history/citation 재사용을 거부하는 검증이다. 이 항목이 통과하기 전에는 end-to-end 사용자별 ACL을 완료로 표시하지 않는다. 사전 점검을 통해 실제 MARU 검증에 사용할 credential이 있음을 확인했으며, 앞선 "실제 서버 미검증"은 credential 부재를 확인한 결론이 아니라 당시 검증 범위 제한이었다.
+
+### 23.6 현재 연결 절차와 이전 설명의 정정
+
+현재 MARU는 MCP server이며 OAuth browser login·OTP·refresh flow를 client에서 구현할 필요가 없다. 관리자에게 받은 API token을 Bearer 인증으로 보내고 Streamable HTTP endpoint `https://maru.ml2-alpha.com/mcp`에 연결한다. KetchupE의 `McpConnection`은 공식 client의 최소 token provider를 사용하며 이는 Authorization Bearer header를 매 요청에 붙이는 방식이다.
+
+앱은 `.env`의 `MARU_API_TOKEN`과 선택적 `MARU_MCP_ENDPOINT`를 읽는다. endpoint 기본값은 current onboarding의 주소이고 runtime과 `probe:maru`가 공유한다. `npm run probe:maru`로 reconnect·initialize·tools/list·browse_storage를 확인한 뒤 앱을 시작한다. probe는 30초 제한과 두 read 도구 allowlist를 사용하고 credential·signed URL을 로그에서 제거한다.
+
+앞선 설명에서 snapshot의 team-scoped 도구와 현재 server의 두 도구를 함께 제시해 연결 안내가 혼동될 수 있었다. 현재 설정에는 onboarding의 두 도구만 사용한다. 본 프로젝트의 Canvas는 로컬 작성 기능이며 MARU의 예전 chat/REST API를 호출하는 경로가 아니다.
+
+## 24. Trolley MCP 연결
+
+[Trolley onboarding](https://trolley.ml2-alpha.com/onboarding.md)의 endpoint `https://trolley.ml2-alpha.com/mcp/`에 Streamable HTTP + Bearer API key로 연결한다. MARU와 별개의 McpConnection을 사용하며 `.env`의 `TROLLEY_API_KEY`를 사용자가 직접 입력한다. 키는 renderer, prompt, trace, Git에 저장하지 않는다. `TROLLEY_MCP_ENDPOINT`는 runtime과 `probe:trolley`가 동일하게 읽고 기본 endpoint의 trailing slash를 유지한다.
+
+연결 확인은 `get_my_capabilities`의 인증된 성공 응답을 기준으로 한다. 키가 없으면 adapter를 생성하지 않고 CLI는 설정 안내와 exit 2로 끝낸다. endpoint의 401이나 onboarding을 읽은 사실을 연결 성공으로 표시하지 않는다. 키 입력 전에는 실서버 capabilities 성공 여부가 미검증 상태다.
+
+현재 노출한 범위는 `get_my_capabilities`, `list_operations` 조회다. Operation 목록 요청에서도 capabilities를 먼저 확인한다. MCP의 tool schema가 인수를 검사하고 기존 harness의 SEARCH budget·timeout·observation·error handling을 사용한다. `trolleyAvailable`은 start/resume 때 현재 설정으로 구성하며 항상 검색/gated policy도 Trolley를 요청한 경우 local retrieval로 대체하지 않는다. prompt 변경은 policy-5/grounded-answer-5로 versioning한다.
+
+Trolley의 역할·group/Target 권한은 서버의 인증된 principal이 결정한다. 빈 Operation 목록은 admin 여부의 증명이 아니다. Operation 실행·직접 SQL·관리자 write는 이 연결 단계에서 노출하지 않는다. 향후 실행을 추가할 때 최신 list_operations의 input_schema와 실제 사용자 요청에 연결해야 하며 caller identity를 임의 email 인수로 대체하지 않는다.
+
+결과는 untrusted context로 전달하고 공통 sanitizer가 credential·URL·깊이·문자/배열 규모를 제한한다. 20개를 넘는 배열은 omitted_items를 표시하므로 전체 목록으로 해석하지 않는다. Trolley raw 결과와 파생 답변은 중앙 telemetry에서 제외하며 tool 종류·사용 가능 여부·budget/latency 같은 관측 계약은 유지한다.
+
+로컬 검증은 adapter capabilities 선행, 거부/잘못된 응답/비허용 tool, redaction/목록 생략, 미설정·search budget 계약, 세 policy 전략의 Trolley 경로, telemetry 내용 제외다. API key 입력과 사용자 확인 후 `npm run probe:trolley`로 실제 인증 연결을 검증한다.

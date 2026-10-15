@@ -17,6 +17,15 @@ const state: PolicyState = {
 const base = { taskDifficulty: 1, predictedSuccess: 0.8, evidenceSufficiency: 0.2, reasonCode: "MISSING_EVIDENCE", policyVersion: "orchestration-1" } as const;
 
 describe("validateDecision", () => {
+  it("allows Trolley discovery only when configured and rejects execution tools", () => {
+    const decision = { ...base, action: "SEARCH", search: { tool: "get_my_capabilities" } };
+    expect(validateDecision(decision, state)).toMatchObject({ ok: false, code: "INVALID_DECISION" });
+    expect(validateDecision(decision, { ...state, trolleyAvailable: true }).ok).toBe(true);
+    expect(validateDecision({ ...decision, search: { tool: "list_operations" } }, { ...state, trolleyAvailable: true }).ok).toBe(true);
+    expect(validateDecision({ ...decision, search: { tool: "execute" } }, { ...state, trolleyAvailable: true }).ok).toBe(false);
+    expect(validateDecision(decision, { ...state, trolleyAvailable: true, remaining: { ...state.remaining, searches: 0 } })).toMatchObject({ ok: false, code: "BUDGET_EXCEEDED" });
+  });
+
   it("accepts a valid search", () => {
     const result = validateDecision({ ...base, action: "SEARCH", search: { tool: "search_local_docs", query: "연차" } }, state);
     expect(result.ok).toBe(true);

@@ -1,5 +1,7 @@
+import type { BusinessAction, BusinessToolAPI } from "./BusinessTool.types";
 // Renderer-facing IPC contract. Type-only; shared with electron/ via `import type`.
 import type { ContractCanvas } from "./Canvas.types";
+import type { WorkSourceAPI } from "./WorkSource.types";
 import type { AnchorChoiceResumeContent, CanvasEditOp, CanvasInterrupt, StartCanvasInput } from "./CanvasEdit.types";
 
 export type ThreadSummary = {
@@ -41,9 +43,12 @@ export type AgentStreamEvent = {
   payload: unknown;
 };
 
-/** mode: auto = route chat/doc from the message (default), chat/doc = force. */
-export type StartRunInput = { threadId: string; workspaceId: string; text: string; mode?: "auto" | "chat" | "doc" };
-export type StartRunResult = { runId: string; kind: "agent" | "canvas" };
+/** auto (default) routes the message; any other mode selects a registered workflow ID. */
+export type StartRunInput = { threadId: string; workspaceId: string; text: string; mode?: string };
+/** Persisted workflow kind; built-ins are agent and canvas. */
+export type RunKind = string;
+export type RunAction = { id: string; type: "work_sources"; title: string; question: string } | BusinessAction;
+export type StartRunResult = { runId: string; kind: RunKind; action?: RunAction; status?: RunStatus };
 
 export type CollectionSummary = {
   name: string;
@@ -93,7 +98,7 @@ export type InteractionKind =
 
 export type WorkspaceSummary = { id: string; name: string; memoryEnabled: boolean };
 
-export interface KetchupEAgentAPI {
+export interface KetchupEAgentAPI extends WorkSourceAPI, BusinessToolAPI {
   getWorkspace(): Promise<WorkspaceSummary>;
   setMemoryEnabled(workspaceId: string, enabled: boolean): Promise<void>;
 
@@ -102,7 +107,7 @@ export interface KetchupEAgentAPI {
   loadThread(threadId: string, beforeMessageId?: string, limit?: number): Promise<MessagePage>;
   renameThread(threadId: string, title: string): Promise<void>;
   deleteThread(threadId: string): Promise<void>;
-  openRun(threadId: string): Promise<{ runId: string; status: RunStatus; kind: "agent" | "canvas" } | null>;
+  openRun(threadId: string): Promise<{ runId: string; status: RunStatus; kind: RunKind; action?: RunAction } | null>;
 
   startRun(input: StartRunInput): Promise<StartRunResult>;
   resumeRun(runId: string, text: string): Promise<void>;

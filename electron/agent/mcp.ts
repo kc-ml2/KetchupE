@@ -6,6 +6,20 @@ import {
 } from "@modelcontextprotocol/client";
 import { AgentError } from "./contracts.ts";
 
+/** Bound untrusted MCP results and omit credentials and capability URLs. */
+export function sanitizeMcpResult(value: unknown, depth = 0): unknown {
+  if (depth > 5) return "[nested data omitted]";
+  if (typeof value === "string") return value.replace(/https?:\/\/\S+/giu, "[URL omitted]").slice(0, 800);
+  if (Array.isArray(value)) {
+    const items = value.slice(0, 20).map((item) => sanitizeMcpResult(item, depth + 1));
+    return value.length > 20 ? [...items, { omitted_items: value.length - 20 }] : items;
+  }
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .filter(([key]) => !/(?:url|token|secret|authorization|api[_-]?key)/iu.test(key))
+    .map(([key, nested]) => [key, sanitizeMcpResult(nested, depth + 1)]));
+}
+
 export type McpServerConfig = {
   id: string;
   endpoint: URL;

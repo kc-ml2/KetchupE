@@ -17,6 +17,7 @@ import electronUpdater from "electron-updater";
 const { autoUpdater } = electronUpdater;
 import { registerAgentHandlers } from "./ipc/agentHandlers.ts";
 import { registerCollectionHandlers } from "./ipc/collectionHandlers.ts";
+import { registerWorkSourceHandlers } from "./ipc/workSourceHandlers.ts";
 import { startAgentRuntime, type AgentRuntime } from "./agent/runtime.ts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -304,6 +305,7 @@ function startLocalAgent() {
     });
     registerAgentHandlers(agentRuntime);
     registerCollectionHandlers(agentRuntime);
+    registerWorkSourceHandlers(agentRuntime, path.join(__dirname, "workbook.worker.js"));
   } catch (error) {
     console.error("[agent] failed to start local agent runtime:", error);
   }

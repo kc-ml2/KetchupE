@@ -11,9 +11,19 @@ import type { TelemetrySettings } from "./settings.ts";
 import { readTrace } from "./trace.ts";
 
 export const TELEMETRY_FLUSH_MS = 5_000;
+export const TELEMETRY_REQUEST_TIMEOUT_MS = 30_000;
 const TELEMETRY_RETRY_MAX_MS = 5 * 60_000;
 const OUTBOX_LIMIT = 100;
 export const TRAJECTORY_SCHEMA_VERSION = "ketchupe-trajectory-v2";
+
+/** Retry-After may be delay-seconds or an HTTP date. Invalid values use local backoff. */
+export function retryAfterMs(value: string | null, now = Date.now()): number {
+  if (!value?.trim()) return 0;
+  const trimmed = value.trim();
+  const delay = /^\d+$/.test(trimmed) ? Number(trimmed) * 1000 : Date.parse(trimmed) - now;
+  // Node timers overflow beyond 24.8 days; cap untrusted headers at the platform limit.
+  return Number.isFinite(delay) ? Math.min(2_147_483_647, Math.max(0, delay)) : 0;
+}
 
 /** Anonymous, stable per install; never derived from the machine name or the user. */
 export function loadInstallId(userData: string): string {
@@ -84,6 +94,7 @@ export function buildRunTrace(
   if (!run) return undefined;
   const events = readTrace(db, runId);
   const started = events.find((event) => event.type === "run.started");
+  if (started?.payload.localOnly === true) return undefined;
   const answer = db.prepare("SELECT content FROM messages WHERE run_id = ? AND role = 'assistant' ORDER BY rowid DESC LIMIT 1").get(runId) as { content: string } | undefined;
   const text = (value: string | undefined) => value === undefined
     ? undefined
@@ -99,7 +110,7 @@ export function buildRunTrace(
 
   const transitions = events.filter((event) => event.type === "policy.decided" && event.payload.transition);
   const decisions = transitions.map((event) => (event.payload.transition as PolicyTransition).decision);
-  const usedMaru = transitions.some((event) => {
+  const usedExternal = transitions.some((event) => {
     const transition = event.payload.transition as PolicyTransition;
     return transition.observation?.kind === "external"
       || transition.decision.search?.tool === "browse_storage"
@@ -153,7 +164,7 @@ export function buildRunTrace(
     score: item.score,
   }));
   const exportObservation = (observation: PolicyTransition["observation"]) => observation?.kind === "external"
-    ? { kind: observation.kind, tool: observation.tool, latencyMs: observation.latencyMs, result: "[MARU_RESULT_OMITTED]" }
+    ? { kind: observation.kind, tool: observation.tool, latencyMs: observation.latencyMs, result: observation.tool === "get_my_capabilities" || observation.tool === "list_operations" ? "[TROLLEY_RESULT_OMITTED]" : "[MARU_RESULT_OMITTED]" }
     : observation?.kind === "verification"
       ? { ...observation, missingClaims: observation.missingClaims.map((claim) => text(claim)) }
       : observation?.kind === "user"
@@ -165,6 +176,7 @@ export function buildRunTrace(
     recentMessages: state.recentMessages.map((message) => ({ ...message, content: text(message.content) })),
     activeCollections: state.activeCollections.map((name) => text(name)),
     maruAvailable: state.maruAvailable,
+    trolleyAvailable: state.trolleyAvailable,
     evidence: exportEvidence(state.evidence),
     signals: state.signals,
     previousDecisions: state.previousDecisions,
@@ -179,7 +191,7 @@ export function buildRunTrace(
         ? { tool: decision.search.tool, arguments: "[MARU_ARGUMENTS_OMITTED]" }
         : decision.search.tool === "read_external_document"
           ? { tool: decision.search.tool, ref_id: id(decision.search.ref_id), query: text(decision.search.query) }
-        : { ...decision.search, query: text(decision.search.query) },
+        : { ...decision.search, ...("query" in decision.search ? { query: text(decision.search.query) } : {}) },
     question: text(decision.question),
     claimsToVerify: decision.claimsToVerify?.map((claim) => text(claim)),
     stopReason: text(decision.stopReason),
@@ -197,7 +209,7 @@ export function buildRunTrace(
         ...attr("langfuse.observation.type", "agent"),
         ...traceAttributes(),
         ...attr("langfuse.observation.input", text(run.goal)),
-        ...attr("langfuse.observation.output", usedMaru ? undefined : text(answer?.content)),
+        ...attr("langfuse.observation.output", usedExternal ? undefined : text(answer?.content)),
         ...attr("langfuse.trace.metadata.status", run.status),
         ...attr("langfuse.trace.metadata.errorCode", run.error_code ?? undefined),
         ...attr("langfuse.trace.metadata.actions", actions.join(">")),
@@ -630,6 +642,7 @@ export class LangfuseExporter {
     let scores = 0;
     let error: string | undefined;
     for (const row of rows) {
+      let retryDelay = 0;
       try {
         let payload: unknown;
         if (row.kind === "run") {
@@ -641,8 +654,11 @@ export class LangfuseExporter {
           const stored = JSON.parse(row.payload ?? "null") as Score;
           payload = row.kind === "score" ? scoreTrace(stored, this.resource(), this.settings().environment) : stored;
         }
-        const response = await fetch(endpoint, { method: "POST", headers: this.headers(), body: JSON.stringify(payload) });
-        if (!response.ok) throw new Error(`${row.kind} ingest ${response.status}: ${(await response.text()).slice(0, 200)}`);
+        const response = await fetch(endpoint, { method: "POST", headers: this.headers(), body: JSON.stringify(payload), signal: AbortSignal.timeout(TELEMETRY_REQUEST_TIMEOUT_MS) });
+        if (!response.ok) {
+          retryDelay = retryAfterMs(response.headers.get("retry-after"));
+          throw new Error(`${row.kind} ingest ${response.status}: ${(await response.text()).slice(0, 200)}`);
+        }
         if (row.kind === "run") this.db.prepare("UPDATE telemetry_outbox SET sent_at = ?, last_error = NULL WHERE id = ?").run(new Date().toISOString(), row.id);
         else this.db.prepare("DELETE FROM telemetry_outbox WHERE id = ?").run(row.id);
         if (row.kind === "score") scores += 1;
@@ -652,7 +668,7 @@ export class LangfuseExporter {
         const attempts = row.attempts + 1;
         this.db.prepare("UPDATE telemetry_outbox SET attempts = ?, last_error = ? WHERE id = ?").run(attempts, error, row.id);
         this.log(`[telemetry] flush failed: ${error}`);
-        this.schedule(Math.min(TELEMETRY_FLUSH_MS * 2 ** Math.min(attempts, 6), TELEMETRY_RETRY_MAX_MS));
+        this.schedule(Math.max(retryDelay, Math.min(TELEMETRY_FLUSH_MS * 2 ** Math.min(attempts, 6), TELEMETRY_RETRY_MAX_MS)));
         break;
       }
     }
