@@ -16,6 +16,8 @@ async function setup() {
   const input: Parameters<BusinessTool["execute"]>[0] = { values: { workDate: "2026-10-14", actualEdits: "확인", planEdits: "확인" }, files: { previousReport: [await file(books.report, "전일일보.xlsx")], weeklyPlans: [await file(books.weekly, "계획.xlsx")], cashStatus: [await file(books.status, "261013_자금현황표[KC].xlsx")] }, checkpoint: {}, signal: new AbortController().signal };
   return { books, input, file };
 }
+// Real XLSX/PNG generation needs more time on shared Windows CI runners.
+const artifactTestTimeout = 30_000;
 async function confirm(input: Parameters<BusinessTool["execute"]>[0]) {
   const review = await dailyCashTool.execute(input);
   expect(review.status, JSON.stringify(review)).toBe("needs_input");
@@ -46,7 +48,7 @@ it("appends a dated sheet, redeems a maturity, reconciles KC cash and returns a 
   for (const row of [238, 239, 249]) expect(s.getRow(row).hidden, `row ${row}`).toBe(false);
   await expect(sharp(Buffer.from(result.image!.bytes)).metadata()).resolves.toMatchObject({ width: columnsPx * SCALE, height: rowsPx * SCALE });
   expect(result.externalData?.matured).toHaveLength(1);
-});
+}, artifactTestTimeout);
 it("matches the KC file date to the report date (work date minus one), not the work date", async () => {
   const { input, books, file } = await setup(); input.files.cashStatus = [await file(books.status, "261014_자금현황표[KC].xlsx")];
   expect(await dailyCashTool.execute(input)).toMatchObject({ status: "failed", message: expect.stringContaining("기준일 2026-10-14와 일보 기준일 2026-10-13") });
@@ -57,7 +59,7 @@ it("carries sub-won interest fractions forward and reconciles them against whole
   if (result.status !== "completed") return;
   const b = new ExcelJS.Workbook(); await b.xlsx.load(Buffer.from(result.file.bytes) as unknown as ExcelJS.Buffer); const s = b.getWorksheet("261013")!;
   expect(s.getCell("D10").value).toBe(100000.27878); expect(s.getCell("H10").result).toBe(109000.27878);
-});
+}, artifactTestTimeout);
 it("prefills today, the previous report, the weekly plan and the report-date KC file from connected folders", () => {
   const wf = (name: string) => ({ sourceId: "s", relativePath: name, name });
   const files = ["261013_일일자금일보 .xlsx", "261014_일일자금일보.xlsx", "일일자금일보 샘플.xlsx", "일일자금일보 업무흐름.xlsx", "주간자금계획서_1002.xlsx", "주간자금계획서_1009.xlsx", "주간자금계획서_1016.xlsx", "261014_자금현황표[KC].xlsx", "261013_자금현황표[KC].xlsx"].map(wf);
@@ -75,7 +77,7 @@ it("reads a truly empty cell as 0 but still asks for a formula without a saved r
   s.getCell("I30").value = { formula: "H30*1" } as ExcelJS.CellValue; input.files.previousReport = [await file(books.report, "전일일보.xlsx")];
   expect(await dailyCashTool.execute(input)).toMatchObject({ status: "needs_input", fields: [expect.objectContaining({ key: "cell_I30", type: "number" })] });
   input.values.cell_I30 = "0"; expect((await confirm(input)).status).toBe("completed");
-});
+}, artifactTestTimeout);
 it("asks for actual execution, rather than treating weekly plans as actuals", async () => {
   const { input } = await setup(); delete input.values.actualEdits;
   const result = await dailyCashTool.execute(input); expect(result).toMatchObject({ status: "needs_input", fields: [expect.objectContaining({ key: "actualEdits", type: "movements", rows: [{ index: 1, direction: "in", description: "정기예금 만기 원금", party: "테스트은행", amount: "10000" }, expect.objectContaining({ index: 2, direction: "out", amount: "1000" })] }), expect.objectContaining({ key: "planEdits", type: "movements", rows: [expect.objectContaining({ index: 1, direction: "out", amount: "2000" })] })] });
@@ -128,7 +130,7 @@ it("keeps JPY and CNY separate and uses KC foreign balances with per-unit FX rat
   if (result.status !== "completed") return;
   const b = new ExcelJS.Workbook(); await b.xlsx.load(Buffer.from(result.file.bytes) as unknown as ExcelJS.Buffer); const s = b.getWorksheet("261013")!;
   expect(s.getCell("H25").result).toBe(100); expect(s.getCell("H27").result).toBe(200); expect(s.getCell("F242").value).toBe(40950);
-});
+}, artifactTestTimeout);
 it("never combines a months-old daily report with a current KC snapshot", async () => {
   const { books, input, file } = await setup(); books.report.getWorksheet(1)!.name = "260528"; input.files.previousReport = [await file(books.report, "old.xlsx")];
   expect(await dailyCashTool.execute(input)).toMatchObject({ status: "failed", message: expect.stringContaining("너무 오래") });
