@@ -123,10 +123,13 @@ export function BusinessArtifacts({ api, threadId, running }: { api: KetchupEAge
     finally { setSaving(false); }
   };
   return <div className="flex flex-wrap gap-2 mb-2">
-    {items.map((item) => <div key={item.id} className="flex flex-wrap gap-1">
-      <button className={`${control} inline-flex items-center gap-1 text-black dark:text-white`} type="button" onClick={() => void api.openBusinessArtifact(item.id).catch((cause) => setError(String(cause)))}><LuFile aria-hidden />{item.name} 열기 · v{item.version}</button>
-      {/\.png$/i.test(item.name) && <button className={`${control} inline-flex items-center gap-1 text-black dark:text-white`} type="button" disabled={saving} aria-label={`${item.name} 다운로드`} onClick={() => void save(item)}><LuDownload aria-hidden />다운로드</button>}
-    </div>)}
+    {items.map((item) => {
+      const isPng = /\.png$/i.test(item.name);
+      return <button key={item.id} className={`${control} inline-flex items-center gap-1 text-black dark:text-white`} type="button" disabled={isPng && saving} onClick={() => {
+        if (isPng) void save(item);
+        else void api.openBusinessArtifact(item.id).catch((cause) => setError(String(cause)));
+      }}>{isPng ? <LuDownload aria-hidden /> : <LuFile aria-hidden />}{item.name} {isPng ? "다운로드" : "열기"} · v{item.version}</button>;
+    })}
     {saved && <p role="status">{saved}</p>}
     {error && <p role="alert">{error}</p>}
   </div>;

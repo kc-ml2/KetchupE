@@ -68,9 +68,11 @@ it.each([true, false, "저장할 수 없습니다"])("downloads a PNG by artifac
   let finish!: (saved: boolean) => void; let fail!: (error: Error) => void;
   vi.mocked(api.saveBusinessArtifact).mockReturnValue(new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
   render(<BusinessArtifacts api={api} threadId="thread" running={false} />);
-  const button = await screen.findByRole("button", { name: "일보.png 다운로드" });
+  const button = await screen.findByRole("button", { name: "일보.png 다운로드 · v1.0" });
+  expect(screen.getAllByRole("button")).toHaveLength(1);
   fireEvent.click(button);
   expect(api.saveBusinessArtifact).toHaveBeenCalledWith("image");
+  expect(api.openBusinessArtifact).not.toHaveBeenCalled();
   expect(button).toBeDisabled();
   if (typeof result === "string") fail(new Error(result)); else finish(result);
   await waitFor(() => expect(button).toBeEnabled());
