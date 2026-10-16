@@ -43,8 +43,9 @@ export async function buildBankStatement(rows = BANK_ROWS, account = STATEMENTS[
 const outDir = process.argv[2];
 // vitest also imports this module and has its own argv.
 if (outDir && !process.env.VITEST) {
-  const { writeFile } = await import("node:fs/promises");
+  const { mkdir, writeFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
+  await mkdir(outDir, { recursive: true });
   for (const { file, account, rows } of STATEMENTS) {
     await writeFile(join(outDir, file), await buildBankStatement(rows, account));
     console.log(`wrote ${join(outDir, file)}`);

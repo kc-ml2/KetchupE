@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => {
     "LITELLM_BASE_URL",
     "LITELLM_API_KEY",
     "LITELLM_MODEL_ALIAS",
+    "LITELLM_ROUTER_MODEL_ALIAS",
   ].map((key) => [`process.env.${key}`, JSON.stringify(env[key] ?? "")]));
   return {
     plugins: [

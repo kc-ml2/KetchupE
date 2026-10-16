@@ -16,7 +16,7 @@
 
 자연어 요청은 등록된 기능의 설명·예시·필수 입력을 보고 라우팅합니다. `$doc`, `$daily_cash`, `$work_sources`로 명시 선택할 수도 있습니다. 업무 탭에는 주요 기능의 바로가기를 둡니다. **계약서 작성은 “어떤 계약서 작성을 도와드릴까요?”라는 질문부터 시작하며, 사용자의 요청을 받은 뒤 실행합니다.**
 
-입력창 위에서 실행·입력 대기 상태를 확인하고 이어가거나 중단할 수 있습니다. 일일자금일보는 대화 안의 입력 카드에서 원천 파일·기준 정보를 확인하고 필요한 추가 질문에 답합니다. 계산은 코드가 담당하며, 검증을 통과한 결과만 전달합니다. 세부 업무 규칙과 남은 확인 사항은 [일일자금일보 문서](docs/DAILY_CASH.md)를 보세요. `bank_daily`는 업무 흐름 확인용이며 제품 배포 전 registry에서 제외해야 합니다.
+입력창 위에서 실행·입력 대기 상태를 확인하고 이어가거나 중단할 수 있습니다. 일일자금일보는 대화 안의 입력 카드에서 원천 파일·기준 정보를 확인하고 필요한 추가 질문에 답합니다. 계산은 코드가 담당하며, 검증을 통과한 결과만 전달합니다. 세부 업무 규칙과 남은 확인 사항은 [일일자금일보 문서](docs/BUSINESS_TOOLS.md#daily-cash)를 보세요. `bank_daily`는 업무 흐름 확인용이며 제품 배포 전 registry에서 제외해야 합니다.
 
 ## 구조
 
@@ -57,7 +57,8 @@ Git에서 제외된 로컬 `.env`에 연결 정보를 설정합니다. API key/t
 ```dotenv
 LITELLM_BASE_URL=https://your-gateway.example.com/v1/
 LITELLM_API_KEY=<발급받은 키>
-LITELLM_MODEL_ALIAS=<배포한 모델 alias>
+LITELLM_MODEL_ALIAS=<배포한 생성 모델 alias>
+LITELLM_ROUTER_MODEL_ALIAS=clef
 
 # 선택: 토큰에는 Bearer 접두어를 넣지 않습니다.
 MARU_API_TOKEN=<사용자 토큰>
@@ -72,7 +73,9 @@ npm run probe:maru
 npm run probe:trolley
 ```
 
-MCP 키 변경 후 앱을 재시작합니다. 현재 MARU는 storage 조회·검색 및 문서 다운로드/인덱싱, Trolley는 capabilities·Operation 목록 조회까지 연결되어 있습니다. Trolley Operation 실행은 연결되어 있지 않습니다. 새 MCP의 연결 절차는 [외부 팀용 가이드](docs/MCP_PROVIDER_GUIDE.md)를 따릅니다.
+자연어 업무 선택은 같은 LiteLLM의 `/v1/systemone`에 등록된 `clef` alias를 사용합니다. 다른 이름으로 배포했다면 `LITELLM_ROUTER_MODEL_ALIAS`를 지정하세요. `$업무ID`와 명시 mode는 라우팅 모델을 호출하지 않습니다. 생성·답변 모델은 `LITELLM_MODEL_ALIAS`를 유지합니다. 라우팅 실패 시 다른 모델로 자동 전환하지 않습니다. 설정 변경 후 개발 서버를 재시작하고 배포판은 다시 빌드합니다.
+
+MCP 키 변경 후 앱을 재시작합니다. 현재 MARU는 storage 조회·검색 및 문서 다운로드/인덱싱, Trolley는 capabilities·Operation 목록 조회까지 연결되어 있습니다. Trolley Operation 실행은 연결되어 있지 않습니다. 새 MCP의 연결 절차는 [외부 팀용 가이드](docs/WORKFLOW_INTEGRATION_GUIDE.md)를 따릅니다.
 
 ## 코드 찾기
 
@@ -96,18 +99,13 @@ MCP 키 변경 후 앱을 재시작합니다. 현재 MARU는 storage 조회·검
 - 중앙 수집은 [telemetry-gateway.ts](scripts/telemetry-gateway.ts)를 사용합니다. Desktop에는 Langfuse secret을 넣지 않습니다. 기본 `ops` mode는 자유 텍스트·식별자를 HMAC 처리하며, 모든 개인정보 제거를 보장하지 않습니다.
 - 임의 MCP 자동 설치, 외부 코드/SKILL 실행, multi-agent, 전역 실행 queue는 없습니다. 설치본 서명·fresh-install 검증과 외부 benchmark의 평가·승격은 별도 범위입니다.
 
-## 더 읽기
+## Documentation
 
-| 독자 / 목적 | 문서 |
+| Purpose | Guide |
 | --- | --- |
-| 외부 MCP·Tool 제공 팀: 무엇을 납품할지 | **[MCP 제작·전달 가이드](docs/MCP_PROVIDER_GUIDE.md)** |
-| 케찹이 담당자: 받은 도구를 업무로 연결하기 | **[워크플로 추가 가이드](docs/WORKFLOW_INTEGRATION_GUIDE.md)** |
-| Excel Tool 구현 계약 | [BUSINESS_TOOLS.md](docs/BUSINESS_TOOLS.md) |
-| 일일자금일보 규칙·검증 | [DAILY_CASH.md](docs/DAILY_CASH.md) |
-| 설계 배경·데이터 계약·운영 제약 | [KETCHUPE_V3_ARCHITECTURE.md](KETCHUPE_V3_ARCHITECTURE.md) |
-| Harness·검색·상태 복원의 상세 해설 | [KETCHUPE_V3_CODE_GUIDE.md](KETCHUPE_V3_CODE_GUIDE.md) |
-
-상세 문서에는 이전 구현 시점의 설명도 남아 있습니다. 현재 등록·라우팅 방식은 위 연동 가이드와 실제 코드가 기준입니다.
+| Architecture, lifecycle, code map, limitations | [Architecture and code map](docs/KETCHUPE_V3_ARCHITECTURE.md) |
+| Add a workflow or connect an external MCP provider | [Integration guide](docs/WORKFLOW_INTEGRATION_GUIDE.md) |
+| Excel execution contract and Daily Cash rules | [Business tools and Daily Cash](docs/BUSINESS_TOOLS.md) |
 
 ## License
 

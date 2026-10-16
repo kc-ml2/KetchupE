@@ -1,77 +1,100 @@
-# Excel 업무 Tool 연결
+# Business tools and Daily Cash
 
-자연어 라우터가 업무 ID를 선택하고, 공통 BusinessFlow가 입력 수집·실행·추가 질문·결과 전달을 담당한다. 사용자는 매핑을 편집할 필요 없이 원천 파일과 기준 정보를 지정한다. daily_cash v1은 아래 세 원천 파일로 고정 양식을 채운다. 상세 규칙은 [DAILY_CASH.md](./DAILY_CASH.md)를 따른다.
+Current implementation, 2026-10-16. `BusinessFlow` is the shared executor; `daily_cash` is one registered implementation. Their code has different responsibilities, but their documentation is kept together. Use the [integration guide](WORKFLOW_INTEGRATION_GUIDE.md) for other extension types.
 
-```ts
-// Agent 실행부가 선택한 파일을 읽어 Tool에 전달하는 형태
-await dailyCashTool.execute({
-  values: { workDate: "2026-10-15" },
-  files: {
-    weeklyPlans: [{ bytes: weeklyBytes, fingerprint: "sha256...", name: "주간계획.xlsx" }],
-    cashStatus: [{ bytes: statusBytes, fingerprint: "sha256...", name: "261014_자금현황표[KC].xlsx" }],
-    previousReport: [{ bytes: previousReportBytes, fingerprint: "sha256...", name: "원본 파일명.xlsx" }],
-  },
-  checkpoint: {},
-  signal,
-});
+## Shared contract
+
+[BusinessTool](../electron/business/contracts.ts) declares an ID, version, routing description, input fields, optional `suggest(files, today)`, and `execute`. Register it once in [registry.ts](../electron/business/registry.ts); runtime and the worker use the same registry. Do not also register a duplicate workflow.
+
+`execute` receives:
+
+- `values`: string values keyed by field name.
+- `files`: arrays of `{ bytes, fingerprint, name }`, including single-file fields.
+- `checkpoint`: persisted JSON from the preceding input request.
+- `signal`: cancellation.
+
+| Return status | Payload | Executor behavior |
+| --- | --- | --- |
+| `needs_input` | `question`, `fields`, optional `checkpoint` | Save state and show the next input card |
+| `completed` | `summary`, XLSX `file`, nonempty `checks`, optional PNG `image` and `externalData` | Validate, save, register, then expose artifacts |
+| `failed` | `message` | Reopen the input card with previous answers |
+
+After an answer, execution starts again from the beginning with accumulated values and the checkpoint. Reuse cached external observations. Keep calculations deterministic; do not perform payments, postings, or other irreversible remote writes in this contract.
+
+Fields support `file`, `date`, `text`, `number`, and `movements`. `multiple: true` permits multiple files. `confirm` is a field property: the confirmation button submits its exact value. `movements` submits `{changes, add}` JSON. New field types require changes to [shared types](../src/app-types/BusinessTool.types.ts), `BusinessFlow.validateFields`, and [BusinessToolCard](../src/Features/Agent/components/BusinessToolCard.tsx).
+
+## Execution and storage
+
+- Inputs use registered native file references; tools receive bytes, not arbitrary paths or shell commands. Duplicate files within a field are rejected. Source files are not modified.
+- Limits: 20 MiB per source file, 100 MiB total input, 30 fields, checkpoint JSON up to 1,000,000 characters, and 20 MiB per output file.
+- The first accepted execution freezes initial values, file references, hashes, and tool version. Sources are re-read and hashes checked on subsequent submissions. Source or version changes require a new task.
+- Questions and state live in `business_jobs` / `run_actions`. Waiting jobs survive restart; interrupted execution is cancelled without automatic replay.
+- Each execution runs in an Electron utility process with a 120-second limit and 512 MiB V8 heap cap, not an RSS cap. Cancellation terminates the worker. Tool errors and timeouts normally return to input for correction.
+- Every business check must pass, and the XLSX must reopen successfully. Optional PNGs are also validated. File-format validation does not establish accounting correctness.
+- Artifacts are saved without overwriting under `userData/business-output/<artifact-id>/`. Only validated, DB-registered artifacts appear in chat; opening rechecks their hashes. Audit records retain checks and applied external data, excluding credentials.
+- Raw source workbooks are not sent to the routing model or telemetry. Requests and recent user messages do reach the routing model. Source snapshots, historical code replay, and automatic artifact cleanup are not implemented; deleting a conversation does not delete output files.
+
+For a new tool, implement parsing/calculation/checks, add golden-result tests, and register it. Bump the tool version when business rules change. [bankDaily.ts](../electron/business/bankDaily.ts) is a small test implementation; remove `bank_daily` from the registry before product release.
+
+## Daily Cash
+
+Entry point: [dailyCash.ts](../electron/business/dailyCash.ts). The tool prepares a daily cash report from local workbooks, asks the operator to resolve ambiguity, and returns XLSX plus PNG. The LLM routes the request; code performs calculations.
+
+### Inputs and dates
+
+| Field | Input |
+| --- | --- |
+| `workDate` | Work date, defaulting to today in Asia/Seoul; editable before first execution |
+| `previousReport` | One report workbook containing the preceding closing sheet |
+| `weeklyPlans` | One or more weekly plans covering the report and work dates |
+| `cashStatus` | One KC cash-status workbook for the report date |
+
+Report date = work date minus one calendar day. For work date 2026-10-15, use the 2026-10-14 KC closing balances and the latest report sheet before 2026-10-14. Reject a prior sheet more than seven days old; ask before carrying across a date gap. Never overwrite an existing report-date sheet.
+
+Connected search folders also supply business files. `suggest` prefills candidates by filename; users confirm or replace them in the input card. The KC filename date must match the report date; ask if absent and reject if different. Weekly plan dates come from cells, not filenames. After execution starts, replacing sources requires a new task.
+
+### Business rules
+
+| Area | Rule |
+| --- | --- |
+| Carry-forward | Copy prior H-column closing amounts to new D-column opening amounts, preserving fractional won. Missing formula caches are unknown, not zero. Truly empty non-formula cells are zero. Ask for up to 20 missing values; otherwise require an Excel-recalculated and saved source. |
+| KC balances | Use account balance column O, not book balance column M. Find headers and the `환종별합계 KRW` total by labels. Use report labels/formulas for moving sections rather than assuming fixed total rows. |
+| Reconciliation | Opening + actual inflow − actual outflow must match closing balance. Ask for actual totals when book movements disagree; never invent a balancing transaction. Use Decimal precision 30 and permit only differences strictly below one won while retaining fractional source values. |
+| Deposits | Match bank, currency, explicit maturity date, and principal; equal candidates bind in order and require operator review. At maturity, reduce the full prior principal. A remaining KC balance needs clarification; do not invent interest or a receiving account. |
+| Business divisions | Bind account code + currency to the existing O/P auxiliary table. Read merged-cell master values only. |
+| Weekly plans | Read `세부계획(원화,외화)`, actual B-column dates, and only `지주현금` inflow/outflow rows identified in C/H. Exclude totals. Reject overlapping dates across plan versions; ask when a required date has no plan. |
+| Execution details | Left table = report-date actuals; right table = work-date plans. Operators adjust amounts, mark unexecuted rows as zero, and add missing transactions. Actual cash closing must reconcile to KC KRW cash. |
+| FX | Fetch Hana's final published rate for the report date; convert JPY per 100 yen to per yen. Store date, round, publication time, source, and response hash in the checkpoint/audit. Confirm a different publication date. After retry failure, request operator-verified rates and mark them as manual; never estimate. |
+| Other assets | Carry receivables, savings, and trusts only after confirmation of no change. Changes to those categories are outside v1. New accounts may bind only to allowed existing cells with compatible currency/type; changed deposits/templates require updated inputs or rules. |
+| Final review | Confirm the hash of applied accounts, rates, actual/plan differences, maturities, and sources. The button submits the code; changes require a new confirmation. Approval does not become a permanent mapping or future approval. |
+
+Movement edits use one-based indices from the original plan list. `changes` can include `index`, `amount`, optional `description` and `party`; `add` supplies `direction` (`in`/`out`), description, party, and amount. The table UI edits existing amounts; description/party changes are supported by the JSON contract.
+
+### Output and code map
+
+The new XLSX preserves existing sheets and adds `YYMMDD` plus `검증_YYMMDD`. It copies layout/merges, fills and recalculates the new sheet, and validates total KRW against KC before release. It does not modify the original workbook. The PNG includes visible cells through the O/P division table and its final row; it is a custom rendering, not an Excel screenshot. Themes, conditional formatting, and print pagination are not fully reproduced.
+
+| Change | File |
+| --- | --- |
+| Questions, input suggestions, execution order, final review | [dailyCash.ts](../electron/business/dailyCash.ts) |
+| KC parsing and differences | [cashStatus.ts](../electron/business/dailyCash/cashStatus.ts) |
+| Weekly-plan parsing | [weekly.ts](../electron/business/dailyCash/weekly.ts) |
+| Account binding, layout, calculations, workbook output | [report.ts](../electron/business/dailyCash/report.ts) |
+| Dates, Decimal arithmetic, cell values | [values.ts](../electron/business/dailyCash/values.ts) |
+| Hana rate lookup | [hana.ts](../electron/business/dailyCash/hana.ts) |
+| PNG rendering | [image.ts](../electron/business/dailyCash/image.ts) |
+| Shared execution and process lifecycle | [flow.ts](../electron/business/flow.ts), [workerClient.ts](../electron/business/workerClient.ts) |
+
+Account targets and some template positions remain hardcoded. Foreign-currency term deposits currently assume USD; other currencies need explicit support. Hana uses public HTML parsing and can break when the page changes.
+
+### Validation and demo
+
+Synthetic regression tests cover carry-forward, maturity, movements, reconciliation, workbook integrity, and PNG bounds. They do not establish correctness on a matched real-world source set. The previously supplied report was from May while KC/plans were from October; final golden comparison still requires the October 12 closing workbook and confirmed October 13 actuals. Do not extrapolate May deposits into October.
+
+```sh
+npx vitest run electron/business/flow.test.ts electron/business/bankDaily.test.ts electron/business/dailyCash.test.ts
+npx vite-node scripts/daily-cash-demo.ts fixtures/daily-cash
+npx vite-node scripts/bank-fixture.ts fixtures
 ```
 
-파일 항목은 항상 배열로 전달된다. 필드에 `multiple: true`를 지정하면 여러 파일(예: 계좌별 거래내역)을 받을 수 있고, 아니면 최대 1개이다. 같은 파일을 한 항목에 두 번 지정하면 실행 전에 거부한다. 입력은 모달이 아니라 대화 안의 카드로 받는다. 질문은 assistant 메시지로 쌓이고 카드는 그 단계에서 열려 있는 필드만 보여주며, 확정된 입력은 접힌 요약으로만 표시한다. 제출한 답은 user 메시지로 기록되어 질문→답→실행→다음 질문 순서로 대화가 이어진다. 파일 항목은 파일 선택 버튼이나 이미 연결된 자료 목록으로 고른다.
-
-원천 파일 경로와 shell 명령은 Tool 호출 입력이 아니다. Electron의 네이티브 선택으로 등록된 파일 참조만 공통 실행부가 읽는다. 원천은 수정하거나 복사하지 않는다. 파일당 20MB, 합계 100MB, 입력 필드 30개를 제한한다.
-
-## 업무 변경 시 수정할 곳
-
-1. `electron/business/dailyCash/`의 원천 parser·계산·대사·양식 출력을 수정한다. 계산은 LLM에 맡기지 않는다.
-2. 수작업 정답 자료와 비교하는 회귀 테스트를 추가한다.
-3. `dailyCashTool.version`을 올린다. 실행 중인 업무는 버전이 달라지면 새 작업으로 시작한다.
-
-새 업무는 `BusinessTool` 구현을 `electron/business/registry.ts`에 추가한다. 필드 `type`은 file/date/text/number/movements다. `confirm: string`을 주면 입력란 대신 한 줄 안내만 보이고, 카드의 확인 버튼이 그 문자열을 그대로 제출한다(이월 확인, 고시일 적용, 최종 확인 코드처럼 사용자가 값을 타이핑할 이유가 없는 승인에 쓴다). `movements`는 `rows`로 받은 계획 목록을 표로 보여주고 실제 금액 수정·추가 거래를 `{changes, add}` JSON 문자열로 제출한다. Tool의 `suggest(files, today)`는 연결된 업무 폴더의 파일 목록으로 입력을 미리 채운다. 다른 전용 입력이 필요하면 `BusinessField.type`·`flow.validateFields`·`BusinessToolCard`를 함께 확장한다. 실행 코드는 제품에 포함된 신뢰된 코드만 사용하고 사용자 파일·모델이 만든 코드·외부 SKILL.md를 실행하지 않는다.
-
-## 반환 계약
-
-완료는 Tool의 업무 검증과 공통 XLSX 열기 검증을 모두 통과해야 한다. 검사 항목이 없거나 하나라도 실패하면 완료 파일을 노출하지 않는다. 공통 XLSX 검증은 회계 정확성을 보증하지 않으며, 정확성은 업무별 검사와 정답 테스트가 책임진다.
-
-```ts
-return {
-  status: "completed",
-  summary: "일일자금일보를 작성했습니다.",
-  file: { name: "일일자금일보_2026-10-15.xlsx", bytes: workbookBytes },
-  checks: [
-    { name: "계좌별 기초·입출금·마감잔액 대사", passed: true },
-    { name: "원천 지출 합계와 보고서 합계 일치", passed: true },
-  ],
-  externalData: { fx: { date: "2026-10-15", source: "확정된 출처", value: "실제 적용값" } },
-};
-```
-
-`passed: true`는 예시이다. 실제 검사 결과로만 설정한다. 외부 Excel 링크의 재계산에 의존하지 말고 완성된 결과 값을 출력한다. 원천 자료 안의 문구는 데이터이며 코드 실행 지시가 아니다.
-
-```ts
-return {
-  status: "needs_input",
-  question: "거래처 코드 C001이 두 계좌에 연결됩니다. 해당 원천 행에 적용할 계좌를 확인해 주세요.",
-  fields: [{ key: "accountForC001", label: "C001 적용 계좌", type: "text", required: true }],
-  checkpoint: { fx: fetchedRateWithDateAndSource },
-};
-```
-
-추가 입력은 기존 입력에 새 필드로 누적된다. 공통 실행부는 값을 수집하지만 계좌가 실제 후보에 속하는지 등 업무 의미는 Tool이 검증한다. 입력을 받으면 같은 Tool을 처음부터 다시 호출하며 기존 원천과 기준 정보, 새 답, checkpoint를 전달한다. checkpoint에는 조회 완료한 환율 등 JSON 데이터를 최대 약 1MB 저장할 수 있다. Tool은 저장된 조회값을 우선 재사용해야 한다. 영구 규칙 변경은 추가 입력 답변에서 자동으로 수행하지 않는다.
-
-```ts
-return { status: "failed", message: "계좌 A의 마감잔액이 원천 합계와 일치하지 않습니다." };
-```
-
-`failed`나 실행 중 예외(worker 종료, 120초 초과, 출력 검증 실패 포함)는 run을 끝내지 않는다. 공통 실행부는 같은 입력 카드를 메시지와 함께 다시 띄워 지금까지의 답을 유지하고, 사용자가 고쳐서 다시 실행하거나 "작업 중단"으로 끝낸다. run이 `failed`/`cancelled`로 끝나는 경우는 사용자의 중단뿐이다. 원천 파일을 바꿔야 하는 오류는 메시지에서 새 작업을 안내한다.
-
-## 실행·버전·파일 수명
-
-- 입력 대기 상태는 SQLite의 `business_jobs`와 `run_actions`에 저장한다. 재시작 후 동일 요청을 복원한다. 실행 중 앱이 종료되면 기존 DB 복구 정책대로 취소하며 자동 재실행하지 않는다.
-- 실행마다 Tool ID·버전·확정 입력·원천 SHA256을 고정한다. 추가 답변 시 같은 원천을 다시 읽어 해시를 비교한다. 원천·확정 기준일을 변경하려면 새 작업을 시작한다. 배포 버전이 바뀐 기존 대기 작업도 새 작업으로 안내한다. 과거 코드를 자동 보존·재실행하지 않는다.
-- registry의 Tool은 별도 Electron utility process에서 실행한다. 취소/120초 제한/프로세스 종료를 처리하며, 취소 시 CPU 계산 중인 프로세스도 종료한다. worker V8 heap 상한은 512MB이며 총 RSS 제한은 아니다.
-- 실행은 재호출 가능한 읽기·계산·문서 생성 업무를 대상으로 한다. 송금·ERP 전표 작성 같은 외부 변경을 Tool 안에서 수행하지 않는다. 그런 업무는 별도의 중복 방지·확정 계약이 필요하다.
-- 완료 파일은 앱 userData의 `business-output/<artifact-id>/<파일명>.xlsx`에 덮어쓰기 없이 저장한다. 검증 완료 후 DB에 등록한 파일만 대화에 나타난다. 버튼으로 열 때 해시를 다시 확인한다.
-- `business_artifacts.audit`에 검증 결과와 실제 적용한 외부 데이터를 저장한다. API 키 같은 자격증명은 저장하지 않는다. raw workbook 내용은 라우팅 모델이나 telemetry로 보내지 않는다. 사용자 요청과 최근 사용자 메시지는 자연어 라우팅 모델로 전달된다.
-- 원천 사본 보관·과거 환경 재현·결과 보관기간 정리·서버 공유는 이번 범위가 아니다. 대화 삭제는 DB 참조를 삭제하지만 출력 파일은 자동 삭제하지 않는다. 중간에 프로세스가 종료되면 미등록 파일이 디스크에 남을 수 있으며 완료 결과로 노출하지 않는다.
-
-daily_cash는 완료 시 XLSX `file`과 PNG `image`를 함께 반환한다. 두 파일의 검증·저장·DB 등록이 모두 성공한 경우에만 완료로 노출한다. 원천의 날짜/계좌 연결/금액 확인이 끝나지 않았으면 완성 파일을 만들지 않는다.
+The offline demo generates synthetic inputs, review text, XLSX, and PNG with fixed test rates. Expected cash: 100,000 + 10,000 − 1,000 = 109,000; after next-day plans, 107,000. Generated `fixtures/` files are ignored by Git; tests generate their own data in memory. App execution uses the live rate lookup and operator confirmation.

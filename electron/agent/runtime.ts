@@ -180,8 +180,7 @@ export function startAgentRuntime(options: RuntimeOptions): AgentRuntime {
       cancel: (id: string) => getRunAction(db, id)?.type === "work_sources" ? workSourcesFlow.cancel(id) : workflow.cancel(id),
     })),
   ], (text, routes, input) => routeMessage(
-    harnessModel,
-    { ...policyProfile, modelAlias: current.modelAlias || "gateway-default" },
+    { ...current, modelAlias: process.env.LITELLM_ROUTER_MODEL_ALIAS?.trim() || "clef" },
     text,
     AbortSignal.timeout(policyProfile.runTimeoutMs),
     routes,

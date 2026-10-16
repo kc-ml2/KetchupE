@@ -1,6 +1,6 @@
 # Project Context
 
-- see @KETCHUPE_V3_ARCHITECTURE.md
+- see @docs/KETCHUPE_V3_ARCHITECTURE.md
 
 ---
 

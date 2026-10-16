@@ -17,7 +17,9 @@ const defaults = {
 describe("AgentMessages", () => {
   it("진행 상태와 답변의 참고 문서 제목을 표시한다", () => {
     const onOpenCitation = vi.fn();
-    const { rerender } = render(<AgentMessages {...defaults} progressText="문서 검색 중" />);
+    const { rerender } = render(
+      <AgentMessages {...defaults} progressText="문서 검색 중" />,
+    );
     expect(screen.getByText("문서 검색 중")).toBeInTheDocument();
 
     rerender(
@@ -25,13 +27,26 @@ describe("AgentMessages", () => {
         {...defaults}
         streamingText="연차를 정산합니다 [[e1]]."
         streamingRunId="run-1"
-        streamingCitations={[{ evidenceId: "e1", title: "인사 규정", breadcrumb: [], page: 2 }]}
-        streamingAppliedContext={{ workspaceInstruction: "인사 규정에 근거해 답변", memories: [{ id: "memory-1", kind: "preference", content: "답변은 존댓말로 작성" }] }}
+        streamingCitations={[
+          { evidenceId: "e1", title: "인사 규정", breadcrumb: [], page: 2 },
+        ]}
+        streamingAppliedContext={{
+          workspaceInstruction: "인사 규정에 근거해 답변",
+          memories: [
+            {
+              id: "memory-1",
+              kind: "preference",
+              content: "답변은 존댓말로 작성",
+            },
+          ],
+        }}
         onOpenCitation={onOpenCitation}
       />,
     );
     expect(screen.queryByText("문서 검색 중")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "[1] 인사 규정 · 2쪽" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "[1] 인사 규정 · 2쪽" }),
+    );
     expect(onOpenCitation).toHaveBeenCalledWith("run-1", "e1");
     expect(screen.getByText("인사 규정에 근거해 답변")).toBeInTheDocument();
     expect(screen.getByText(/답변은 존댓말로 작성/)).toBeInTheDocument();
@@ -43,12 +58,16 @@ describe("AgentMessages", () => {
       <AgentMessages
         {...defaults}
         streamingRunId="run-1"
-        streamingText={"## 연차 정산\n\n- **미사용 연차**는 수당으로 지급 [[e1]]\n- `통상임금` 기준"}
+        streamingText={
+          "## 연차 정산\n\n- **미사용 연차**는 수당으로 지급 [[e1]]\n- `통상임금` 기준"
+        }
         onOpenCitation={onOpenCitation}
       />,
     );
 
-    expect(screen.getByRole("heading", { level: 2, name: "연차 정산" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "연차 정산" }),
+    ).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(screen.getByText("미사용 연차").tagName).toBe("STRONG");
     expect(screen.getByText("통상임금").tagName).toBe("CODE");
@@ -57,22 +76,45 @@ describe("AgentMessages", () => {
     expect(onOpenCitation).toHaveBeenCalledWith("run-1", "e1");
   });
 
-  it("답변 텍스트를 복사한다", () => {
-    const writeText = vi.fn();
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  it("필수 확인 정보를 별도 블록으로 구분해 표시한다", () => {
     render(
       <AgentMessages
         {...defaults}
-        messages={[{
-          id: "message-1",
-          threadId: "thread-1",
-          runId: "run-1",
-          role: "assistant",
-          content: "복사할 답변",
-          citations: [],
-          appliedContext: { memories: [] },
-          createdAt: "2026-09-15T00:00:00.000Z",
-        }]}
+        streamingRunId="run-1"
+        streamingText={
+          "답변입니다.\n\n계좌 연결\n33889000081904:KRW → P238 (하나_입출금_...)"
+        }
+      />,
+    );
+
+    expect(screen.getByText("계좌 연결")).toBeInTheDocument();
+    expect(document.querySelector("blockquote")).not.toBeNull();
+    expect(document.querySelector("blockquote")?.textContent).toContain(
+      "33889000081904:KRW → P238",
+    );
+  });
+
+  it("답변 텍스트를 복사한다", () => {
+    const writeText = vi.fn();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    render(
+      <AgentMessages
+        {...defaults}
+        messages={[
+          {
+            id: "message-1",
+            threadId: "thread-1",
+            runId: "run-1",
+            role: "assistant",
+            content: "복사할 답변",
+            citations: [],
+            appliedContext: { memories: [] },
+            createdAt: "2026-09-15T00:00:00.000Z",
+          },
+        ]}
       />,
     );
 
