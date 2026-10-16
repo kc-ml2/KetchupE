@@ -12,8 +12,8 @@ import type { WorkbookJob } from "../work/reader.ts";
 import type { AgentRuntime } from "../agent/runtime.ts";
 import type { SourceProfile } from "../../src/app-types/WorkSource.types.ts";
 
-const mock = vi.hoisted(() => ({ handlers: new Map<string, (...args: any[]) => any>(), paths: [] as string[], read: vi.fn() }));
-vi.mock("electron", () => ({ ipcMain: { handle: (name: string, handler: (...args: any[]) => any) => mock.handlers.set(name, handler) }, BrowserWindow: { fromWebContents: () => null }, dialog: { showOpenDialog: async () => ({ canceled: false, filePaths: mock.paths }) } }));
+const mock = vi.hoisted(() => ({ handlers: new Map<string, (...args: any[]) => any>(), paths: [] as string[], read: vi.fn(), save: vi.fn(), artifactPath: vi.fn() }));
+vi.mock("electron", () => ({ ipcMain: { handle: (name: string, handler: (...args: any[]) => any) => mock.handlers.set(name, handler) }, BrowserWindow: { fromWebContents: () => null }, dialog: { showOpenDialog: async () => ({ canceled: false, filePaths: mock.paths }), showSaveDialog: mock.save } }));
 vi.mock("../work/reader.ts", () => ({ readWorkbookJob: mock.read }));
 import { registerWorkSourceHandlers } from "./workSourceHandlers.ts";
 
@@ -30,9 +30,51 @@ beforeEach(async () => {
     return job.action.kind === "inspect" ? inspectWorkbook(book, job.fingerprint, job.action.sheet, job.action.headerRow) : extractRows(book, job.fingerprint, job.action.mapping);
   });
   flow = new WorkSourcesFlow(db, () => undefined);
-  registerWorkSourceHandlers({ db, workSourcesFlow: flow } as AgentRuntime, "worker");
+  registerWorkSourceHandlers({ db, workSourcesFlow: flow, businessFlow: { artifactPath: mock.artifactPath } } as unknown as AgentRuntime, "worker");
 });
-afterEach(async () => { db.close(); mock.handlers.clear(); mock.read.mockReset(); await rm(folder, { recursive: true, force: true }); });
+afterEach(async () => { db.close(); mock.handlers.clear(); mock.read.mockReset(); mock.save.mockReset(); mock.artifactPath.mockReset(); await rm(folder, { recursive: true, force: true }); });
+
+const artifactId = "9b3bb758-a5cb-4eda-87b3-28bac9b487e2";
+const saveArtifact = (id = artifactId) => mock.handlers.get("business:saveArtifact")!({ sender: {} }, id);
+it("saves the verified PNG to the native dialog destination with its original filename", async () => {
+  const source = join(folder, "일일자금일보_261015.png"); const destination = join(folder, "saved.png");
+  const bytes = await (await import("sharp")).default({ create: { width: 1, height: 1, channels: 4, background: "white" } }).png().toBuffer();
+  await writeFile(source, bytes);
+  mock.artifactPath.mockResolvedValue(source);
+  mock.save.mockResolvedValue({ canceled: false, filePath: destination });
+  expect(await saveArtifact()).toBe(true);
+  expect(mock.save).toHaveBeenCalledWith({ title: "결과 파일 저장", defaultPath: "일일자금일보_261015.png", filters: [{ name: "PNG", extensions: ["png"] }] });
+  expect(await readFile(destination)).toEqual(bytes);
+  expect(await readFile(source)).toEqual(bytes);
+  expect(mock.artifactPath).toHaveBeenNthCalledWith(2, artifactId);
+});
+it("does not write a file when saving is canceled", async () => {
+  const destination = join(folder, "saved.png");
+  mock.artifactPath.mockResolvedValue(join(folder, "report.png"));
+  mock.save.mockResolvedValue({ canceled: true, filePath: destination });
+  expect(await saveArtifact()).toBe(false);
+  expect(mock.artifactPath).toHaveBeenCalledTimes(1);
+  await expect(readFile(destination)).rejects.toThrow();
+});
+it("rejects renderer paths and unavailable artifacts before showing the save dialog", async () => {
+  await expect(saveArtifact("/tmp/report.png")).rejects.toThrow();
+  expect(mock.artifactPath).not.toHaveBeenCalled();
+  mock.artifactPath.mockRejectedValue(new Error("완료된 결과 파일이 없습니다."));
+  await expect(saveArtifact()).rejects.toThrow("완료된 결과 파일");
+  expect(mock.save).not.toHaveBeenCalled();
+});
+it("rechecks the artifact after the dialog and preserves the destination on validation failure", async () => {
+  const destination = join(folder, "saved.png"); await writeFile(destination, "existing");
+  mock.artifactPath.mockResolvedValueOnce(join(folder, "report.png")).mockRejectedValueOnce(new Error("결과 파일이 변경되었습니다."));
+  mock.save.mockResolvedValue({ canceled: false, filePath: destination });
+  await expect(saveArtifact()).rejects.toThrow("결과 파일이 변경");
+  expect(await readFile(destination, "utf8")).toBe("existing");
+});
+it("propagates a copy failure instead of reporting a successful save", async () => {
+  mock.artifactPath.mockResolvedValue(mock.paths[0]);
+  mock.save.mockResolvedValue({ canceled: false, filePath: join(folder, "missing", "saved.png") });
+  await expect(saveArtifact()).rejects.toThrow();
+});
 
 it("connects a native selection through inspection, validated extraction and persisted profile", async () => {
   const [source] = await invoke("pickSources", "file");

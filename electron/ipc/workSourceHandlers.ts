@@ -1,4 +1,5 @@
-import { realpath } from "node:fs/promises";
+import { copyFile, realpath } from "node:fs/promises";
+import { basename, extname } from "node:path";
 import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { z } from "zod";
 import type { AgentRuntime } from "../agent/runtime.ts";
@@ -18,6 +19,17 @@ export function registerWorkSourceHandlers(runtime: AgentRuntime, workerPath: st
     const path = await runtime.businessFlow.artifactPath(z.string().uuid().parse(id));
     const error = await shell.openPath(path);
     if (error) throw new Error(error);
+  });
+  ipcMain.handle("business:saveArtifact", async (event, rawId: unknown) => {
+    const id = z.string().uuid().parse(rawId);
+    const path = await runtime.businessFlow.artifactPath(id);
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const extension = extname(path).slice(1);
+    const options: Electron.SaveDialogOptions = { title: "결과 파일 저장", defaultPath: basename(path), filters: [{ name: extension.toUpperCase(), extensions: [extension] }] };
+    const picked = owner ? await dialog.showSaveDialog(owner, options) : await dialog.showSaveDialog(options);
+    if (picked.canceled || !picked.filePath) return false;
+    await copyFile(await runtime.businessFlow.artifactPath(id), picked.filePath);
+    return true;
   });
   const sources = new WorkSources(runtime.db);
   let reading = false;

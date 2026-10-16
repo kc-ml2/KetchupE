@@ -6,7 +6,7 @@ import BusinessToolCard, { BusinessArtifacts } from "./BusinessToolCard";
 
 const file = { sourceId: "local", relativePath: "source.xlsx", name: "source.xlsx" };
 const action: BusinessAction = { id: "action", type: "business_tool", title: "일일자금일보", question: "자료를 지정하세요", fields: [{ key: "date", label: "기준일", type: "date", required: true }, { key: "source", label: "입출금 내역", type: "file", required: true }], input: { values: {}, files: {} } };
-const apiFixture = () => ({ listWorkSources: vi.fn().mockResolvedValue([{ id: "local" }]), listWorkFiles: vi.fn().mockResolvedValue([file]), submitBusinessInput: vi.fn().mockResolvedValue(undefined), pickWorkFiles: vi.fn().mockResolvedValue([]), listBusinessArtifacts: vi.fn().mockResolvedValue([]), openBusinessArtifact: vi.fn().mockResolvedValue(undefined) }) as unknown as KetchupEAgentAPI;
+const apiFixture = () => ({ listWorkSources: vi.fn().mockResolvedValue([{ id: "local" }]), listWorkFiles: vi.fn().mockResolvedValue([file]), submitBusinessInput: vi.fn().mockResolvedValue(undefined), pickWorkFiles: vi.fn().mockResolvedValue([]), listBusinessArtifacts: vi.fn().mockResolvedValue([]), openBusinessArtifact: vi.fn().mockResolvedValue(undefined), saveBusinessArtifact: vi.fn().mockResolvedValue(true) }) as unknown as KetchupEAgentAPI;
 
 it("collects declared inputs without a mapping editor and passes the owning action", async () => {
   const api = apiFixture(); render(<BusinessToolCard api={api} runId="run" action={action} />);
@@ -60,6 +60,24 @@ it("reloads completed artifacts and opens by artifact ID rather than renderer pa
   view.rerender(<BusinessArtifacts api={api} threadId="thread" running={false} />);
   fireEvent.click(await screen.findByRole("button", { name: "일보.xlsx 열기 · v1.0" }));
   expect(api.openBusinessArtifact).toHaveBeenCalledWith("artifact");
+});
+
+it.each([true, false, "저장할 수 없습니다"])("downloads a PNG by artifact ID and handles save result %s", async (result) => {
+  const api = apiFixture();
+  vi.mocked(api.listBusinessArtifacts).mockResolvedValue([{ id: "image", runId: "run", name: "일보.png", toolId: "daily_cash", version: "1.0" }]);
+  let finish!: (saved: boolean) => void; let fail!: (error: Error) => void;
+  vi.mocked(api.saveBusinessArtifact).mockReturnValue(new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
+  render(<BusinessArtifacts api={api} threadId="thread" running={false} />);
+  const button = await screen.findByRole("button", { name: "일보.png 다운로드" });
+  fireEvent.click(button);
+  expect(api.saveBusinessArtifact).toHaveBeenCalledWith("image");
+  expect(button).toBeDisabled();
+  if (typeof result === "string") fail(new Error(result)); else finish(result);
+  await waitFor(() => expect(button).toBeEnabled());
+  if (result === true) expect(screen.getByRole("status")).toHaveTextContent("일보.png 저장 완료");
+  else expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  if (typeof result === "string") expect(screen.getByRole("alert")).toHaveTextContent(result);
+  else expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
 it("still offers available files when an older source no longer exists", async () => {

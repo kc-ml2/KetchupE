@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('agentAPI', {
   submitBusinessInput: (runId, actionId, input) => ipcRenderer.invoke('business:submit', runId, actionId, input),
   listBusinessArtifacts: (threadId) => ipcRenderer.invoke('business:artifacts', threadId),
   openBusinessArtifact: (id) => ipcRenderer.invoke('business:openArtifact', id),
+  saveBusinessArtifact: (id) => ipcRenderer.invoke('business:saveArtifact', id),
   submitWorkSelection: (runId, actionId, selection) => ipcRenderer.invoke('work:submitSelection', runId, actionId, selection),
   pickWorkSources: (kind) => ipcRenderer.invoke('work:pickSources', kind),
   pickWorkFiles: (multiple) => ipcRenderer.invoke('work:pickFiles', multiple),

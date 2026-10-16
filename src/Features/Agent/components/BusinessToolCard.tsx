@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LuCheck, LuFile } from "react-icons/lu";
+import { LuCheck, LuDownload, LuFile } from "react-icons/lu";
 import type { KetchupEAgentAPI } from "@app-types/Agent.types";
 import type { BusinessAction, BusinessArtifact, BusinessField, BusinessInput } from "@app-types/BusinessTool.types";
 import type { WorkFile, WorkSource } from "@app-types/WorkSource.types";
@@ -109,13 +109,25 @@ export default function BusinessToolCard({ api, runId, action }: { api: KetchupE
 export function BusinessArtifacts({ api, threadId, running }: { api: KetchupEAgentAPI; threadId: string; running: boolean }) {
   const [items, setItems] = useState<BusinessArtifact[]>([]);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState("");
   useEffect(() => {
-    let alive = true; setItems([]); setError("");
+    let alive = true; setItems([]); setError(""); setSaved("");
     void api.listBusinessArtifacts(threadId).then((result) => { if (alive) setItems(result); }).catch((cause) => { if (alive) setError(String(cause)); });
     return () => { alive = false; };
   }, [api, threadId, running]);
+  const save = async (item: BusinessArtifact) => {
+    setSaving(true); setError(""); setSaved("");
+    try { if (await api.saveBusinessArtifact(item.id)) setSaved(`${item.name} 저장 완료`); }
+    catch (cause) { setError(String(cause)); }
+    finally { setSaving(false); }
+  };
   return <div className="flex flex-wrap gap-2 mb-2">
-    {items.map((item) => <button className={`${control} inline-flex items-center gap-1 text-black dark:text-white`} key={item.id} type="button" onClick={() => void api.openBusinessArtifact(item.id).catch((cause) => setError(String(cause)))}><LuFile aria-hidden />{item.name} 열기 · v{item.version}</button>)}
+    {items.map((item) => <div key={item.id} className="flex flex-wrap gap-1">
+      <button className={`${control} inline-flex items-center gap-1 text-black dark:text-white`} type="button" onClick={() => void api.openBusinessArtifact(item.id).catch((cause) => setError(String(cause)))}><LuFile aria-hidden />{item.name} 열기 · v{item.version}</button>
+      {/\.png$/i.test(item.name) && <button className={`${control} inline-flex items-center gap-1 text-black dark:text-white`} type="button" disabled={saving} aria-label={`${item.name} 다운로드`} onClick={() => void save(item)}><LuDownload aria-hidden />다운로드</button>}
+    </div>)}
+    {saved && <p role="status">{saved}</p>}
     {error && <p role="alert">{error}</p>}
   </div>;
 }

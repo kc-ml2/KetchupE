@@ -19,4 +19,5 @@ export interface BusinessToolAPI {
   submitBusinessInput(runId: string, actionId: string, input: BusinessInput): Promise<void>;
   listBusinessArtifacts(threadId: string): Promise<BusinessArtifact[]>;
   openBusinessArtifact(id: string): Promise<void>;
+  saveBusinessArtifact(id: string): Promise<boolean>;
 }
