@@ -31,7 +31,7 @@ React 화면 → typed preload IPC → Electron main / WorkflowDispatcher
 운영 관측 → telemetry outbox → 서비스 소유 OTLP gateway → Langfuse
 ```
 
-- **Tomato**: 폴더를 parse/chunk/index하고 FTS5·vector 검색을 제공합니다. embedding 준비 전에는 keyword 검색을 사용합니다. 로컬 폴더, rclone 동기화 폴더, Notion export를 같은 collection으로 취급합니다.
+- **Tomato**: 폴더를 parse/chunk/index하고 FTS5·vector 검색을 제공합니다. vector 검색은 collection별 in-process HNSW(ANN) 인덱스를 쓰고, 긴 chunk는 512토큰 모델 한도에 맞춰 window로 나눠 임베딩한 뒤 하나의 벡터로 합칩니다. embedding 준비 전에는 keyword 검색을 사용합니다. 로컬 폴더, rclone 동기화 폴더, Notion export를 같은 collection으로 취급합니다.
 - **Harness**: policy가 제안한 `SEARCH / ASK / VERIFY / ANSWER / STOP`을 검증하고 예산·근거·실행 이력을 관리합니다. policy가 직접 도구를 실행하지 않습니다.
 - **Canvas**: 참고 양식 선택과 문서 편집을 별도 상태로 관리합니다. 문서 버전은 전체 스냅샷으로 저장하고 undo/redo를 지원합니다.
 - **BusinessFlow**: 입력 카드, 원천 해시·Tool 버전 고정, 추가 질문과 checkpoint, worker 실행, XLSX 검증·결과 저장을 공통 처리합니다.
