@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import {
   mkdir,
   readFile,
@@ -14,13 +15,14 @@ import { DatabaseSync } from "node:sqlite";
 import { blocksToChunks, parse, VERSION as KORDOC_VERSION, type IRBlock } from "kordoc";
 import {
   blobToVector,
-  cosineSimilarity,
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL,
   EMBEDDING_PROFILE,
+  type EmbeddingInput,
   embedTexts,
   vectorToBlob,
 } from "./embedding.ts";
+import { HnswIndex, type HnswGraph } from "./hnsw.ts";
 import { CJK_RUN, estimateTokens, normalizeCjkForFts } from "./text.ts";
 
 export { estimateTokens, normalizeCjkForFts };
@@ -547,6 +549,14 @@ export function chunkMarkdown(sourceId: string, title: string, markdown: string,
   return chunkUnits(sourceId, parsed.title ?? title, parsed.units, options);
 }
 
+interface VectorIndexEntry {
+  index: HnswIndex;
+  /** chunk_id -> content_hash currently represented in `index` */
+  hashes: Map<string, string>;
+  /** `${profile}|${count}|${max updated_at}` of the SQLite rows the index mirrors */
+  signature: string;
+}
+
 export class Tomato {
   readonly home: string;
   readonly profile: ReturnType<typeof pipelineProfile>;
@@ -555,6 +565,8 @@ export class Tomato {
   readonly modelCache: string;
   private readonly chunkOptions: ChunkOptions;
   private readonly parserOptions: ParserOptions;
+  /** In-memory ANN index per collection, rebuilt lazily from SQLite and kept in step with it. */
+  private readonly vectorIndexes = new Map<string, VectorIndexEntry>();
 
   constructor(home: string, options: { modelCache?: string } & PipelineOptions = {}) {
     this.home = resolve(home);
@@ -683,6 +695,7 @@ export class Tomato {
           `).all(EMBEDDING_PROFILE)) as Record<string, unknown>[];
       const total = Number(totalRow.count);
       let embedded = 0;
+      const touchedCollections = new Set<string>();
       const insert = db.prepare(`
         INSERT INTO embeddings (chunk_id, profile, dimensions, vector, content_hash, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -713,12 +726,20 @@ export class Tomato {
             updatedAt,
           ));
           db.exec("COMMIT");
+          batch.forEach((row, index) => {
+            this.upsertIndexedVector(String(row.collection), String(row.chunk_id), String(row.content_hash), vectors[index]);
+            touchedCollections.add(String(row.collection));
+          });
         } catch (error) {
           db.exec("ROLLBACK");
           throw error;
         }
         embedded += batch.length;
         onProgress?.(embedded, pending.length);
+      }
+      for (const collection of touchedCollections) {
+        const entry = this.syncVectorIndex(db, collection);
+        this.saveVectorIndex(collection, entry);
       }
       return {
         collection: collectionName,
@@ -1027,23 +1048,131 @@ export class Tomato {
     } catch (error) {
       throw new TomatoError(`embedding query 추론 실패: ${errorMessage(error)}`);
     }
-    const rows = db.prepare(`
-      SELECT c.*, e.vector, e.dimensions FROM chunks c
-      JOIN embeddings e ON e.chunk_id = c.chunk_id
-      WHERE e.profile = ? AND e.content_hash = c.content_hash AND c.collection IN (${placeholders})
-    `).all(EMBEDDING_PROFILE, ...collections) as Record<string, unknown>[];
-
-    // ponytail: O(N×384) is simplest for local corpora; add sqlite-vec/HNSW only when measured p95 requires it.
-    for (const row of rows) {
-      if (!(row.vector instanceof Uint8Array) || Number(row.dimensions) !== EMBEDDING_DIMENSIONS) {
-        throw new Error(`잘못된 embedding row: ${row.chunk_id}`);
+    // ANN (HNSW) per collection instead of a full-table cosine scan; exact below HnswIndex.exactBelow.
+    // rowsToResults keeps at most two chunks per source, so ask for a few times `limit` candidates.
+    const perCollection = Math.max(limit * 3, 24);
+    const hits: Array<{ chunkId: string; score: number }> = [];
+    for (const collection of collections) {
+      const entry = this.syncVectorIndex(db, collection);
+      if (!entry.index.size) continue;
+      for (const hit of entry.index.search(queryVector, perCollection, Math.max(64, perCollection * 2))) {
+        hits.push({ chunkId: hit.id, score: hit.score });
       }
-      row.semantic_score = cosineSimilarity(queryVector, blobToVector(row.vector));
     }
+    hits.sort((left, right) => right.score - left.score || left.chunkId.localeCompare(right.chunkId));
+    const top = hits.slice(0, perCollection);
+    if (!top.length) return [];
+    const scores = new Map(top.map((hit) => [hit.chunkId, hit.score]));
+    const rows = db.prepare(`
+      SELECT c.* FROM chunks c WHERE c.chunk_id IN (${top.map(() => "?").join(", ")})
+    `).all(...top.map((hit) => hit.chunkId)) as Record<string, unknown>[];
+    for (const row of rows) row.semantic_score = scores.get(String(row.chunk_id)) ?? -1;
     rows.sort((left, right) => Number(right.semantic_score) - Number(left.semantic_score)
       || String(left.source_id).localeCompare(String(right.source_id))
       || Number(left.sequence) - Number(right.sequence));
     return rowsToResults(rows, semanticQuery, limit, "semantic", (row) => Number(row.semantic_score));
+  }
+
+  /**
+   * Brings the in-memory index for one collection in step with SQLite. A cheap signature
+   * (row count + latest updated_at) short-circuits the common case; otherwise only chunk ids and
+   * content hashes are listed, and vectors are fetched for the added/changed rows alone. This also
+   * covers writes from other processes, since nothing here relies on in-process hooks.
+   */
+  private syncVectorIndex(db: DatabaseSync, collection: string): VectorIndexEntry {
+    const signatureRow = db.prepare(`
+      SELECT COUNT(*) AS count, COALESCE(MAX(e.updated_at), '') AS latest
+      FROM embeddings e JOIN chunks c ON c.chunk_id = e.chunk_id
+      WHERE e.profile = ? AND e.content_hash = c.content_hash AND c.collection = ?
+    `).get(EMBEDDING_PROFILE, collection) as { count: number; latest: string };
+    const signature = `${EMBEDDING_PROFILE}|${signatureRow.count}|${signatureRow.latest}`;
+    let entry = this.vectorIndexes.get(collection);
+    if (!entry) {
+      entry = this.loadVectorIndex(collection)
+        ?? { index: new HnswIndex({ dimensions: EMBEDDING_DIMENSIONS }), hashes: new Map(), signature: "" };
+      this.vectorIndexes.set(collection, entry);
+    }
+    if (entry.signature === signature) return entry;
+
+    const current = db.prepare(`
+      SELECT c.chunk_id, c.content_hash
+      FROM chunks c JOIN embeddings e ON e.chunk_id = c.chunk_id
+      WHERE e.profile = ? AND e.content_hash = c.content_hash AND c.collection = ?
+    `).all(EMBEDDING_PROFILE, collection) as Array<{ chunk_id: string; content_hash: string }>;
+    const currentHashes = new Map(current.map((row) => [row.chunk_id, row.content_hash]));
+    for (const chunkId of [...entry.hashes.keys()]) {
+      if (!currentHashes.has(chunkId)) {
+        entry.index.remove(chunkId);
+        entry.hashes.delete(chunkId);
+      }
+    }
+    const stale = current.filter((row) => entry!.hashes.get(row.chunk_id) !== row.content_hash).map((row) => row.chunk_id);
+    for (let offset = 0; offset < stale.length; offset += 500) {
+      const batch = stale.slice(offset, offset + 500);
+      const rows = db.prepare(`
+        SELECT chunk_id, vector, dimensions, content_hash FROM embeddings
+        WHERE profile = ? AND chunk_id IN (${batch.map(() => "?").join(", ")})
+      `).all(EMBEDDING_PROFILE, ...batch) as Record<string, unknown>[];
+      for (const row of rows) {
+        if (!(row.vector instanceof Uint8Array) || Number(row.dimensions) !== EMBEDDING_DIMENSIONS) {
+          throw new Error(`잘못된 embedding row: ${row.chunk_id}`);
+        }
+        entry.index.add(String(row.chunk_id), blobToVector(row.vector));
+        entry.hashes.set(String(row.chunk_id), String(row.content_hash));
+      }
+    }
+    if (entry.index.needsCompaction()) entry.index.compact();
+    entry.signature = signature;
+    if (stale.length || entry.hashes.size !== currentHashes.size) this.saveVectorIndex(collection, entry);
+    return entry;
+  }
+
+  private vectorIndexPaths(collection: string): { graph: string; vectors: string } {
+    const base = join(this.home, "indexes", this.fingerprint.slice(0, 16), `hnsw-${encodeURIComponent(collection)}`);
+    return { graph: `${base}.json`, vectors: `${base}.f32` };
+  }
+
+  /**
+   * Persisted graph + packed vectors, so a restarted worker does not rebuild the index from scratch
+   * (building is ~1–2 ms per 384-d vector in TypeScript). Any divergence from SQLite is reconciled by
+   * the hash diff in `syncVectorIndex`, so a stale file is only a slower start, never a wrong answer.
+   */
+  private loadVectorIndex(collection: string): VectorIndexEntry | undefined {
+    const paths = this.vectorIndexPaths(collection);
+    try {
+      const stored = JSON.parse(readFileSync(paths.graph, "utf8")) as { profile: string; hashes: [string, string][]; graph: HnswGraph };
+      if (stored.profile !== EMBEDDING_PROFILE || stored.graph.dimensions !== EMBEDDING_DIMENSIONS) return undefined;
+      const bytes = readFileSync(paths.vectors);
+      const data = new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
+      return { index: HnswIndex.restore(stored.graph, data), hashes: new Map(stored.hashes), signature: "" };
+    } catch {
+      return undefined;
+    }
+  }
+
+  private saveVectorIndex(collection: string, entry: VectorIndexEntry): void {
+    const paths = this.vectorIndexPaths(collection);
+    try {
+      mkdirSync(dirname(paths.graph), { recursive: true });
+      const vectors = entry.index.vectorData();
+      writeFileSync(`${paths.vectors}.tmp`, Buffer.from(vectors.buffer, vectors.byteOffset, vectors.byteLength));
+      writeFileSync(`${paths.graph}.tmp`, JSON.stringify({
+        profile: EMBEDDING_PROFILE, hashes: [...entry.hashes.entries()], graph: entry.index.toGraph(),
+      }));
+      renameSync(`${paths.vectors}.tmp`, paths.vectors);
+      renameSync(`${paths.graph}.tmp`, paths.graph);
+    } catch {
+      // Persistence is an optimization; the index stays valid in memory and rebuilds from SQLite if needed.
+    }
+  }
+
+  /** Keeps a freshly written embedding in the index so the next search syncs without re-reading vectors. */
+  private upsertIndexedVector(collection: string, chunkId: string, contentHash: string, vector: Float32Array): void {
+    const entry = this.vectorIndexes.get(collection);
+    if (!entry) return;
+    entry.index.add(chunkId, vector);
+    entry.hashes.set(chunkId, contentHash);
+    entry.signature = ""; // force a (cheap) re-sync so the signature matches SQLite again
   }
 
   private searchRows(db: DatabaseSync, expression: string, collections: string[], limit: number): Record<string, unknown>[] {
@@ -1139,6 +1268,7 @@ export class Tomato {
   }
 
   private deleteCollectionRows(db: DatabaseSync, collection: string): void {
+    this.vectorIndexes.delete(collection);
     db.exec("BEGIN IMMEDIATE");
     try {
       const ids = db.prepare("SELECT chunk_id FROM chunks WHERE collection = ?").all(collection) as Array<{ chunk_id: string }>;
@@ -1253,9 +1383,13 @@ function rowToChunk(row: Record<string, unknown>): ChunkRecord {
   };
 }
 
-function passageText(row: Record<string, unknown>): string {
+/** Header (title + breadcrumb) is repeated in every embedding window so long chunks keep their document context. */
+function passageText(row: Record<string, unknown>): EmbeddingInput {
   const breadcrumb = JSON.parse(String(row.breadcrumb)) as string[];
-  return [String(row.title), breadcrumb.join(" > "), String(row.body)].filter(Boolean).join("\n");
+  return {
+    header: [String(row.title), breadcrumb.join(" > ")].filter(Boolean).join("\n"),
+    body: String(row.body),
+  };
 }
 
 function rowsToResults(
