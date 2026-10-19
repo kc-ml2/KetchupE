@@ -30,6 +30,7 @@ it("appends a dated sheet, redeems a maturity, reconciles KC cash and returns a 
   expect(result.status, JSON.stringify(result.status === "failed" ? result : {})).toBe("completed");
   if (result.status !== "completed") return;
   const b = new ExcelJS.Workbook(); await b.xlsx.load(Buffer.from(result.file.bytes) as unknown as ExcelJS.Buffer);
+  expect(b.worksheets.map((sheet) => sheet.name)).toEqual(["261012", "261013"]);
   expect(b.getWorksheet("261012")!.getCell("H10").value).toBe(100000);
   const s = b.getWorksheet("261013")!;
   expect(s.model.merges).toEqual(b.getWorksheet("261012")!.model.merges);

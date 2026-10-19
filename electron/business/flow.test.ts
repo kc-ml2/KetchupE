@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import ExcelJS from "exceljs";
@@ -49,6 +49,17 @@ it("executes a registered tool using selected bytes and delivers only verified a
   await writeFile(path, "modified"); await expect(flow.artifactPath(artifact.id)).rejects.toThrow("변경");
   await expect(flow.submit(runId, action.id, input)).rejects.toThrow("이미 처리");
   expect(JSON.parse(String(db.prepare("SELECT audit FROM business_artifacts").get()!.audit)).externalData).toEqual({ rate: "fixture-only" });
+});
+
+it("updates the selected original workbook after validating the generated workbook", async () => {
+  const sourcePath = join(folder, "source.xlsx");
+  const generated = new ExcelJS.Workbook(); generated.addWorksheet("결과").getCell("A1").value = "updated"; output = Buffer.from(await generated.xlsx.writeBuffer());
+  tool.updateSource = "source";
+  const runId = start(); const action = getRunAction(db, runId)!;
+  await flow.submit(runId, action.id, input);
+  const updated = new ExcelJS.Workbook(); await updated.xlsx.load(await readFile(sourcePath) as unknown as ExcelJS.Buffer);
+  expect(updated.getWorksheet("결과")?.getCell("A1").value).toBe("updated");
+  expect(getRun(db, runId).status).toBe("completed");
 });
 
 it("persists additional structured input across DB reopen and pins the tool version", async () => {

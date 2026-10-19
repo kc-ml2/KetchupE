@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, open, readdir, realpath } from "node:fs/promises";
-import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { lstat, open, readdir, realpath, rename, unlink } from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import type { WorkFile, WorkSource } from "../../src/app-types/WorkSource.types.ts";
 
@@ -90,5 +90,26 @@ export class WorkSources {
       const bytes = buffer.subarray(0, length);
       return { bytes, fingerprint: createHash("sha256").update(bytes).digest("hex") };
     } finally { await handle.close(); }
+  }
+
+  async replace(file: WorkFile, expectedFingerprint: string, bytes: Uint8Array): Promise<void> {
+    const source = this.source(file.sourceId);
+    if (typeof file.relativePath !== "string" || isAbsolute(file.relativePath)) throw new Error("잘못된 파일 경로입니다.");
+    const target = source.kind === "file" ? source.displayPath : resolve(source.displayPath, file.relativePath);
+    const rel = relative(source.displayPath, target);
+    if ((source.kind === "file" && file.relativePath !== "") || rel === ".." || rel.startsWith("../") || rel.startsWith("..\\") || isAbsolute(rel)) throw new Error("선택한 자료 범위 밖의 파일입니다.");
+    if (await realpath(target) !== target || await realpath(source.displayPath) !== source.displayPath || extname(target).toLowerCase() !== ".xlsx") throw new Error("연결된 XLSX 경로가 변경되었습니다. 원본을 다시 선택해 주세요.");
+    const current = await this.read(file);
+    if (current.fingerprint !== expectedFingerprint) throw new Error("작업 중 원본 파일이 변경되었습니다. 최신 파일로 새 작업을 시작해 주세요.");
+    if (bytes.length > MAX_WORKBOOK_BYTES) throw new Error("수정된 통합문서가 20MB 제한을 초과합니다.");
+    const info = await lstat(target);
+    if (!info.isFile() || info.isSymbolicLink()) throw new Error("일반 XLSX 파일만 갱신할 수 있습니다.");
+    const temporary = join(dirname(target), `.${basename(target)}.${randomUUID()}.tmp`);
+    try {
+      const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, info.mode & 0o777);
+      try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
+      if (await realpath(target) !== target || (await lstat(target)).ino !== info.ino) throw new Error("원본 파일이 교체되었습니다. 최신 파일로 새 작업을 시작해 주세요.");
+      await rename(temporary, target);
+    } finally { await unlink(temporary).catch(() => undefined); }
   }
 }

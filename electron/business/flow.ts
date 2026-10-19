@@ -142,6 +142,11 @@ export class BusinessFlow {
           if (metadata.format !== "png" || !metadata.width || !metadata.height) throw new Error("PNG 이미지를 읽을 수 없습니다.");
           outputs.push(result.image);
         }
+        if (tool.updateSource) {
+          const selected = input.files[tool.updateSource]; const original = files[tool.updateSource];
+          if (selected?.length !== 1 || original?.length !== 1) throw new Error("갱신할 원본 XLSX를 하나 선택해야 합니다.");
+          await sources.replace(selected[0], original[0].fingerprint, result.file.bytes);
+        }
         const artifacts = outputs.map((file) => ({ ...file, id: randomUUID() }));
         const message = `${result.summary}\n\n완성 파일: ${artifacts.map((file) => file.name).join(", ")}`;
         let transaction = false;

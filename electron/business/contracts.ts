@@ -17,6 +17,8 @@ export type BusinessTool = WorkflowRoute & {
   title: string;
   fields: BusinessField[];
   unavailableReason?: string;
+  /** Replace this selected XLSX after a successful, validated run. */
+  updateSource?: string;
   /** Prefills the input form from the connected work folders (today = Asia/Seoul YYYY-MM-DD). The user still sees and can change every pick. */
   suggest?: (files: WorkFile[], today: string) => BusinessInput;
   execute: (input: {

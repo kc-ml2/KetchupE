@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -25,6 +25,17 @@ it("registers references without copying, discovers nested XLSX files and detect
   expect((await sources.register([root], "folder"))).toHaveLength(1);
   sources.remove(source.id);
   await expect(sources.read(files[0])).rejects.toThrow("연결이 해제");
+});
+
+it("replaces a selected workbook only when its original fingerprint still matches", async () => {
+  const path = join(folder, "report.xlsx"); await writeFile(path, "original");
+  const [source] = await sources.register([path], "file"); const [file] = await sources.files(source.id);
+  const original = await sources.read(file);
+  await sources.replace(file, original.fingerprint, Buffer.from("updated"));
+  expect(await readFile(path, "utf8")).toBe("updated");
+  await writeFile(path, "changed elsewhere");
+  await expect(sources.replace(file, original.fingerprint, Buffer.from("stale"))).rejects.toThrow("원본 파일이 변경");
+  expect(await readFile(path, "utf8")).toBe("changed elsewhere");
 });
 
 it("rejects traversal, absolute paths, symlink escapes and sibling files outside a selected file", async () => {

@@ -72,7 +72,7 @@ Movement edits use one-based indices from the original plan list. `changes` can 
 
 ### Output and code map
 
-The new XLSX preserves existing sheets and adds `YYMMDD` plus `검증_YYMMDD`. It copies layout/merges, fills and recalculates the new sheet, and validates total KRW against KC before release. It does not modify the original workbook. The PNG includes visible cells through the O/P division table and its final row; it is a custom rendering, not an Excel screenshot. Themes, conditional formatting, and print pagination are not fully reproduced.
+The selected source XLSX is updated in place with only the `YYMMDD` report sheet added; a result copy is also kept in the app. Audit details remain in the app’s business artifact record, not an extra worksheet. The app checks the source fingerprint before replacement and stops if the file changed during the workflow. It copies layout/merges, fills and recalculates the new sheet, and validates total KRW against KC before saving. The PNG includes visible cells through the O/P division table and its final row; it is a custom rendering, not an Excel screenshot. Themes, conditional formatting, and print pagination are not fully reproduced.
 
 | Change | File |
 | --- | --- |
