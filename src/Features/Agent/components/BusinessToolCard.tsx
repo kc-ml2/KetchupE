@@ -56,7 +56,7 @@ export default function BusinessToolCard({ api, runId, action }: { api: KetchupE
     try { await fn(); } catch (cause) { setError(String(cause)); } finally { setBusy(false); }
   };
   const setValue = (key: string, value: string) => setInput((current) => ({ ...current, values: { ...current.values, [key]: value } }));
-  return <div className="flex items-start w-full max-w-2xl mb-3">
+  return <div className="flex items-start w-full mb-3">
     <img src={KetchupE} alt="" className="w-7 h-7 object-cover" />
     <form aria-label={`${action.title} 입력`} onSubmit={(event) => { event.preventDefault(); void perform(async () => { await api.submitBusinessInput(runId, action.id, input); }); }}
       className="flex-1 min-w-0 px-4 py-3 rounded-2xl border border-[#E4E4E7] dark:border-[#27272A] bg-white dark:bg-[#18181B] text-sm text-[#18181B] dark:text-[#FAFAFA]">

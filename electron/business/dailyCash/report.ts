@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import { compact, isoSheetDate, Money, money, numeric, raw, sameWon, sheetDate, sum, text, type Amount } from "./values.ts";
 import type { KcAccount } from "./cashStatus.ts";
-import type { Movement } from "./weekly.ts";
+import { depositKind, type Movement } from "./weekly.ts";
 import type { Rates } from "./hana.ts";
 
 export const cashRows = [9, 10, 11, 12, 13, 15, 21, 23, 24, 26, 28, 30];
@@ -38,13 +38,13 @@ export function layout(s: ExcelJS.Worksheet) {
   const krwTermRows = range(51, krwTermSum - 1); const fxTermRows = range(fxHeader + 2, fxTermSum - 1); const trustRows = range(trustHeader + 2, trustSum - 1);
   const termRows = [...krwTermRows, ...fxTermRows];
   const activeTerms = termRows.filter((r) => text(s.getCell(`C${r}`)));
-  return { closing, total, businessRows, krwTermRows, fxTermRows, termRows, krwTermSum, fxTermSum, trustRows, trustSum, otherRows: [...noteRows, ...trustRows], activeTerms, opening, inSum, outSum };
+  return { closing, total, businessRows, krwTermRows, fxTermRows, termRows, krwTermSum, fxTermSum, fxHeader, trustRows, trustSum, otherRows: [...noteRows, ...trustRows], activeTerms, opening, inSum, outSum };
 }
 // ponytail: every 외화 정기예금 row is treated as USD (K열이 $K$21). A JPY/CNY deposit fails the currency check in bindAccounts instead of being mis-rated.
 export const currencyAt = (row: number, l: Layout) => [23, 24].includes(row) ? "JPY" : row === 26 ? "CNY" : [21, 28, 30].includes(row) || l.fxTermRows.includes(row) ? "USD" : "KRW";
 export function priorAmounts(s: ExcelJS.Worksheet, overrides: Record<string, Amount>) {
   const l = layout(s); const values: Record<string, Amount> = {}; const missing: string[] = [];
-  for (const row of [...cashRows, ...l.activeTerms, ...l.otherRows]) {
+  for (const row of [...cashRows, ...l.termRows, ...l.otherRows]) {
     for (const col of currencyAt(row, l) === "KRW" ? ["H"] : ["H", "I"]) {
       const key = `${col}${row}`;
       // 수식 없이 완전히 빈 셀은 Excel 산술과 같이 0이다. 수식인데 저장된 결과가 없는 셀만 담당자에게 묻는다.
@@ -66,6 +66,7 @@ export function bindAccounts(s: ExcelJS.Worksheet, accounts: KcAccount[], previo
   const businessTargets: Record<string, string> = { "33889000081904:KRW": "보통예금하나", "33889007370038:USD": "하나USD", "33889000330952:KRW": "MMT하나", "140002733206:KRW": "보통예금신한1", "140005948841:KRW": "보통예금신한2", "180007074373:CNY": "신한CNY", "180007074373:USD": "신한USD" };
   const allowed = new Set([...cashRows, ...l.termRows].map((r) => `H${r}`).concat(l.businessRows.map((r) => `P${r}`)));
   for (const a of accounts) {
+    const newTerm = a.product === "정기예금" && Boolean(a.bank.trim()) && a.start === reportDate && a.opening.isZero() && a.incoming.gt(0) && a.outgoing.isZero() && a.balance.eq(a.incoming) && a.maturity && a.maturity > reportDate;
     let target = explicit[a.key];
     if (!target && a.key === "140013557434:KRW") target = "H10";
     if (!target && a.key === "140013557473:KRW") target = "H11";
@@ -73,23 +74,51 @@ export function bindAccounts(s: ExcelJS.Worksheet, accounts: KcAccount[], previo
     if (!target && a.product === "정기예금") {
       const candidates = l.activeTerms.filter((r) => !used.has(`H${r}`) && currencyAt(r, l) === a.currency && bankGroup(a.bank) !== undefined && bankGroup(text(s.getCell(`C${r}`))) === bankGroup(a.bank) && maturity(s, r) === a.maturity && previous[`H${r}`]?.eq(a.opening));
       // Equal bank/currency/maturity/principal slots are interchangeable; the review records each assignment.
-      if (candidates.length) target = `H${candidates[0]}`;
+      if (candidates.length && !newTerm) target = `H${candidates[0]}`;
+      if (!target && newTerm) {
+        // shortcut: 신규 예금은 기존 빈 행을 사용한다. 빈 행이 소진되면 양식의 예금 구역을 확장해야 한다.
+        const row = l.termRows.find((r) => !used.has(`H${r}`) && currencyAt(r, l) === a.currency && !text(s.getCell(`A${r}`)) && !text(s.getCell(`C${r}`)) && previous[`H${r}`]?.isZero());
+        if (row) target = `H${row}`;
+      }
     }
     if (!target) {
       // 은행·통화·원금은 같은데 만기만 다른 행이 있으면 대개 한쪽 자료의 만기 표기 오류다. 어느 셀을 봐야 하는지 알려준다.
       const near = a.product === "정기예금" ? l.activeTerms.filter((r) => !used.has(`H${r}`) && currencyAt(r, l) === a.currency && bankGroup(text(s.getCell(`C${r}`))) === bankGroup(a.bank) && previous[`H${r}`]?.eq(a.opening) && maturity(s, r) !== a.maturity) : [];
       const because = near.length ? ` → 일보 ${near.map((r) => `H${r}(만기 ${maturity(s, r)}, A${r} "${text(s.getCell(`A${r}`))}")`).join(", ")}와 은행·원금이 같지만 만기가 다릅니다. 전일 일보의 만기 표기 또는 KC 만기일을 확인해 고친 뒤 새 작업을 시작하세요.` : "";
-      unresolved.push(`${a.key} / ${a.name} / ${a.currency} / 잔고 ${a.balance} / 만기 ${a.maturity ?? "없음"}${because}`); continue;
+      unresolved.push(`${a.key} / ${a.name} / ${a.currency} / 잔고 ${a.balance} / 만기 ${a.maturity ?? "없음"}${newTerm ? " / 신규 가입에 사용할 같은 통화의 빈 예금 행이 없습니다. 양식을 확장하세요." : ""}${because}`); continue;
     }
     if (!allowed.has(target) || used.has(target)) throw new Error(`${a.key}: 일보 셀 ${target}이 허용되지 않거나 중복됩니다.`);
     const row = Number(target.slice(1));
     const expected = target[0] === "H" ? currencyAt(row, l) : /USD/.test(text(s.getCell(`O${row}`))) ? "USD" : /JPY/.test(text(s.getCell(`O${row}`))) ? "JPY" : /CNY/.test(text(s.getCell(`O${row}`))) ? "CNY" : "KRW";
     if (a.currency !== expected || (a.product === "정기예금") !== (target[0] === "H" && l.termRows.includes(row))) throw new Error(`${a.key}: 통화/정기예금 구분과 대상 셀이 다릅니다.`);
-    if (l.termRows.includes(row) && target[0] === "H" && (!l.activeTerms.includes(row) || maturity(s, row) !== a.maturity)) throw new Error(`${a.key}: 전일 일보의 만기일/예금 항목과 다릅니다. 갱신된 전일 일보가 필요합니다.`);
+    if (l.termRows.includes(row) && target[0] === "H") {
+      if (l.activeTerms.includes(row) ? newTerm || maturity(s, row) !== a.maturity : !newTerm || text(s.getCell(`A${row}`)) || !previous[target]?.isZero()) throw new Error(`${a.key}: 전일 일보의 만기일/예금 항목과 다릅니다. 신규 예금은 가입일·만기일·기초 0원과 빈 행을 확인하세요.`);
+    }
     bindings.set(a.key, target); used.add(target);
   }
   for (const r of [...cashRows, ...l.activeTerms]) if (!used.has(`H${r}`) && previous[`H${r}`] && !previous[`H${r}`].isZero() && !(l.termRows.includes(r) && maturity(s, r) <= reportDate)) unresolved.push(`일보 H${r} (${text(s.getCell(`C${r}`))}, ${previous[`H${r}`]})에 대응하는 KC 계좌가 없습니다.`);
   return { bindings, unresolved };
+}
+/** 사업 분류의 예금 원금은 지주 입출금계좌 집행표와 분리해 KC 및 전일 예금과 대사한다. */
+export function depositIssues(s: ExcelJS.Worksheet, previous: Record<string, Amount>, accounts: KcAccount[], bindings: Map<string, string>, actual: Movement[], reportDate: string) {
+  const l = layout(s);
+  const expected = l.krwTermRows.filter((r) => l.activeTerms.includes(r) && maturity(s, r) <= reportDate && previous[`H${r}`].gt(0)).map((r) => ({ kind: "maturity", bank: text(s.getCell(`C${r}`)), maturity: maturity(s, r), amount: previous[`H${r}`] }));
+  for (const a of accounts) if (a.currency === "KRW" && a.product === "정기예금" && bindings.has(a.key) && a.incoming.gt(0)) expected.push({ kind: "subscription", bank: a.bank, maturity: a.maturity!, amount: a.incoming });
+  const issues: string[] = [];
+  // 거래처가 없는 일괄 가입 계획은 은행이 명시된 내역을 먼저 배분한 뒤 남은 원금과 대사한다.
+  for (const m of [...actual].sort((a, b) => Number(Boolean(b.party)) - Number(Boolean(a.party)))) {
+    const kind = depositKind(m); if (!kind || kind === "interest") continue;
+    const due = m.description.match(/~\s*(\d{6})(?!\d)/)?.[1];
+    let remaining = m.amount;
+    for (const e of expected) {
+      const sameBank = !m.party || m.party.replace(/\s/g, "") === e.bank.replace(/\s/g, "") || (bankGroup(m.party) !== undefined && bankGroup(m.party) === bankGroup(e.bank) && !(/지점|센터/.test(m.party) && /지점|센터/.test(e.bank)));
+      if (e.kind !== kind || !sameBank || (kind === "maturity" && due && isoSheetDate(due) !== e.maturity)) continue;
+      const used = Money.min(remaining, e.amount); remaining = remaining.minus(used); e.amount = e.amount.minus(used);
+    }
+    if (!remaining.isZero()) issues.push(`${m.description} / ${m.party}: 예금 현황과 맞지 않는 원금 ${remaining}원 (${m.source})`);
+  }
+  for (const e of expected) if (!e.amount.isZero()) issues.push(`${e.bank}: ${e.kind === "maturity" ? "만기 감소" : "가입 증가"} ${e.amount}원의 실제 집행 내역을 확인하세요.`);
+  return issues;
 }
 function formula(s: ExcelJS.Worksheet, cell: string, expression: string, value: Amount) { s.getCell(cell).value = { formula: expression, result: value.toNumber() }; }
 /** Writes a 집행내역 description so neither Excel nor the PNG clips it: wrap on, and the row tall enough for the lines the merged cell's real width can hold. */
@@ -118,8 +147,7 @@ export function buildReport(book: ExcelJS.Workbook, previous: ExcelJS.Worksheet,
   s.eachRow((r) => r.eachCell((c) => { if (!c.isMerged || c.master.address === c.address) { if (c.type === ExcelJS.ValueType.Formula) frozen.push([c.address, null]); } }));
   for (const [address, value] of frozen) s.getCell(address).value = value;
   s.getCell("B2").value = `일 일 자 금 일 보\n${reportDate.replaceAll("-", ".")}`;
-  s.getCell("M19").value = `${reportDate} 최종 고시`; s.getCell("M100").value = `${reportDate} 최종 고시`;
-  for (const r of [19, 100]) { s.getRow(r).height = Math.max(s.getRow(r).height ?? 15, 30); s.getCell(`M${r}`).alignment = { ...s.getCell(`M${r}`).alignment, wrapText: true }; }
+  for (const r of [19, l.fxHeader]) { s.getCell(`M${r}`).value = `${reportDate} 최종 고시`; s.getRow(r).height = Math.max(s.getRow(r).height ?? 15, 30); s.getCell(`M${r}`).alignment = { ...s.getCell(`M${r}`).alignment, wrapText: true }; }
   for (const row of [...cashRows, ...l.termRows, ...l.otherRows]) {
     numeric(s.getCell(`D${row}`), amounts[`H${row}`] ?? new Money(0)); numeric(s.getCell(`E${row}`), 0); numeric(s.getCell(`G${row}`), 0);
     numeric(s.getCell(`H${row}`), amounts[`H${row}`] ?? new Money(0));
@@ -128,6 +156,7 @@ export function buildReport(book: ExcelJS.Workbook, previous: ExcelJS.Worksheet,
   for (const row of l.activeTerms) if (maturity(previous, row) <= reportDate) {
     numeric(s.getCell(`G${row}`), amounts[`H${row}`]); numeric(s.getCell(`H${row}`), 0);
     if (currencyAt(row, l) !== "KRW") numeric(s.getCell(`I${row}`), 0);
+    if (amounts[`H${row}`].gt(0)) s.getRow(row).hidden = false;
   }
   // The KC side table (header + every account row) must be readable in the PNG, so unhide it even if the previous sheet collapsed those rows.
   s.getRow(l.businessRows[0] - 1).hidden = false;
@@ -136,9 +165,14 @@ export function buildReport(book: ExcelJS.Workbook, previous: ExcelJS.Worksheet,
     const target = bindings.get(account.key)!; const row = Number(target.slice(1)); numeric(s.getCell(target), account.balance);
     s.getCell(target).note = `출처: 자금현황표/${account.source}; 계좌키 ${account.key}; 계좌잔고(O열)`;
     if (target[0] !== "H") continue;
+    if (l.termRows.includes(row) && !l.activeTerms.includes(row)) {
+      s.getCell(`A${row}`).value = `${sheetDate(account.start!)}~${sheetDate(account.maturity!)}`;
+      s.getCell(`C${row}`).value = account.bank;
+      s.getRow(row).hidden = false;
+    }
     const flow = changes[account.key] ?? account;
     numeric(s.getCell(`E${row}`), flow.incoming); numeric(s.getCell(`G${row}`), flow.outgoing);
-    if (l.termRows.includes(row) && maturity(previous, row) <= reportDate) { numeric(s.getCell(`G${row}`), amounts[`H${row}`]); numeric(s.getCell(`E${row}`), 0); }
+    if (l.activeTerms.includes(row) && maturity(previous, row) <= reportDate) { numeric(s.getCell(`G${row}`), amounts[`H${row}`]); numeric(s.getCell(`E${row}`), 0); }
     // 금일금액은 전일+증가-감소 수식값으로 두어 담당자 일보처럼 소수 원을 이월한다. KC 정수 잔고와는 1원 미만 차이만 허용한다.
     const closingAmount = money(s.getCell(`D${row}`)).plus(money(s.getCell(`E${row}`))).minus(money(s.getCell(`G${row}`)));
     if (!sameWon(closingAmount, account.balance)) throw new Error(`${account.key}: 전일금액+증가-감소와 계좌잔고가 일치하지 않습니다.`);
@@ -148,7 +182,8 @@ export function buildReport(book: ExcelJS.Workbook, previous: ExcelJS.Worksheet,
   const totalRows: Record<number, number[]> = { 42: [35, 36, 37, 38, 39, 40, 41], 47: [46], [l.trustSum]: l.trustRows, 14: [10, 11, 12, 13], 16: [15], 17: [9, 14, 16], 22: [21], 25: [23, 24], 27: [26], 29: [28], 31: [30], [l.krwTermSum]: l.krwTermRows, [l.fxTermSum]: l.fxTermRows };
   for (const [target, children] of Object.entries(totalRows)) for (const col of ["D", "E", "G", "H", ...([22, 25, 27, 29, 31, l.fxTermSum].includes(Number(target)) ? ["I"] : [])]) {
     const vals = children.map((r) => { const v = raw(s.getCell(`${col}${r}`)); return v == null ? new Money(0) : money(s.getCell(`${col}${r}`)); });
-    formula(s, `${col}${target}`, children.map((r) => `${col}${r}`).join("+"), sum(vals));
+    const cells = children.map((r) => `${col}${r}`);
+    formula(s, `${col}${target}`, [l.krwTermSum, l.fxTermSum, l.trustSum].includes(Number(target)) ? `SUM(${cells.join(",")})` : cells.join("+"), sum(vals));
   }
   for (const row of [...cashRows.filter((r) => currencyAt(r, l) !== "KRW"), ...l.fxTermRows]) {
     const c = currencyAt(row, l) as keyof Rates["perUnit"]; const balance = money(s.getCell(`H${row}`)); const cost = money(s.getCell(`I${row}`)); const rate = new Money(rates.perUnit[c]);

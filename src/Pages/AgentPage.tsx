@@ -428,184 +428,188 @@ const AgentPage = (): React.JSX.Element => {
         <div className={tab === "home" ? "flex flex-1 min-h-0" : "hidden"}>
           <div className="flex flex-col flex-1 min-w-0 min-h-0">
             <div className="flex-1 overflow-y-auto px-6 md:px-8 py-4">
-              <AgentMessages
-                initialPrompt={
-                  awaitingContractRequest
-                    ? "어떤 계약서 작성을 도와드릴까요?"
-                    : undefined
-                }
-                messages={messages}
-                streamingText={streamingText}
-                streamingRunId={view.runId}
-                streamingCitations={responsePersisted ? [] : view.citations}
-                streamingAppliedContext={
-                  responsePersisted ? { memories: [] } : view.appliedContext
-                }
-                progressText={null}
-                hasMore={hasMore}
-                onLoadOlder={() => void loadOlder()}
-                onOpenCitation={(runId, evidenceId) =>
-                  void api.openCitation(runId, evidenceId)
-                }
-              />
-              {view.action?.type === "business_tool" && view.runId && (
-                <div
-                  ref={promptRef}
-                  tabIndex={-1}
-                  aria-label={`${view.action.title} 입력 대기`}
-                >
-                  <BusinessToolCard
-                    key={view.action.id}
-                    api={api}
-                    runId={view.runId}
-                    action={view.action}
-                  />
-                </div>
-              )}
-              {canvas.interrupt?.type === "awaiting_anchor_choice" && (
-                <div ref={promptRef} tabIndex={-1} aria-label="참고 문서 선택">
-                  <AnchorChoicePrompt
-                    candidates={canvas.interrupt.candidates}
-                    selectedIds={canvas.selectedAnchorIds}
-                    disabled={canvas.isBusy}
-                    onToggle={canvasRun.toggleAnchor}
-                    onSubmit={(action) =>
-                      void canvasRun.submitAnchorChoice(action)
-                    }
-                  />
-                </div>
-              )}
-              {canvas.canvas && canvasRun.showMissingTermsForm && (
-                <MissingTermsForm
-                  terms={canvas.canvas.missing_terms}
-                  disabled={canvas.isBusy}
-                  onSubmit={canvasRun.submitMissingTerms}
+              <div className="mx-auto w-full max-w-3xl">
+                <AgentMessages
+                  initialPrompt={
+                    awaitingContractRequest
+                      ? "어떤 계약서 작성을 도와드릴까요?"
+                      : undefined
+                  }
+                  messages={messages}
+                  streamingText={streamingText}
+                  streamingRunId={view.runId}
+                  streamingCitations={responsePersisted ? [] : view.citations}
+                  streamingAppliedContext={
+                    responsePersisted ? { memories: [] } : view.appliedContext
+                  }
+                  progressText={null}
+                  hasMore={hasMore}
+                  onLoadOlder={() => void loadOlder()}
+                  onOpenCitation={(runId, evidenceId) =>
+                    void api.openCitation(runId, evidenceId)
+                  }
                 />
-              )}
-              <div ref={bottomRef} />
+                {view.action?.type === "business_tool" && view.runId && (
+                  <div
+                    ref={promptRef}
+                    tabIndex={-1}
+                    aria-label={`${view.action.title} 입력 대기`}
+                  >
+                    <BusinessToolCard
+                      key={view.action.id}
+                      api={api}
+                      runId={view.runId}
+                      action={view.action}
+                    />
+                  </div>
+                )}
+                {canvas.interrupt?.type === "awaiting_anchor_choice" && (
+                  <div ref={promptRef} tabIndex={-1} aria-label="참고 문서 선택">
+                    <AnchorChoicePrompt
+                      candidates={canvas.interrupt.candidates}
+                      selectedIds={canvas.selectedAnchorIds}
+                      disabled={canvas.isBusy}
+                      onToggle={canvasRun.toggleAnchor}
+                      onSubmit={(action) =>
+                        void canvasRun.submitAnchorChoice(action)
+                      }
+                    />
+                  </div>
+                )}
+                {canvas.canvas && canvasRun.showMissingTermsForm && (
+                  <MissingTermsForm
+                    terms={canvas.canvas.missing_terms}
+                    disabled={canvas.isBusy}
+                    onSubmit={canvasRun.submitMissingTerms}
+                  />
+                )}
+                <div ref={bottomRef} />
+              </div>
             </div>
 
-            <div className="px-6 pb-4">
-              {errorText && (
-                <div className="mb-2 text-xs text-[#DC2626]">{errorText}</div>
-              )}
-              {canvas.actionContexts.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {canvas.actionContexts.map((context) => (
-                    <span
-                      key={
-                        context.op === "edit"
-                          ? `edit:${context.block_id}`
-                          : `add:${context.after_block_id}`
-                      }
-                      className="inline-flex items-center gap-2 rounded-full border border-[#0066FF] bg-[#EFF6FF] px-3 py-1 text-xs font-medium text-[#0066FF] dark:bg-[#0B1B33]"
-                    >
-                      {context.label}{" "}
-                      {context.op === "edit" ? "수정" : "아래 추가"}
-                      <button
-                        type="button"
-                        onClick={() => canvasRun.removeContext(context)}
-                        className="rounded-full hover:bg-[#0066FF] hover:text-white w-4 h-4 leading-none"
-                        title="선택 해제"
+            <div className="px-6 md:px-8 pb-4">
+              <div className="mx-auto w-full max-w-3xl">
+                {errorText && (
+                  <div className="mb-2 text-xs text-[#DC2626]">{errorText}</div>
+                )}
+                {canvas.actionContexts.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {canvas.actionContexts.map((context) => (
+                      <span
+                        key={
+                          context.op === "edit"
+                            ? `edit:${context.block_id}`
+                            : `add:${context.after_block_id}`
+                        }
+                        className="inline-flex items-center gap-2 rounded-full border border-[#0066FF] bg-[#EFF6FF] px-3 py-1 text-xs font-medium text-[#0066FF] dark:bg-[#0B1B33]"
                       >
-                        ×
-                      </button>
-                    </span>
-                  ))}
+                        {context.label}{" "}
+                        {context.op === "edit" ? "수정" : "아래 추가"}
+                        <button
+                          type="button"
+                          onClick={() => canvasRun.removeContext(context)}
+                          className="rounded-full hover:bg-[#0066FF] hover:text-white w-4 h-4 leading-none"
+                          title="선택 해제"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {canvas.canvas && canvas.hidden && (
+                  <button
+                    type="button"
+                    onClick={canvasRun.reopen}
+                    className="inline-flex items-center gap-1 mb-2 rounded border border-[#D4D4D8] dark:border-[#52525B] p-2 bg-white dark:bg-[#18181B] text-sm text-black dark:text-white"
+                  >
+                    <LuFileText aria-hidden />
+                    {canvas.canvas.title || "문서"} 다시 열기
+                  </button>
+                )}
+                {selectedId && (
+                  <BusinessArtifacts
+                    api={api}
+                    threadId={selectedId}
+                    running={view.isRunning}
+                  />
+                )}
+                <div
+                  role="group"
+                  aria-label="워크플로 상태"
+                  className="flex flex-wrap items-center gap-3 mb-2 rounded-lg border border-[#E4E4E7] dark:border-[#27272A] bg-[#F4F4F5] dark:bg-[#1F1F1F] px-3 py-2 text-sm"
+                >
+                  <LuCirclePause
+                    aria-hidden
+                    className="w-4 h-4 shrink-0 text-[#0066FF]"
+                  />
+                  <span
+                    role="status"
+                    className="flex-1 font-medium text-[#18181B] dark:text-[#FAFAFA]"
+                  >
+                    {workflowStatus}
+                  </span>
+                  {canContinue && (
+                    <button
+                      type="button"
+                      onClick={continueWorkflow}
+                      className="rounded bg-[#0066FF] px-3 py-1 font-medium text-white"
+                    >
+                      이어가기
+                    </button>
+                  )}
+                  {(activeRunId || awaitingContractRequest || starting) && (
+                    <button
+                      type="button"
+                      disabled={stopping || (!activeRunId && starting)}
+                      onClick={() => void stopWorkflow()}
+                      className="rounded px-3 py-1 text-[#DC2626] hover:bg-[#FEE2E2] dark:hover:bg-[#3B1111] disabled:opacity-40"
+                    >
+                      작업 중단
+                    </button>
+                  )}
                 </div>
-              )}
-              {canvas.canvas && canvas.hidden && (
-                <button
-                  type="button"
-                  onClick={canvasRun.reopen}
-                  className="inline-flex items-center gap-1 mb-2 rounded border border-[#D4D4D8] dark:border-[#52525B] p-2 bg-white dark:bg-[#18181B] text-sm text-black dark:text-white"
+                <form
+                  onSubmit={submit}
+                  className="flex items-end gap-2 p-2 rounded-xl border border-[#E4E4E7] dark:border-[#27272A]"
                 >
-                  <LuFileText aria-hidden />
-                  {canvas.canvas.title || "문서"} 다시 열기
-                </button>
-              )}
-              {selectedId && (
-                <BusinessArtifacts
-                  api={api}
-                  threadId={selectedId}
-                  running={view.isRunning}
-                />
-              )}
-              <div
-                role="group"
-                aria-label="워크플로 상태"
-                className="flex flex-wrap items-center gap-3 mb-2 rounded-lg border border-[#E4E4E7] dark:border-[#27272A] bg-[#F4F4F5] dark:bg-[#1F1F1F] px-3 py-2 text-sm"
-              >
-                <LuCirclePause
-                  aria-hidden
-                  className="w-4 h-4 shrink-0 text-[#0066FF]"
-                />
-                <span
-                  role="status"
-                  className="flex-1 font-medium text-[#18181B] dark:text-[#FAFAFA]"
-                >
-                  {workflowStatus}
-                </span>
-                {canContinue && (
-                  <button
-                    type="button"
-                    onClick={continueWorkflow}
-                    className="rounded bg-[#0066FF] px-3 py-1 font-medium text-white"
-                  >
-                    이어가기
-                  </button>
-                )}
-                {(activeRunId || awaitingContractRequest || starting) && (
-                  <button
-                    type="button"
-                    disabled={stopping || (!activeRunId && starting)}
-                    onClick={() => void stopWorkflow()}
-                    className="rounded px-3 py-1 text-[#DC2626] hover:bg-[#FEE2E2] dark:hover:bg-[#3B1111] disabled:opacity-40"
-                  >
-                    작업 중단
-                  </button>
-                )}
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        void submit(event);
+                      }
+                    }}
+                    placeholder={placeholder}
+                    disabled={canvas.interrupt?.type === "awaiting_anchor_choice"}
+                    rows={2}
+                    className="flex-1 resize-none bg-transparent px-2 py-1 text-sm outline-none text-[#18181B] dark:text-[#FAFAFA]"
+                  />
+                  {busy ? (
+                    <button
+                      type="button"
+                      disabled={stopping || !activeRunId}
+                      onClick={() => void stopWorkflow()}
+                      className="p-2 text-[#DC2626]"
+                      title="중단"
+                    >
+                      <FaStopCircle className="w-5 h-5" />
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={!input.trim()}
+                      className="p-2 text-[#0066FF] disabled:opacity-40"
+                      title="보내기"
+                    >
+                      <IoSend className="w-5 h-5" />
+                    </button>
+                  )}
+                </form>
               </div>
-              <form
-                onSubmit={submit}
-                className="flex items-end gap-2 p-2 rounded-xl border border-[#E4E4E7] dark:border-[#27272A]"
-              >
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      void submit(event);
-                    }
-                  }}
-                  placeholder={placeholder}
-                  disabled={canvas.interrupt?.type === "awaiting_anchor_choice"}
-                  rows={2}
-                  className="flex-1 resize-none bg-transparent px-2 py-1 text-sm outline-none text-[#18181B] dark:text-[#FAFAFA]"
-                />
-                {busy ? (
-                  <button
-                    type="button"
-                    disabled={stopping || !activeRunId}
-                    onClick={() => void stopWorkflow()}
-                    className="p-2 text-[#DC2626]"
-                    title="중단"
-                  >
-                    <FaStopCircle className="w-5 h-5" />
-                  </button>
-                ) : (
-                  <button
-                    type="submit"
-                    disabled={!input.trim()}
-                    className="p-2 text-[#0066FF] disabled:opacity-40"
-                    title="보내기"
-                  >
-                    <IoSend className="w-5 h-5" />
-                  </button>
-                )}
-              </form>
             </div>
           </div>
 

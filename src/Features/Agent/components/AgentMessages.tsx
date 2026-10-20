@@ -3,6 +3,7 @@ import { LuCopy } from "react-icons/lu";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import type { Root } from "hast";
 import type {
   AppliedContext,
   CitationSummary,
@@ -35,6 +36,22 @@ const REQUIRED_INFO_LABELS = [
 const formatCitationLabel = (evidenceId: string): string =>
   evidenceId.replace(/^e/i, "");
 
+/** 저장된 구형 dailyCash 확인문도 새 확인문과 같은 제목·목록으로 표시한다. */
+const formatDailyCashReview = (text: string): string => {
+  if (!/^계획 대비 실적 차이\r?$/m.test(text) || !/^원화 대사 대상:/m.test(text) || /^\s*(?:`{3}|~{3})/m.test(text)) return text;
+  let inSection = false;
+  const literal = (value: string) => value.replace(/([\\`*_{}\[\]<>])/g, "\\$1");
+  return text.split(/\r?\n/).map((line) => {
+    const heading = line.match(/^(계좌 연결|계획 대비 실적 차이|정기예금 집행(?:\s*\([^\n]*\))?|신규 가입|만기|원화 대사 대상|환율)(?::\s*(.*))?$/);
+    if (heading) {
+      inSection = true;
+      return `\n\n### ${heading[1]}\n\n${heading[2] ? `- ${literal(heading[2])}` : ""}`;
+    }
+    if (line.startsWith("확정하려면")) { inSection = false; return `\n\n${line}`; }
+    return inSection && line.trim() ? `- ${literal(line.replace(/^\d+\.\s*/, ""))}` : line;
+  }).join("\n");
+};
+
 const formatRequiredInfoBlocks = (text: string): string => {
   const blocks = text.split(/\n{2,}/);
 
@@ -60,6 +77,7 @@ const formatRequiredInfoBlocks = (text: string): string => {
       const bodyLines = [inlineValue.trim(), ...rest].filter(
         (value) => value.length > 0,
       );
+      if (label === "계좌 연결") return `### ${label}\n\n${bodyLines.map((line) => `- ${line}`).join("\n")}`;
       if (bodyLines.length === 0) {
         return `> **${label}**`;
       }
@@ -69,10 +87,42 @@ const formatRequiredInfoBlocks = (text: string): string => {
     .join("\n\n");
 };
 
+/** Markdown으로 파싱된 계좌 목록만 접어서 코드 블록과 뒤의 확인 항목은 그대로 둔다. */
+const collapseAccountList = () => (tree: Root) => {
+  for (let i = 0; i < tree.children.length; i++) {
+    const heading = tree.children[i];
+    if (heading.type !== "element" || !/^h[1-6]$/.test(heading.tagName) || heading.children.length !== 1 || heading.children[0].type !== "text" || heading.children[0].value.trim() !== "계좌 연결") continue;
+    let next = i + 1;
+    while (next < tree.children.length) {
+      const gap = tree.children[next];
+      if (gap.type !== "text" || gap.value.trim()) break;
+      next++;
+    }
+    const list = tree.children[next];
+    if (list?.type !== "element" || !["ul", "ol"].includes(list.tagName)) continue;
+    tree.children.splice(i, next - i + 1, {
+      type: "element", tagName: "details", properties: {}, children: [
+        { type: "element", tagName: "summary", properties: {}, children: heading.children },
+        list,
+      ],
+    });
+  }
+};
+
 const buildComponents = (
   runId: string | null,
   onOpenCitation: (runId: string, evidenceId: string) => void,
 ): Components => ({
+  details: ({ children }) => (
+    <details className={`my-3 rounded-xl border px-3 py-2 [&>ul]:mt-3 [&>ol]:mt-3 ${border}`}>
+      {children}
+    </details>
+  ),
+  summary: ({ children }) => (
+    <summary className="cursor-pointer rounded font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0066FF]">
+      {children}
+    </summary>
+  ),
   a: ({ href, children }) => {
     const evidenceId = href?.startsWith(CITE_HREF)
       ? href.slice(CITE_HREF.length)
@@ -118,7 +168,7 @@ const buildComponents = (
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="mb-1.5 mt-1 text-sm font-semibold first:mt-0">{children}</h3>
+    <h3 className="mb-2 mt-5 text-sm font-semibold first:mt-0">{children}</h3>
   ),
   // A fenced block keeps react-markdown's language class; inline code gets the pill styling.
   code: ({ className, children }) =>
@@ -177,9 +227,10 @@ export const MessageBody = ({
     <div className="break-words">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
+        rehypePlugins={[collapseAccountList]}
         components={components}
       >
-        {withCitationLinks(formatRequiredInfoBlocks(text))}
+        {withCitationLinks(formatRequiredInfoBlocks(formatDailyCashReview(text)))}
       </ReactMarkdown>
     </div>
   );
@@ -286,7 +337,7 @@ const AgentMessages = ({
   <div className="flex flex-col gap-3">
     {initialPrompt && (
       <div className="flex justify-start">
-        <div className="max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed bg-[#F4F4F5] dark:bg-[#1F1F1F] text-[#18181B] dark:text-[#FAFAFA]">
+        <div className="w-full min-w-0 px-4 py-2.5 rounded-2xl text-sm leading-relaxed bg-[#F4F4F5] dark:bg-[#1F1F1F] text-[#18181B] dark:text-[#FAFAFA]">
           {initialPrompt}
         </div>
       </div>
@@ -306,7 +357,7 @@ const AgentMessages = ({
         className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
       >
         <div
-          className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${message.role === "user" ? "whitespace-pre-wrap bg-[#0066FF] text-white" : "bg-[#F4F4F5] dark:bg-[#1F1F1F] text-[#18181B] dark:text-[#FAFAFA]"}`}
+          className={`min-w-0 px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${message.role === "user" ? "max-w-[80%] whitespace-pre-wrap bg-[#0066FF] text-white" : "w-full bg-[#F4F4F5] dark:bg-[#1F1F1F] text-[#18181B] dark:text-[#FAFAFA]"}`}
         >
           {message.role === "assistant" ? (
             <MessageBody
@@ -345,7 +396,7 @@ const AgentMessages = ({
     ))}
     {streamingText && (
       <div className="flex justify-start">
-        <div className="max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed bg-[#F4F4F5] dark:bg-[#1F1F1F] text-[#18181B] dark:text-[#FAFAFA]">
+        <div className="w-full min-w-0 px-4 py-2.5 rounded-2xl text-sm leading-relaxed bg-[#F4F4F5] dark:bg-[#1F1F1F] text-[#18181B] dark:text-[#FAFAFA]">
           <MessageBody
             text={streamingText}
             runId={streamingRunId}
@@ -362,7 +413,7 @@ const AgentMessages = ({
     )}
     {!streamingText && progressText && (
       <div className="flex justify-start">
-        <div className="max-w-[80%] px-4 py-2.5 rounded-2xl text-sm border border-[#D4D4D8] dark:border-[#52525B] bg-transparent text-[#71717A] animate-pulse">
+        <div className="w-full min-w-0 px-4 py-2.5 rounded-2xl text-sm border border-[#D4D4D8] dark:border-[#52525B] bg-transparent text-[#71717A] animate-pulse">
           {progressText}
         </div>
       </div>

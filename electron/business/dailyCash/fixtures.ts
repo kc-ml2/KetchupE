@@ -27,7 +27,7 @@ export function fixtureBooks() {
   for (const col of ["I", "J", "K", "L"]) s.getColumn(col).hidden = true;
   const weekly = new ExcelJS.Workbook(); const w = weekly.addWorksheet("세부계획(원화,외화)");
   w.getCell("B3").value = "일자"; w.getCell("C4").value = "구분"; w.getCell("H4").value = "구분"; w.getCell("L4").value = "금액";
-  w.getCell("B7").value = new Date("2026-10-13T00:00:00Z"); w.getCell("C7").value = "지주현금"; w.getCell("D7").value = "정기예금 만기 원금"; w.getCell("F7").value = "테스트은행"; w.getCell("G7").value = 10000; w.getCell("H7").value = "지주현금"; w.getCell("I7").value = "소모품 지급"; w.getCell("K7").value = "가상문구"; w.getCell("L7").value = 1000;
+  w.getCell("B7").value = new Date("2026-10-13T00:00:00Z"); w.getCell("C7").value = "지주현금"; w.getCell("D7").value = "정기예금 만기 원금"; w.getCell("F7").value = "기업은행 테스트"; w.getCell("G7").value = 10000; w.getCell("H7").value = "지주현금"; w.getCell("I7").value = "소모품 지급"; w.getCell("K7").value = "가상문구"; w.getCell("L7").value = 1000;
   w.getCell("B8").value = new Date("2026-10-14T00:00:00Z"); w.getCell("H8").value = "지주현금"; w.getCell("I8").value = "익일 지급 계획"; w.getCell("K8").value = "가상상사"; w.getCell("L8").value = 2000; w.getCell("B9").value = "지주-현금입금";
   const status = new ExcelJS.Workbook(); const k = status.addWorksheet("Sheet1");
   k.addRow(["No", "(금융)거래처", "계좌코드", "계좌명", "계좌번호", "환종", "기초(원화)\n잔액", "기초(거래)\n잔액", "입금(장부)", "입금(거래)", "출금(장부)", "출금(거래)", "기말잔액\n(장부)", "기말잔액\n(거래)", "계좌잔고", "차액", "상품구분", "등록계정", "가입일", "만기일", "중복유무"]);
